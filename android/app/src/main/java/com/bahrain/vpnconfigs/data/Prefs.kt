@@ -1,11 +1,21 @@
 // =====================================================================
-// Prefs.kt — إعدادات تطبيق bahrain-vpn وحفظ السيرفر المختار والمفضلة والتطبيقات.
+// Prefs.kt — إعدادات تطبيق bahrain-vpn، التفضيلات، وسجل الاتصالات الآمن.
 // =====================================================================
 package com.bahrain.vpnconfigs.data
 
 import android.content.Context
 import androidx.core.content.edit
 import org.json.JSONArray
+import org.json.JSONObject
+
+data class ConnectionHistoryEntry(
+    val label: String,
+    val endpoint: String,
+    val proto: String,
+    val country: String = "",
+    val pingMs: Long = 0L,
+    val timestampMs: Long = 0L,
+)
 
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -19,6 +29,10 @@ class Prefs(ctx: Context) {
         get() = (sp.getString("repo", Repo.DEFAULT_REPO) ?: Repo.DEFAULT_REPO)
             .ifBlank { Repo.DEFAULT_REPO }
         set(v) = sp.edit { putString("repo", v.trim().ifBlank { Repo.DEFAULT_REPO }) }
+
+    var feedProfile: String
+        get() = (sp.getString("feed_profile", "smart") ?: "smart").ifBlank { "smart" }
+        set(v) = sp.edit { putString("feed_profile", v.trim().ifBlank { "smart" }) }
 
     var testTop: Int
         get() = sp.getInt("test_top", 400)
@@ -77,7 +91,6 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("udp_in_tcp", false)
         set(v) = sp.edit { putBoolean("udp_in_tcp", v) }
 
-    // false = استثناء التطبيقات المحددة (الافتراضي)، true = تشغيل الـ VPN للتطبيقات المحددة فقط
     var splitIncludeOnly: Boolean
         get() = sp.getBoolean("split_include_only", false)
         set(v) = sp.edit { putBoolean("split_include_only", v) }
@@ -107,7 +120,84 @@ class Prefs(ctx: Context) {
         }
         set(list) {
             val arr = JSONArray()
-            list.forEach { if (it.isNotBlank()) arr.put(it) }
+            list.take(500).forEach { if (it.isNotBlank()) arr.put(it) }
             sp.edit { putString("custom_configs_json", arr.toString()) }
         }
+
+    // ─────────── سجل الاتصالات الآمن (بدون تخزين بيانات الاعتماد السرية) ───────────
+    var connectionHistory: List<ConnectionHistoryEntry>
+        get() {
+            val raw = sp.getString("connection_history_json", null) ?: return emptyList()
+            return try {
+                val arr = JSONArray(raw)
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.optJSONObject(i) ?: continue
+                        val label = o.optString("label")
+                        val ep = o.optString("endpoint")
+                        if (label.isBlank() && ep.isBlank()) continue
+                        add(
+                            ConnectionHistoryEntry(
+                                label = label,
+                                endpoint = ep,
+                                proto = o.optString("proto"),
+                                country = o.optString("country"),
+                                pingMs = o.optLong("ping_ms", 0L),
+                                timestampMs = o.optLong("ts_ms", 0L),
+                            )
+                        )
+                    }
+                }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+        private set(list) {
+            val arr = JSONArray()
+            list.take(20).forEach { item ->
+                arr.put(
+                    JSONObject()
+                        .put("label", item.label)
+                        .put("endpoint", item.endpoint)
+                        .put("proto", item.proto)
+                        .put("country", item.country)
+                        .put("ping_ms", item.pingMs)
+                        .put("ts_ms", item.timestampMs)
+                )
+            }
+            sp.edit { putString("connection_history_json", arr.toString()) }
+        }
+
+    fun recordConnection(
+        label: String,
+        endpoint: String,
+        proto: String,
+        country: String = "",
+        pingMs: Long = 0L,
+    ) {
+        val now = System.currentTimeMillis()
+        val entry = ConnectionHistoryEntry(
+            label = label,
+            endpoint = endpoint,
+            proto = proto,
+            country = country,
+            pingMs = pingMs,
+            timestampMs = now,
+        )
+        val filtered = connectionHistory.filterNot { it.endpoint == endpoint && it.proto == proto }
+        connectionHistory = (listOf(entry) + filtered).take(20)
+    }
+
+    fun updateLatestHistoryCountry(endpoint: String, country: String) {
+        if (country.isBlank()) return
+        val cur = connectionHistory
+        if (cur.isEmpty()) return
+        connectionHistory = cur.mapIndexed { idx, item ->
+            if (idx == 0 && item.endpoint == endpoint) item.copy(country = country) else item
+        }
+    }
+
+    fun clearConnectionHistory() {
+        connectionHistory = emptyList()
+    }
 }

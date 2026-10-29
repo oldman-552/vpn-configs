@@ -347,13 +347,21 @@ class BahrainVpnService : VpnService() {
         }
 
         val now = System.currentTimeMillis()
+        val chosenProto = Converters.protocolBadge(chosenCfg)
+        val chosenEndpoint = Converters.endpointLabel(chosenCfg)
+        prefs.recordConnection(
+            label = chosenLabel,
+            endpoint = chosenEndpoint,
+            proto = chosenProto,
+            pingMs = initialPing,
+        )
         VpnStateManager.update { prev ->
             prev.copy(
                 phase = VpnPhase.CONNECTED,
                 activeCfg = chosenCfg,
                 activeLabel = chosenLabel,
-                activeProto = Converters.protocolBadge(chosenCfg),
-                activeEndpoint = Converters.endpointLabel(chosenCfg),
+                activeProto = chosenProto,
+                activeEndpoint = chosenEndpoint,
                 connectedSinceMs = if (isSwitching && prev.connectedSinceMs > 0L) prev.connectedSinceMs else now,
                 livePingMs = initialPing,
                 exitIp = "",
@@ -387,13 +395,21 @@ class BahrainVpnService : VpnService() {
         }
 
         val now = System.currentTimeMillis()
+        val candProto = Converters.protocolBadge(cand.cfg)
+        val candEndpoint = Converters.endpointLabel(cand.cfg)
+        prefs.recordConnection(
+            label = cand.label,
+            endpoint = candEndpoint,
+            proto = candProto,
+            pingMs = verifiedPingMs,
+        )
         VpnStateManager.update { prev ->
             prev.copy(
                 phase = VpnPhase.CONNECTED,
                 activeCfg = cand.cfg,
                 activeLabel = cand.label,
-                activeProto = Converters.protocolBadge(cand.cfg),
-                activeEndpoint = Converters.endpointLabel(cand.cfg),
+                activeProto = candProto,
+                activeEndpoint = candEndpoint,
                 connectedSinceMs = if (prev.connectedSinceMs > 0L) prev.connectedSinceMs else now,
                 livePingMs = verifiedPingMs,
                 exitIp = "",
@@ -429,6 +445,10 @@ class BahrainVpnService : VpnService() {
                 val ip = map["ip"].orEmpty()
                 val loc = map["loc"].orEmpty()
                 if (ip.isNotEmpty() || loc.isNotEmpty()) {
+                    val curEp = VpnStateManager.status.value.activeEndpoint
+                    if (loc.isNotEmpty() && curEp.isNotEmpty()) {
+                        prefs.updateLatestHistoryCountry(curEp, loc)
+                    }
                     VpnStateManager.update { st ->
                         if (st.phase == VpnPhase.CONNECTED) {
                             st.copy(exitIp = ip, exitCountry = loc)
@@ -683,7 +703,7 @@ class BahrainVpnService : VpnService() {
 
         val repo = Repo(applicationContext, prefs.owner, prefs.repo)
         val savedBest = repo.loadSavedBest().map { it.cfg }
-        val cachedAll = repo.loadCached()?.configs ?: emptyList()
+        val cachedAll = repo.loadCached(prefs.feedProfile)?.configs ?: emptyList()
         val merged = (prefs.customConfigs + savedBest + cachedAll)
             .distinct()
             .filter { Converters.isSupported(it) }

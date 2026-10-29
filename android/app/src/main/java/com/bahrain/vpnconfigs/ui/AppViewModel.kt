@@ -1,6 +1,6 @@
 // =====================================================================
-// AppViewModel.kt — إدارة السيرفرات الموحّدة (bahrain-vpn)، الفحص، المفضلة،
-// استيراد الكانفيغات، واستثناء التطبيقات (Split Tunneling).
+// AppViewModel.kt — إدارة السيرفرات الموحّدة (bahrain-vpn)، فلتر الدول،
+// مؤشرات الجودة والموثوقية، سجل الاتصالات، الفحص، المفضلة، واستثناء التطبيقات.
 // =====================================================================
 package com.bahrain.vpnconfigs.ui
 
@@ -14,10 +14,12 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.bahrain.vpnconfigs.data.ConnectionHistoryEntry
 import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.data.RemoteMeta
 import com.bahrain.vpnconfigs.data.Repo
 import com.bahrain.vpnconfigs.data.ResultLine
+import com.bahrain.vpnconfigs.data.ServerHint
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.TestProgress
 import com.bahrain.vpnconfigs.engine.TestResult
@@ -31,6 +33,7 @@ import com.bahrain.vpnconfigs.work.RefreshWorker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -42,7 +45,12 @@ data class ServerItem(
     val proto: String,
     val endpoint: String,
     val latencyMs: Long = 0L,
+    val jitterMs: Double = 0.0,
     val speedKbps: Double = 0.0,
+    val score: Double = 0.0,
+    val country: String = "",
+    val stabilityRuns: Int = 0,
+    val verifiedAt: String = "",
     val locallyTested: Boolean = false,
     val isFavorite: Boolean = false,
     val isCustom: Boolean = false,
@@ -57,6 +65,10 @@ data class UiState(
     val pingingSingleCfg: String? = null,
     val configs: List<String> = emptyList(),
     val servers: List<ServerItem> = emptyList(),
+    val availableCountries: List<Pair<String, Int>> = emptyList(),
+    val filterCountry: String = "ALL",
+    val feedProfile: String = "smart",
+    val connectionHistory: List<ConnectionHistoryEntry> = emptyList(),
     val selectedCfg: String = "",
     val meta: RemoteMeta = RemoteMeta(),
     val source: String = "—",
@@ -69,6 +81,9 @@ data class UiState(
     val allFile: File? = null,
     val engineReady: Boolean = false,
     val subUrl: String = "",
+    val reliableSubUrl: String = "",
+    val lowLatencyUrl: String = "",
+    val highThroughputUrl: String = "",
     val autoFailover: Boolean = true,
     val appsLoading: Boolean = false,
     val installedApps: List<AppEntry> = emptyList(),
@@ -85,17 +100,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = Prefs(app)
     private val tester = Tester(app)
 
-    private var serverHints: Map<String, Long> = emptyMap()
+    private var serverLatencies: Map<String, Long> = emptyMap()
+    private var serverHints: Map<String, ServerHint> = emptyMap()
 
     var state by mutableStateOf(
-        UiState(
-            engineReady = tester.engineAvailable,
-            subUrl = buildRepo().subscriptionUrl,
-            selectedCfg = prefs.selectedCfg,
-            autoFailover = prefs.autoFailover,
-            splitApps = prefs.splitApps,
-            splitIncludeOnly = prefs.splitIncludeOnly,
-        )
+        run {
+            val r = buildRepo()
+            UiState(
+                engineReady = tester.engineAvailable,
+                feedProfile = prefs.feedProfile,
+                connectionHistory = prefs.connectionHistory,
+                subUrl = r.subscriptionUrl,
+                reliableSubUrl = r.reliableSubUrl,
+                lowLatencyUrl = r.lowLatencyUrl,
+                highThroughputUrl = r.highThroughputUrl,
+                selectedCfg = prefs.selectedCfg,
+                autoFailover = prefs.autoFailover,
+                splitApps = prefs.splitApps,
+                splitIncludeOnly = prefs.splitIncludeOnly,
+            )
+        }
     )
         private set
 
@@ -103,21 +127,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
+            VpnStateManager.status.collectLatest {
+                val latestHistory = prefs.connectionHistory
+                if (latestHistory != state.connectionHistory) {
+                    state = state.copy(connectionHistory = latestHistory)
+                }
+            }
+        }
+
+        viewModelScope.launch {
             val r = buildRepo()
-            val cached = withContext(Dispatchers.IO) { r.loadCached() }
+            val profile = prefs.feedProfile
+            val cached = withContext(Dispatchers.IO) { r.loadCached(profile) }
             val savedResults = withContext(Dispatchers.IO) { r.loadSavedBest() }
             val allF = withContext(Dispatchers.IO) { r.existingAllFile() }
             val bestF = withContext(Dispatchers.IO) { r.existingBestFile() }
             val subF = withContext(Dispatchers.IO) { r.existingSubFile() }
 
-            serverHints = cached?.serverLatencies ?: emptyMap()
+            serverLatencies = cached?.serverLatencies ?: emptyMap()
+            serverHints = cached?.serverHints ?: emptyMap()
             val cfgs = cached?.configs ?: emptyList()
             val built = buildServerList(cfgs, savedResults)
+            val countries = computeCountryCounts(built)
             val chosen = resolveSelected(prefs.selectedCfg, built)
 
             state = state.copy(
                 configs = cfgs,
                 servers = built,
+                availableCountries = countries,
                 selectedCfg = chosen,
                 meta = cached?.meta ?: RemoteMeta(),
                 source = cached?.source ?: "—",
@@ -127,10 +164,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 subFile = subF,
                 engineReady = tester.engineAvailable,
                 subUrl = r.subscriptionUrl,
+                reliableSubUrl = r.reliableSubUrl,
+                lowLatencyUrl = r.lowLatencyUrl,
+                highThroughputUrl = r.highThroughputUrl,
             )
 
             if (cached == null) {
                 refresh()
+            } else {
+                refresh(silent = true)
             }
         }
     }
@@ -139,6 +181,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val owner = prefs.owner.ifBlank { Repo.DEFAULT_OWNER }
         val rep = prefs.repo.ifBlank { Repo.DEFAULT_REPO }
         return Repo(getApplication(), owner, rep)
+    }
+
+    private fun computeCountryCounts(items: List<ServerItem>): List<Pair<String, Int>> {
+        val counts = HashMap<String, Int>()
+        for (item in items) {
+            if (item.country.length == 2) {
+                counts[item.country] = (counts[item.country] ?: 0) + 1
+            }
+        }
+        return counts.entries
+            .sortedByDescending { it.value }
+            .take(18)
+            .map { it.key to it.value }
     }
 
     private fun resolveSelected(current: String, list: List<ServerItem>): String {
@@ -156,30 +211,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         remoteConfigs: List<String>,
         localResults: List<TestResult>,
     ): List<ServerItem> {
-        val favSet = prefs.favorites
-        val customs = prefs.customConfigs
+        val favSet = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
+        val customs = prefs.customConfigs.map { Converters.cleanUri(it) }
         val customSet = customs.toHashSet()
-        val resultMap = localResults.associateBy { it.cfg }
+        val resultMap = localResults.associateBy { Converters.cleanUri(it.cfg) }
 
         val orderedRaw = LinkedHashSet<String>()
-        // 1) السيرفرات المفحوصة محليًا والناجحة أولًا (الأسرع في الأعلى)
-        localResults.filter { it.ok }.forEach { orderedRaw.add(it.cfg) }
-        // 2) السيرفرات المضافة يدويًا من المستخدم
+        // 1) السيرفرات المفضلة
+        favSet.forEach { if (Converters.isSupported(it)) orderedRaw.add(it) }
+        // 2) السيرفرات المفحوصة محليًا والناجحة (الأسرع في الأعلى)
+        localResults.filter { it.ok }.forEach {
+            val cleaned = Converters.cleanUri(it.cfg)
+            if (Converters.isSupported(cleaned)) orderedRaw.add(cleaned)
+        }
+        // 3) السيرفرات المضافة يدويًا من المستخدم
         customs.forEach { if (Converters.isSupported(it)) orderedRaw.add(it) }
-        // 3) بقية السيرفرات الحيّة من فرع data
-        remoteConfigs.forEach { if (Converters.isSupported(it)) orderedRaw.add(it) }
+        // 4) بقية السيرفرات الحيّة من فرع data (مرتّبة مسبقًا حسب جودة/موثوقية السحابة)
+        val sortedRemote = remoteConfigs
+            .map { Converters.cleanUri(it) }
+            .filter { Converters.isSupported(it) }
+            .sortedWith(
+                compareByDescending<String> { serverHints[it]?.score ?: 0.0 }
+                    .thenBy { (serverHints[it]?.latencyMs ?: serverLatencies[it] ?: 0L).let { ms -> if (ms > 0L) ms else Long.MAX_VALUE } }
+            )
+        sortedRemote.forEach { orderedRaw.add(it) }
 
         val items = orderedRaw.mapIndexed { idx, cfg ->
             val name = "bahrain-vpn #${idx + 1}"
             val local = resultMap[cfg]
-            val hintMs = serverHints[cfg] ?: 0L
+            val hint = serverHints[cfg]
+            val hintMs = hint?.latencyMs?.takeIf { it > 0L } ?: (serverLatencies[cfg] ?: 0L)
             ServerItem(
                 cfg = cfg,
                 name = name,
                 proto = Converters.protocolBadge(cfg),
                 endpoint = Converters.endpointLabel(cfg),
                 latencyMs = local?.latencyMs ?: hintMs,
-                speedKbps = local?.speedKbps ?: 0.0,
+                jitterMs = hint?.jitterMs ?: 0.0,
+                speedKbps = if ((local?.speedKbps ?: 0.0) > 0.0) local!!.speedKbps else (hint?.speedKbps ?: 0.0),
+                score = hint?.score ?: 0.0,
+                country = hint?.country.orEmpty(),
+                stabilityRuns = hint?.stabilityRuns ?: 0,
+                verifiedAt = hint?.verifiedAt.orEmpty(),
                 locallyTested = local != null,
                 isFavorite = cfg in favSet,
                 isCustom = cfg in customSet,
@@ -196,6 +269,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         state = state.copy(selectedCfg = item.cfg, error = null)
     }
 
+    fun setFilterCountry(cc: String) {
+        state = state.copy(filterCountry = cc)
+    }
+
+    fun setFeedProfile(profile: String) {
+        prefs.feedProfile = profile
+        state = state.copy(feedProfile = profile, filterCountry = "ALL")
+        refresh(silent = false)
+    }
+
+    fun clearConnectionHistory() {
+        prefs.clearConnectionHistory()
+        state = state.copy(connectionHistory = emptyList(), info = "تم مسح سجل الاتصالات")
+    }
+
     fun toggleFavorite(cfg: String) {
         val next = prefs.favorites.toMutableSet()
         if (!next.add(cfg)) next.remove(cfg)
@@ -208,16 +296,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val next = prefs.customConfigs.filterNot { it == cfg }
         prefs.customConfigs = next
         val rebuilt = buildServerList(state.configs, state.results)
+        val countries = computeCountryCounts(rebuilt)
         val sel = resolveSelected(state.selectedCfg, rebuilt)
         state = state.copy(
             servers = rebuilt,
+            availableCountries = countries,
             selectedCfg = sel,
             info = "تم حذف الكانفيغ المضاف يدويًا",
         )
     }
 
     fun importConfigsFromText(rawText: String) {
-        val trimmed = rawText.trim()
+        val trimmed = rawText.trim().take(4_000_000)
         if (trimmed.isBlank()) {
             state = state.copy(error = "الحافظة فارغة — انسخ رابط كانفيغ أو اشتراك أولًا")
             return
@@ -235,19 +325,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         val extracted = decodedText.lineSequence()
+            .take(2_000)
             .map { Converters.cleanUri(it) }
             .filter { it.contains("://") && Converters.isSupported(it) }
             .distinct()
             .toList()
 
         if (extracted.isEmpty()) {
-            state = state.copy(error = "لم يُعثر على كانفيغ صالح في النص المنسوخ")
+            state = state.copy(error = "لم يُعثر على كانفيغ صالح وآمن في النص المنسوخ")
             return
         }
 
-        val mergedCustom = (extracted + prefs.customConfigs).distinct()
+        val mergedCustom = (extracted + prefs.customConfigs).distinct().take(500)
         prefs.customConfigs = mergedCustom
         val rebuilt = buildServerList(state.configs, state.results)
+        val countries = computeCountryCounts(rebuilt)
         val firstAdded = rebuilt.firstOrNull { it.cfg == extracted.first() }
         val newSel = firstAdded?.cfg ?: resolveSelected(state.selectedCfg, rebuilt)
         if (firstAdded != null) {
@@ -257,6 +349,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
         state = state.copy(
             servers = rebuilt,
+            availableCountries = countries,
             selectedCfg = newSel,
             error = null,
             info = "تمت إضافة ${extracted.size} سيرفر تحت اسم bahrain-vpn",
@@ -268,14 +361,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         state = state.copy(autoFailover = enabled)
     }
 
-    // ── تنزيل القائمة الحيّة ──
-    fun refresh() {
+    // ── تنزيل القائمة الحيّة مع دعم التحديث الصامت و ETag ──
+    fun refresh(silent: Boolean = false) {
+        if (state.loading) return
         val r = buildRepo()
-        state = state.copy(loading = true, error = null, info = null, subUrl = r.subscriptionUrl)
+        val profile = prefs.feedProfile
+        if (!silent) {
+            state = state.copy(
+                loading = true,
+                error = null,
+                info = null,
+                subUrl = r.subscriptionUrl,
+                reliableSubUrl = r.reliableSubUrl,
+                lowLatencyUrl = r.lowLatencyUrl,
+                highThroughputUrl = r.highThroughputUrl,
+            )
+        }
         viewModelScope.launch {
-            val res = withContext(Dispatchers.IO) { r.loadRemote() }
+            val res = withContext(Dispatchers.IO) { r.loadRemote(profile) }
             if (res.serverLatencies.isNotEmpty()) {
-                serverHints = res.serverLatencies
+                serverLatencies = res.serverLatencies
+            }
+            if (res.serverHints.isNotEmpty()) {
+                serverHints = res.serverHints
             }
             val newConfigs = res.configs.ifEmpty { state.configs }
             val allFile = if (res.configs.isNotEmpty()) {
@@ -284,20 +392,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 state.allFile
             }
             val rebuilt = buildServerList(newConfigs, state.results)
+            val countries = computeCountryCounts(rebuilt)
             val sel = resolveSelected(state.selectedCfg, rebuilt)
 
             state = state.copy(
                 loading = false,
                 configs = newConfigs,
                 servers = rebuilt,
+                availableCountries = countries,
                 selectedCfg = sel,
                 meta = if (res.meta.generatedAt != "—") res.meta else state.meta,
                 source = res.source,
                 allFile = allFile,
-                error = res.error,
-                info = if (res.error == null && res.configs.isNotEmpty()) {
-                    "تم تحديث ${rebuilt.size} سيرفر bahrain-vpn جاهز"
-                } else null,
+                error = if (!silent) res.error else null,
+                info = if (!silent && res.error == null && res.configs.isNotEmpty()) {
+                    if (countries.isNotEmpty()) {
+                        "تم تحديث ${rebuilt.size} سيرفر bahrain-vpn (${countries.size} دولة)"
+                    } else {
+                        "تم تحديث ${rebuilt.size} سيرفر bahrain-vpn جاهز"
+                    }
+                } else state.info,
             )
         }
     }
@@ -359,6 +473,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else null
 
                 val rebuilt = buildServerList(state.configs, results)
+                val countries = computeCountryCounts(rebuilt)
                 // اختيار أسرع سيرفر تلقائيًا إذا لم يكن الـ VPN متّصلًا حاليًا
                 val autoPicked = if (!VpnStateManager.status.value.isActive && results.isNotEmpty()) {
                     rebuilt.first().also {
@@ -373,6 +488,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     testing = false,
                     results = results,
                     servers = rebuilt,
+                    availableCountries = countries,
                     selectedCfg = autoPicked,
                     progress = null,
                     allFile = allFile ?: state.allFile,
@@ -521,6 +637,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             error = null,
             info = "تم حفظ الإعدادات بنجاح",
             subUrl = r.subscriptionUrl,
+            reliableSubUrl = r.reliableSubUrl,
+            lowLatencyUrl = r.lowLatencyUrl,
+            highThroughputUrl = r.highThroughputUrl,
             autoFailover = autoFailover,
         )
     }

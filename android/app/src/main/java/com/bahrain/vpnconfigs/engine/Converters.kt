@@ -31,12 +31,28 @@ object Converters {
 
     fun schemeOf(cfg: String): String = cleanUri(cfg).substringBefore("://", "").lowercase()
 
+    private fun isUnsafeHost(rawHost: String): Boolean {
+        val h = rawHost.trim().removeSurrounding("[", "]").trimEnd('.').lowercase()
+        if (h.isEmpty() || h.length > 253) return true
+        if (h == "localhost" || h == "0.0.0.0" || h == "::1" || h == "::" ||
+            h.endsWith(".local") || h.endsWith(".localhost") || h.endsWith(".internal")
+        ) return true
+        if (h.startsWith("127.") || h.startsWith("10.") || h.startsWith("192.168.") ||
+            h.startsWith("169.254.") || h.startsWith("0.") || h.startsWith("fe80:")
+        ) return true
+        if (h.startsWith("172.")) {
+            val second = h.removePrefix("172.").substringBefore('.').toIntOrNull()
+            if (second != null && second in 16..31) return true
+        }
+        return false
+    }
+
     private fun metaOf(cfg: String): MetaCache {
         val cleaned = cleanUri(cfg)
         metaCache[cleaned]?.let { return it }
         val ob = toOutbound(cleaned)
-        val supported = ob != null
         val host = ob?.optString("server", "")?.lowercase() ?: ""
+        val supported = ob != null && !isUnsafeHost(host)
         val endpoint = if (ob != null) {
             val srv = ob.optString("server")
             val port = if (ob.has("server_port")) {

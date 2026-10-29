@@ -517,6 +517,62 @@ fun ConnectHomeScreen(
                 }
             }
         }
+
+        // ── سجل آخر الاتصالات الناجحة (بدون بيانات اعتماد سرية) ──
+        if (state.connectionHistory.isNotEmpty()) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("سجل آخر الاتصالات", style = MaterialTheme.typography.titleMedium)
+                        TextButton(onClick = { vm.clearConnectionHistory() }) {
+                            Text("مسح", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    state.connectionHistory.take(5).forEach { entry ->
+                        val flag = if (entry.country.isNotBlank()) "${VpnStateManager.countryFlag(entry.country)} ${entry.country} • " else ""
+                        val agoMin = ((System.currentTimeMillis() - entry.timestampMs) / 60_000L).coerceAtLeast(0L)
+                        val timeTxt = when {
+                            agoMin < 1L -> "الآن"
+                            agoMin < 60L -> "منذ ${agoMin}د"
+                            agoMin < 1440L -> "منذ ${agoMin / 60L}س"
+                            else -> "منذ ${agoMin / 1440L}ي"
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "$flag${entry.label} (${entry.proto})",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = "${entry.endpoint} • $timeTxt",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (entry.pingMs > 0L) {
+                                LatencyBadge(entry.pingMs)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -586,19 +642,23 @@ fun ServersListScreen(
         )
     }
 
-    val filteredServers = remember(state.servers, searchQuery, selectedFilter) {
+    val filteredServers = remember(state.servers, searchQuery, selectedFilter, state.filterCountry) {
         state.servers.filter { srv ->
             val passFilter = when (selectedFilter) {
                 "ALL" -> true
                 "FAV" -> srv.isFavorite
+                "STABLE" -> srv.stabilityRuns >= 2 || srv.score >= 70.0
                 else -> srv.proto.equals(selectedFilter, ignoreCase = true)
             }
+            val passCountry = state.filterCountry == "ALL" ||
+                srv.country.equals(state.filterCountry, ignoreCase = true)
             val q = searchQuery.trim()
             val passSearch = q.isEmpty() ||
                 srv.name.contains(q, ignoreCase = true) ||
                 srv.endpoint.contains(q, ignoreCase = true) ||
-                srv.proto.contains(q, ignoreCase = true)
-            passFilter && passSearch
+                srv.proto.contains(q, ignoreCase = true) ||
+                srv.country.contains(q, ignoreCase = true)
+            passFilter && passCountry && passSearch
         }
     }
 
@@ -616,8 +676,9 @@ fun ServersListScreen(
         ) {
             Column {
                 Text("قائمة سيرفرات bahrain-vpn", style = MaterialTheme.typography.titleLarge)
+                val updatedLabel = if (state.meta.generatedAt != "—") " • آخر تحديث سحابي: ${state.meta.generatedAt.take(16).replace('T', ' ')}" else ""
                 Text(
-                    "اضغط على أي سيرفر للاتصال أو التبديل الفوري (${filteredServers.size})",
+                    "اضغط للاتصال أو التبديل الفوري (${filteredServers.size})$updatedLabel",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )
@@ -708,10 +769,11 @@ fun ServersListScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        // ── شرائح الفلترة (البروتوكولات + المفضلة) ──
+        // ── شرائح الفلترة (البروتوكولات + المفضلة + المستقرة) ──
         val chips = listOf(
             "ALL" to "الكل",
             "FAV" to "⭐ المفضلة",
+            "STABLE" to "🛡️ المستقرة",
             "HY2" to "HY2",
             "VLESS" to "VLESS",
             "TROJAN" to "TROJAN",
@@ -731,6 +793,30 @@ fun ServersListScreen(
                     onClick = { selectedFilter = key },
                     label = { Text(title) },
                 )
+            }
+        }
+
+        // ── فلتر الدول الديناميكي ──
+        if (state.availableCountries.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                FilterChip(
+                    selected = state.filterCountry == "ALL",
+                    onClick = { vm.setFilterCountry("ALL") },
+                    label = { Text("🌍 كل الدول") },
+                )
+                state.availableCountries.forEach { (cc, count) ->
+                    val flag = VpnStateManager.countryFlag(cc)
+                    FilterChip(
+                        selected = state.filterCountry == cc,
+                        onClick = { vm.setFilterCountry(cc) },
+                        label = { Text("$flag $cc ($count)") },
+                    )
+                }
             }
         }
 
@@ -820,6 +906,20 @@ private fun ServerCard(
                     modifier = Modifier.weight(1f),
                 ) {
                     ProtoChip(item.proto)
+                    if (item.country.isNotBlank()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(6.dp),
+                        ) {
+                            Text(
+                                text = "${VpnStateManager.countryFlag(item.country)} ${item.country}",
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
                     Text(
                         text = item.name,
                         style = MaterialTheme.typography.titleMedium,
@@ -879,6 +979,22 @@ private fun ServerCard(
                             text = "السرعة المقاسة: $spdTxt",
                             style = MaterialTheme.typography.labelSmall,
                             color = VpnConnectedGreen,
+                        )
+                    }
+                    val telemetryParts = buildList {
+                        if (item.locallyTested) add("✓ فُحص على شبكتك")
+                        if (item.score > 0.0) add("الجودة ${item.score.toInt()}/100")
+                        if (item.stabilityRuns >= 2) add("مستقر ×${item.stabilityRuns}")
+                        if (item.jitterMs > 0.5) add("تذبذب ±${item.jitterMs.toInt()}ms")
+                        if (item.verifiedAt.length >= 16) add("آخر فحص ${item.verifiedAt.substring(11, 16)}")
+                    }
+                    if (telemetryParts.isNotEmpty()) {
+                        Text(
+                            text = telemetryParts.joinToString(" • "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -1221,6 +1337,28 @@ fun SettingsAndExportScreen(
                 )
 
                 HorizontalDivider()
+                Text("نمط القائمة السحابية المفضّلة", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    listOf(
+                        "smart" to "الذكي الشامل",
+                        "reliable" to "الأكثر استقرارًا",
+                        "low_latency" to "الأقل تأخيرًا",
+                        "high_throughput" to "الأعلى سرعة",
+                    ).forEach { (key, title) ->
+                        FilterChip(
+                            selected = state.feedProfile == key,
+                            onClick = { vm.setFeedProfile(key) },
+                            label = { Text(title) },
+                        )
+                    }
+                }
+
+                HorizontalDivider()
                 Text("مصدر البيانات السحابي (GitHub)", style = MaterialTheme.typography.labelSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -1281,6 +1419,32 @@ fun SettingsAndExportScreen(
                     Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("نسخ رابط الاشتراك السحابي (sub.txt)")
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { onCopy(state.reliableSubUrl, "نُسخ رابط السيرفرات المستقرة للحافظة") },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                    ) {
+                        Text("المستقرة", fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { onCopy(state.lowLatencyUrl, "نُسخ رابط الأقل تأخيرًا للحافظة") },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                    ) {
+                        Text("أقل بينغ", fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { onCopy(state.highThroughputUrl, "نُسخ رابط الأعلى سرعة للحافظة") },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                    ) {
+                        Text("أعلى سرعة", fontSize = 12.sp)
+                    }
                 }
 
                 ExportFileRow("best100.txt — أفضل السيرفرات المفحوصة", state.bestFile, onCopyFile, onShareFile)
