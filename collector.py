@@ -7,26 +7,25 @@ collector.py — جمع كانفيغات VPN من قنوات تلغرام + مس
   • قنوات تلغرام العامة (web preview: https://t.me/s/NAME)
   • مستودعات اشتراك على GitHub (روابط raw / jsDelivr) — نص عادي أو base64
 
-ما الذي تغيّر عن نسختك الأصلية:
-  1) استخراج كل كانفيغ على حدة بواسطة regex — حتى لو كانت 3 كانفيغات داخل <code> واحد.
+المميزات:
+  1) استخراج كل كانفيغ على حدة بواسطة regex — حتى لو كانت عدة كانفيغات داخل رسالة واحدة.
   2) يجد الكانفيغات خارج <code> أيضًا (نص عادي داخل الرسالة، أو داخل روابط <a href>).
-  3) يفكّ ملفات الاشتراك المُرمّزة بـ base64 تلقائيًا (معظم مستودعات GitHub كذلك).
-  4) طلبات متوازية + timeout + إعادة محاولة مع backoff (لا تعليق على 429/403).
-  5) تنقية الأسماء وحذف التكرار قبل إرسال أي طلب — لا طلب مكرّر.
-  6) الحفاظ على الاسكيم الصحيح (vless://، hysteria2:// …) وخروج نظيف بلا أسطر مبتورة.
-  7) كتابة ذرّية للملف (tmp ثم replace) حتى لا يقرأ أحد ملفًا نصف مكتوب.
-  8) لا يكتب الملف إطلاقًا إذا كانت النتيجة فارغة (حماية لآخر نسخة سليمة).
+  3) يفكّ ملفات الاشتراك المُرمّزة بـ base64 القياسي و URL-safe تلقائيًا.
+  4) ينظّف الكيانات النصية (&amp;) والمحارف الخفية (ZWNJ/RLM) وعلامات الترقيم الزائدة.
+  5) طلبات متوازية + timeout + إعادة محاولة مع backoff (لا تعليق على 429/403).
+  6) تنقية الأسماء وحذف التكرار قبل إرسال أي طلب — لا طلب مكرّر.
+  7) كتابة ذرّية للملف (tmp ثم replace) وحماية آخر نسخة سليمة عند الفراغ.
 
 أمثلة التشغيل:
     python collector.py                                   # تلغرام + GitHub (الافتراضي)
     python collector.py --no-telegram                     # مستودعات GitHub فقط
-    python collector.py --no-github                       # قنوات تلغرام فقط (كسابقًا)
+    python collector.py --no-github                       # قنوات تلغرام فقط
     python collector.py --max-per-source 500 -o config.txt
     python collector.py --unique-endpoint                 # كانفيغ واحد لكل host:port
     python collector.py --sources-file github_sources.txt  # قائمة مصادر خاصة بك
     python collector.py --calendar gregorian --tag "@my_channel"
 
-    # فحص حقيقي واختيار الأسرع (يُنزّل Xray تلقائيًا أول مرة):
+    # فحص حقيقي واختيار الأسرع (يُنزّل Xray/sing-box تلقائيًا أول مرة):
     python collector.py --test                       # config.txt + best.txt (أفضل 100)
     python collector.py --test --test-top 1500 --speed-top 400 --concurrency 24
     python collector.py --test --rank-by latency --best 50 --best-out fastest.txt
@@ -38,6 +37,7 @@ import argparse
 import base64
 import binascii
 import collections
+import html as html_lib
 import json
 import logging
 import re
@@ -57,6 +57,10 @@ try:                       # jdatetime اختياري: إذا لم يكن مثب
 except ImportError:
     jdatetime = None
 
+ROOT_DIR = Path(__file__).resolve().parent
+DEFAULT_CHANNELS_FILE = ROOT_DIR / "channels.txt"
+DEFAULT_SOURCES_FILE = ROOT_DIR / "github_sources.txt"
+
 TZ = ZoneInfo("Asia/Tehran")
 LOG = logging.getLogger("collector")
 
@@ -72,9 +76,10 @@ HEADERS = {
 SCHEMES = ("hysteria2", "vless", "vmess", "trojan", "hy2", "tuic", "ssr", "ss")
 CONFIG_RE = re.compile(r"(?:%s)://[^\s<>\"'`]+" % "|".join(SCHEMES))
 FRAGMENT_RE = re.compile(r"#.*$")
+INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]+")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1) قنوات تلغرام (يمكن استبدالها بملف عبر: --channels channels.txt)
+# 1) قنوات تلغرام الاحتياطية (يُقرأ channels.txt تلقائيًا إن وُجد)
 # ─────────────────────────────────────────────────────────────────────────────
 CHANNELS = [
     "IR_Predators", "DailyV2RY", "oneclickvpnkeys", "i10VPN", "Velinamusic", "FNetPro",
@@ -85,7 +90,7 @@ CHANNELS = [
     "VPNCUSTOMIZE", "UnlimitedDev", "MARAMBASHI", "PrivateVPNs", "client_proo",
     "nufilter", "icv2ray", "Vpn_Mikey", "v2rayngvpn", "kingspeedchanel", "VPN_Xpace",
     "SVNTEAM", "WPSNET", "v2rayng_fa2", "Hope_Net", "ServerNett", "alfred_config",
-    "allv2ray", "alo_v2rayng", "angus_vpn", "antifilterservice", "arv2ray", "asak_vpn",
+    "allv2ray", "alo_v2rayng", "angus_vpn", "antifilterservice", "asak_vpn",
     "asintech", "astrovpn_official", "awlix_ir", "azarbayjab1", "bermudavpn24",
     "bigsmoke_config", "blueberrynetwork", "bored_vpn", "catvpns", "cconfig_v2ray",
     "city_v2rayng", "configforvpn", "configpositive", "configt", "configv2rayforfree",
@@ -102,7 +107,7 @@ CHANNELS = [
     "mahdiserver", "manzariyeh_rasht", "maznet", "meli_proxyy", "mester_v2ray",
     "mgvpnsale", "mikasavpn", "miov2ray", "moftinet", "msv2ray", "msv2raynp", "n2vpn",
     "netmellianti", "new_proxy_channel", "noforcedheaven", "npvv2rayfilter", "ohvpn",
-    "orange_vpns", "outline_ir", "outline_vpn", "pars_vpn3", "parsashonam",
+    "orange_vpns", "outline_ir", "outline_vpn", "pars_vpn3",
     "pashmam_vpn", "pishiserver", "pqv2ray", "proprojec", "proxiiraniii", "proxy_n1",
     "proxyfull", "proxystore11", "prroxyng", "puni_shop_v2rayng", "qeshmserver",
     "realvpnmaster", "rnrifci", "satoshivpn", "savagev2ray", "selinc", "shadowproxy66",
@@ -131,34 +136,21 @@ CHANNELS = [
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2) مستودعات GitHub — كلها مُتحقَّق منها (آخر فحص 2026-10-29)
-#    الترتيب مقصود: الأفضل/المُختبَر أولًا، ثم الأحجام الكبيرة.
-#    ملاحظة: معظم هذه الملفات base64 — الكود يفكّها تلقائيًا.
+# 2) مستودعات GitHub الاحتياطية (يُقرأ github_sources.txt تلقائيًا إن وُجد)
 # ─────────────────────────────────────────────────────────────────────────────
 GITHUB_SOURCES = {
-    # أفضل 200 كانفيغ بعد اختبار فعلي داخل المستودع
     "matin-super": "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/super-sub.txt",
-    # مستودع يمرّر ترافيك HTTP حقيقي (204) قبل النشر
     "au1rxx-verified": "https://github.com/Au1rxx/free-vpn-subscriptions/raw/main/output/v2ray-base64.txt",
-    # أفضل نتائج مُجمِّع mahdibland
     "mahdibland-eternity": "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity",
-    # يجمع + يختبر آليًا
     "ermaozi": "https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/v2ray.txt",
-    # أكبر تنوّع بروتوكولات (vless/vmess/ss/trojan)
     "solispirit-all": "https://raw.githubusercontent.com/SoliSpirit/v2ray-configs/main/all_configs.txt",
-    # مُحسَّن لـ v2rayNG
     "alilapro": "https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/sub.txt",
-    # MatinGhanbari الكامل
     "matin-all": "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/all_sub.txt",
-    # hysteria2 فقط (أسرع عادة على الشبكات المُقيَّدة)
     "matin-hysteria2": "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/hysteria2.txt",
-    # split حسب البروتوكول
     "barryfar-sub1": "https://raw.githubusercontent.com/barry-far/V2ray-config/main/Sub1.txt",
-    # مُختبر السرعة داخليًا (vless)
     "leon406-vless": "https://raw.githubusercontent.com/Leon406/SubCrawler/master/sub/share/vless",
     "leon406-hysteria2": "https://raw.githubusercontent.com/Leon406/SubCrawler/master/sub/share/hysteria2",
     "leon406-mixed": "https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/a11",
-    # قائمة صغيرة منظّمة
     "openproxylist": "https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_RAW.txt",
 }
 
@@ -184,13 +176,41 @@ def channel_urls(raw: list[str]) -> list[str]:
     """
     seen: dict[str, str] = {}
     for item in raw:
-        name = item.strip().rstrip("/").split("/")[-1] or item.strip()
+        stripped = item.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        cleaned = stripped.split("?", 1)[0].split("#", 1)[0].rstrip("/")
+        name = cleaned.split("/")[-1] or stripped
         name = name.removeprefix("@")
         if not re.fullmatch(r"[A-Za-z0-9_]{4,64}", name):
             LOG.warning("اسم مستخدم غير صالح، تم تجاهله: %r", item)
             continue
         seen.setdefault(name.lower(), f"https://t.me/s/{name}")
-    return list(seen.values())          # dict يحافظ على الترتيب + يمنع التكرار
+    return list(seen.values())
+
+
+def get_channels(path: str | Path | None = None) -> list[str]:
+    """قراءة قائمة القنوات من المسار المحدّد، أو من channels.txt إن وُجد، وإلا فالقائمة المدمجة."""
+    target = Path(path) if path else (DEFAULT_CHANNELS_FILE if DEFAULT_CHANNELS_FILE.exists() else None)
+    if target and target.exists():
+        lines = [
+            ln.strip()
+            for ln in target.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
+        if lines:
+            return lines
+    return list(CHANNELS)
+
+
+def get_github_sources(path: str | Path | None = None) -> dict[str, str]:
+    """قراءة مصادر GitHub من المسار المحدّد، أو من github_sources.txt إن وُجد، وإلا فالقائمة المدمجة."""
+    target = Path(path) if path else (DEFAULT_SOURCES_FILE if DEFAULT_SOURCES_FILE.exists() else None)
+    if target and target.exists():
+        loaded = load_sources_file(str(target))
+        if loaded:
+            return loaded
+    return dict(GITHUB_SOURCES)
 
 
 def fetch_text(url: str, retries: int = 3, timeout: tuple[int, int] = (5, 25)) -> str | None:
@@ -210,7 +230,7 @@ def fetch_text(url: str, retries: int = 3, timeout: tuple[int, int] = (5, 25)) -
             return r.text
 
         if r.status_code in (429, 500, 502, 503, 504):
-            wait = min(30, 2 ** attempt)      # 429 = تجاوز الحد → انتظر أكثر
+            wait = min(30, 2 ** attempt)
             LOG.debug("%s -> %d، انتظار %ss", url, r.status_code, wait)
             time.sleep(wait)
             continue
@@ -223,14 +243,19 @@ def fetch_text(url: str, retries: int = 3, timeout: tuple[int, int] = (5, 25)) -
 
 
 def b64_decode(text: str) -> str | None:
-    """فكّ base64 مع تصحيح الحشو (padding). يُرجع None إذا لم يكن base64 صالحًا."""
+    """فكّ base64 القياسي أو URL-safe مع تصحيح الحشو (padding). يُرجع None عند الفشل."""
     compact = re.sub(r"\s+", "", text)
     if not compact:
         return None
+    normalized = compact.replace("-", "+").replace("_", "/")
+    padded = normalized + "=" * (-len(normalized) % 4)
     try:
-        return base64.b64decode(compact + "=" * (-len(compact) % 4)).decode("utf-8", "ignore")
+        return base64.b64decode(padded, validate=True).decode("utf-8", "ignore")
     except (binascii.Error, ValueError):
-        return None
+        try:
+            return base64.b64decode(padded).decode("utf-8", "ignore")
+        except (binascii.Error, ValueError):
+            return None
 
 
 def parse_subscription(text: str) -> list[str]:
@@ -239,13 +264,14 @@ def parse_subscription(text: str) -> list[str]:
       • نص عادي: سطر لكل كانفيغ
       • base64 لكامل الملف (الشائع في مستودعات GitHub)
     """
-    found = CONFIG_RE.findall(text)
+    unescaped = html_lib.unescape(text)
+    found = CONFIG_RE.findall(unescaped)
     if found:
         return found
 
     decoded = b64_decode(text)
     if decoded:
-        return CONFIG_RE.findall(decoded)
+        return CONFIG_RE.findall(html_lib.unescape(decoded))
     return []
 
 
@@ -256,14 +282,14 @@ def extract_configs(html: str) -> list[str]:
     """
     soup = BeautifulSoup(html, "html.parser")
     blocks = soup.select("div.tgme_widget_message_text")
-    if not blocks:                     # احتياطًا لو تغيّر بنية الصفحة
+    if not blocks:
         blocks = [soup]
 
     found: list[str] = []
     for block in blocks:
         found.extend(CONFIG_RE.findall(block.get_text("\n")))
         for a in block.find_all("a", href=True):
-            found.extend(CONFIG_RE.findall(a["href"]))
+            found.extend(CONFIG_RE.findall(html_lib.unescape(a["href"])))
     return found
 
 
@@ -273,25 +299,57 @@ def endpoint_key(cfg: str) -> str | None:
     لإبقاء عقدة واحدة فقط لكل عنوان (حتى لو اختلفت بارامتراتها).
     """
     scheme, _, rest = cfg.partition("://")
-    rest = rest.split("#")[0]
+    rest = rest.split("#", 1)[0]
 
     if scheme == "vmess":
-        body = rest.split("?")[0]
+        body = rest.split("?", 1)[0]
+        dec = b64_decode(body)
+        if not dec:
+            return None
         try:
-            j = json.loads(base64.b64decode(body + "=" * (-len(body) % 4)))
-            return f"{j.get('add')}:{j.get('port')}"
+            j = json.loads(dec)
+            add = str(j.get("add") or "").strip().lower()
+            port = str(j.get("port") or "").strip()
+            return f"{add}:{port}" if add and port else None
         except Exception:
             return None
 
     if "@" not in rest:                # ss/ssr بصيغة base64
-        dec = b64_decode(rest.split("?")[0])
+        dec = b64_decode(rest.split("?", 1)[0].rstrip("/"))
         if not dec or "@" not in dec:
             return None
         rest = dec.rsplit("@", 1)[-1]
-        return rest.split("/")[0].split("?")[0] or None
+        hp = rest.split("/", 1)[0].split("?", 1)[0].strip().lower()
+        return hp or None
 
-    host_port = rest.rsplit("@", 1)[-1].split("/")[0].split("?")[0]
-    return host_port.lower() or None
+    host_port = rest.rsplit("@", 1)[-1].split("/", 1)[0].split("?", 1)[0].strip().lower()
+    return host_port or None
+
+
+def _strip_trailing_junk(cfg: str) -> str:
+    """إزالة علامات الترقيم الزائدة في نهاية السطر دون إتلاف base64 أو عناوين IPv6."""
+    cfg = cfg.rstrip(",.;")
+    while cfg.endswith(")") and "(" not in cfg:
+        cfg = cfg[:-1]
+    while cfg.endswith("]") and "[" not in cfg:
+        cfg = cfg[:-1]
+    return cfg
+
+
+def _valid_vmess_body(body: str) -> bool:
+    dec = b64_decode(body.split("?", 1)[0])
+    if not dec:
+        return False
+    try:
+        j = json.loads(dec)
+        if not isinstance(j, dict):
+            return False
+        add = str(j.get("add") or "").strip()
+        uid = str(j.get("id") or "").strip()
+        port = int(str(j.get("port") or "0").strip())
+        return bool(add and uid and 1 <= port <= 65535)
+    except Exception:
+        return False
 
 
 def clean(configs: list[str]) -> tuple[list[str], int]:
@@ -302,18 +360,31 @@ def clean(configs: list[str]) -> tuple[list[str], int]:
     out: dict[str, None] = {}
     rejected = 0
     for raw in configs:
-        cfg = FRAGMENT_RE.sub("", raw.strip())        # حذف الـ remark القديم فقط هنا
-        scheme, _, body = cfg.partition("://")
+        unescaped = html_lib.unescape(raw)
+        unescaped = INVISIBLE_RE.sub("", unescaped).strip()
+        cfg = FRAGMENT_RE.sub("", unescaped).strip()
+        cfg = _strip_trailing_junk(cfg)
+        scheme, sep, body = cfg.partition("://")
+        if not sep:
+            rejected += 1
+            continue
 
-        # تحقّق بسيط من الصلاحية:
-        # vless/trojan/hysteria2/tuic تحتاج "@host:port" في البدن،
-        # أما vmess/ss/ssr فبدنها base64 ولا تحتوي "@" بالضرورة.
         needs_at = scheme in ("vless", "trojan", "hysteria2", "hy2", "tuic")
-        min_len = 20 if scheme in ("vmess", "ss", "ssr") else 8
+        min_len = 16 if scheme in ("vmess", "ss", "ssr") else 8
 
         if len(body) < min_len or (needs_at and "@" not in body):
             rejected += 1
             continue
+
+        if scheme == "vmess" and not _valid_vmess_body(body):
+            rejected += 1
+            continue
+
+        if needs_at:
+            after_at = body.rsplit("@", 1)[-1].split("/", 1)[0].split("?", 1)[0]
+            if not after_at:
+                rejected += 1
+                continue
 
         out.setdefault(cfg, None)
     return list(out), rejected
@@ -324,7 +395,7 @@ def dedupe_by_endpoint(configs: list[str]) -> tuple[list[str], int]:
     out: list[str] = []
     used: set[str] = set()
     for cfg in configs:
-        key = endpoint_key(cfg) or cfg      # إن فشل الاستخراج نستخدم الكانفيغ نفسه كمفتاح
+        key = endpoint_key(cfg) or cfg
         if key in used:
             continue
         used.add(key)
@@ -335,14 +406,14 @@ def dedupe_by_endpoint(configs: list[str]) -> tuple[list[str], int]:
 def stamp(calendar: str) -> tuple[str, str]:
     """
     يُرجع (ختم الوقت الكامل، التاريخ فقط).
-    الافتراضي شمسي (مثل نسختك)، ويمكن اختيار الميلادي.
+    إذا اختير التقويم الشمسي ولم يكن jdatetime مثبّتًا نعود تلقائيًا إلى الميلادي.
     """
     now = datetime.now(TZ)
     if calendar == "jalali":
-        if jdatetime is None:
-            raise SystemExit("jdatetime غير مثبّت: pip install jdatetime")
-        j = jdatetime.datetime.fromgregorian(datetime=now)
-        return j.strftime("%b-%d | %H:%M"), j.strftime("%b-%d")
+        if jdatetime is not None:
+            j = jdatetime.datetime.fromgregorian(datetime=now)
+            return j.strftime("%b-%d | %H:%M"), j.strftime("%b-%d")
+        LOG.warning("jdatetime غير مثبّت؛ استخدام التقويم الميلادي بدلًا منه.")
     return now.strftime("%b-%d | %H:%M"), now.strftime("%b-%d")
 
 
@@ -358,9 +429,10 @@ def write_outputs(configs: list[str], out_path: Path, calendar: str,
             remark = f"#{tag} {i} | {date_only} | {tag}"
         lines.append(f"{cfg}{remark}")
 
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = out_path.with_name(out_path.name + ".tmp")
     tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    tmp.replace(out_path)      # استبدال ذرّي: القارئ لا يرى ملفًا نصف مكتوب
+    tmp.replace(out_path)
 
 
 def write_best(results, out_path: Path, limit: int, calendar: str, tag: str) -> int:
@@ -375,6 +447,7 @@ def write_best(results, out_path: Path, limit: int, calendar: str, tag: str) -> 
         remark = f"#{i + 1} | {r.latency_ms:.0f}ms | {speed} | {date_only} | {tag}"
         lines.append(f"{r.cfg}{remark}")
 
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = out_path.with_name(out_path.name + ".tmp")
     tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
     tmp.replace(out_path)
@@ -476,7 +549,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--unique-endpoint", action="store_true",
                     help="إبقاء كانفيغ واحد فقط لكل host:port (ملف أصغر وأنظف)")
     ap.add_argument("--calendar", choices=("jalali", "gregorian"), default="jalali")
-    ap.add_argument("--header-note", default="تحديث كل ربع ساعة")
+    ap.add_argument("--header-note", default="تحديث كل نصف ساعة")
     ap.add_argument("--tag", default="@vpn-bahrain", help="الوسم المستخدم في الـ remark")
 
     # ── الفحص الحقيقي واختيار الأسرع ──
@@ -520,9 +593,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # 1) تلغرام
     if args.telegram:
-        raw = CHANNELS
-        if args.channels:
-            raw = Path(args.channels).read_text(encoding="utf-8").splitlines()
+        raw = get_channels(args.channels)
         urls = channel_urls(raw)
         LOG.info("[تلغرام] %d قناة فريدة من أصل %d مُدخل", len(urls), len(raw))
 
@@ -533,7 +604,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # 2) GitHub
     if args.github:
-        sources = load_sources_file(args.sources_file) if args.sources_file else GITHUB_SOURCES
+        sources = get_github_sources(args.sources_file)
         LOG.info("[GitHub] %d مصدر", len(sources))
 
         cfgs, stats = collect_github(sources, args.workers, args.max_per_source)

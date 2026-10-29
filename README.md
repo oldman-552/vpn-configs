@@ -1,79 +1,66 @@
 # Bahrain Configs — مولّد كانفيغات VPN مع فحص حقيقي
 
-منظومة من طبقتين:
+منظومة متكاملة من طبقتين تعمل آليًا بالكامل:
 
 ```
 GitHub Actions (كل 30 دقيقة)                تطبيق أندرويد
 ──────────────────────────────              ──────────────────────────
-277 قناة تلغرام + 13 مستودع GitHub           ينزّل alive.txt (~200KB)
-        ↓ 39,000 كانفيغ                      يمزج العيّنة بين البروتوكولات
+277 قناة تلغرام + 13 مستودع GitHub           ينزّل alive.txt (~200KB) تلقائيًا
+        ↓ ~39,000 كانفيغ                     يمزج العيّنة بين البروتوكولات
 تنظيف + إزالة تكرار                          يفحصها فعليًا عبر نواة sing-box
         ↓                                    على شبكة هاتفك (generate_204)
-فحص اتصال حقيقي (Xray + sing-box)            يقيس سرعة أفضل N
+فحص اتصال حقيقي (Xray + sing-box)            يقيس سرعة التنزيل الفعلية لأفضل N
         ↓ ~1,000 حيّة                        ↓
-نشر في فرع data عبر jsDelivr                 يكتب config.txt + best100.txt
-                                              ويشاركها مع v2rayNG/Hiddify
+نشر في فرع data عبر jsDelivr                 يكتب best100.txt + sub.txt + config.txt
+                                              وينسخ/يفتح مباشرة في v2rayNG و Hiddify
 ```
 
-**الفكرة:** الخادم يقلّص العدد (رخيص وسريع)، والهاتف يقرّر الأفضل **لشبكتك أنت** —
-لأن عقدة سريعة على خادم أوروبي قد تكون ميتة عندك.
+**الفكرة:** الخادم يقلّص العدد (سريع ومجاني)، والهاتف يقرّر الأفضل **لشبكتك أنت** —
+لأن عقدة سريعة على خادم أوروبي قد تكون محجوبة أو بطيئة عند مزوّدك المحلي.
 
 ---
 
-## 1) الخادم (GitHub Actions)
-
-### التشغيل
-1. ارفع المشروع إلى مستودع **Public** (المجاني للجدولة الكثيفة).
-2. `Actions → data → Run workflow` (أو انتظر 30 دقيقة).
-3. سيُنشأ فرع `data` تلقائيًا:
+## 1) الروابط السحابية المباشرة (تتحدّث آليًا كل 30 دقيقة)
 
 ```
-https://cdn.jsdelivr.net/gh/OWNER/REPO@data/alive.txt       ← التطبيق يستخدم هذا
-https://cdn.jsdelivr.net/gh/OWNER/REPO@data/best100.txt
-https://cdn.jsdelivr.net/gh/OWNER/REPO@data/sub.txt         ← اشتراك base64
-https://cdn.jsdelivr.net/gh/OWNER/REPO@data/alive.json
-https://cdn.jsdelivr.net/gh/OWNER/REPO@data/all.txt.gz
-https://cdn.jsdelivr.net/gh/OWNER/REPO@data/meta.json
+https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/sub.txt         ← رابط اشتراك Base64 جاهز لـ v2rayNG / Hiddify / NekoBox
+https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/best100.txt     ← أفضل 100 حسب قياس الخادم
+https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/alive.txt       ← كل الكانفيغات الحيّة (يستخدمها التطبيق)
+https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/alive.json
+https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/all.txt.gz
+https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/meta.json
 ```
 
-### الملفات
+---
+
+## 2) تطبيق الأندرويد
+
+- **التحميل المباشر:** من صفحة [**Releases**](https://github.com/oldman-552/vpn-configs/releases) حمّل ملف `app-release.apk` وثبّته مباشرة (التطبيق مضبوط مسبقًا على `oldman-552/vpn-configs` بدون أي إعداد يدوي).
+- **البناء عبر GitHub Actions:** `Actions → apk → Run workflow` (ينتج `app-release.apk` موقّع وجاهز للتثبيت + `app-debug.apk`).
+- **البناء محليًا:**
+  ```bash
+  cd android && bash scripts/fetch-engines.sh --all && gradle assembleDebug assembleRelease
+  ```
+
+تفاصيل التطبيق الكاملة: [`android/README.md`](android/README.md)
+
+---
+
+## 3) الملفات وبنية المشروع
+
 | ملف | الوظيفة |
 |---|---|
-| `.github/workflows/data.yml` | الجدولة + الجمع + الفحص + النشر (commit واحد يُستبدل → لا انتفاخ) |
-| `server/build_data.py` | منطق الدورة: جمع → تنظيف → فحص → بناء `dist/` |
-| `collector.py` | جمع تلغرام + GitHub (regex، base64، retry، كتابة ذرّية) |
-| `tester.py` | محرّك الفحص (Xray + sing-box) — نفس المنطق المستخدم في التطبيق |
-| `github_sources.txt` / `channels.txt` | قوائم المصادر |
-
-### متغيّرات البيئة (في `data.yml`)
-`TEST_TOP=1200` • `CONCURRENCY=40` • `TEST_TIMEOUT=5` • `BEST_N=100` • `MAX_PER_HOST=3`
-
-### نتيجة تشغيل حقيقي
-```
-جمع: 46,377 → نظيف: 39,602
-فحص: 250 → حيّة 96   (بتوزيع متوازن: vless/ss/trojan/vmess/hysteria2/tuic)
-المخرجات: alive.txt 12KB • best100.txt 14KB • all.txt.gz 2.2MB • meta.json
-الزمن: 44 ثانية (بعيّنة 250؛ العيّنة الكاملة 1200 تستغرق ~3–4 دقائق)
-```
+| `.github/workflows/data.yml` | الجدولة كل 30 دقيقة + الجمع + الفحص + النشر إلى فرع `data` وتفريغ كاش jsDelivr |
+| `.github/workflows/apk.yml` | بناء APK موقّع (`arm64-v8a` + `x86_64`) ورفعه إلى Releases و Artifacts |
+| `.github/workflows/ci.yml` | اختبارات آلية شاملة لكل وحدات النظام (`pytest`) |
+| `server/build_data.py` | منطق دورة الخادم: جمع ← تنظيف ← فحص ← بناء `dist/` |
+| `collector.py` | جمع تلغرام + GitHub (regex، base64 قياسي و URL-safe، تنظيف HTML/ZWNJ، كتابة ذرّية) |
+| `tester.py` | محرّك الفحص الحقيقي (Xray + sing-box عبر SOCKS5h و `generate_204`) |
+| `channels.txt` / `github_sources.txt` | قوائم قنوات تلغرام ومصادر GitHub |
 
 ---
 
-## 2) التطبيق (أندرويد)
-
-```bash
-# بناء عبر GitHub Actions: Actions → apk → Run workflow → Artifacts
-# أو محليًا:
-cd android && bash scripts/fetch-engines.sh --all && gradle assembleDebug
-```
-
-بعد التثبيت: **الإعدادات ← OWNER و REPO** → «تنزيل القائمة» → «ابدأ الفحص»
-→ الملفات ← شارك `best100.txt` إلى v2rayNG.
-
-تفاصيل كاملة: [`android/README.md`](android/README.md)
-
----
-
-## 3) الاستخدام اليدوي (سطر الأوامر)
+## 4) الاستخدام اليدوي (سطر الأوامر)
 
 ```bash
 pip install -r requirements.txt
@@ -85,28 +72,10 @@ python tester.py -i config.txt --best 100  # إعادة فحص ملف جاهز
 TEST_TOP=400 python server/build_data.py   # دورة الخادم محليًا → dist/
 ```
 
-### نتائج الفحص (مرجعية)
-| بروتوكول | النجاح عبر sing-box (مُتحقَّق) |
-|---|---|
-| ss | 10/10 |
-| hysteria2 | 8/8 |
-| hy2 | 6/6 |
-| vmess | 9/10 |
-| trojan | 8/10 |
-| vless | 10/12 (الفشل بسبب نقل `xhttp` غير المدعوم) |
-
 ---
 
-## 4) مرجع المصادر
-- أفضل مستودعات الاشتراك المُتحقَّقة (نجوم/تحديث/حجم): [`sources.md`](sources.md)
-- تقييم الكود الأصلي وأخطاؤه: [`review.md`](review.md)
-
----
-
-## 5) ملاحظات مهمة
-1. **المستودع Public** → ملفاتك مرئية للجميع (بديل Private يحدّ الجدولة بـ ~الساعة).
-2. **cron جت‌هب غير دقيق** (تأخير 5–20 دقيقة وقت الذروة) — لذلك اخترنا 30 دقيقة لا 15.
-3. **الأمان:** مشغّل أي عقدة مجانية يرى وجهاتك وSNI — لا تسجّل دخولًا لحسابات حساسة.
-4. **النتائج تخصّ شبكتك:** «أفضل 100» يتغيّر بتغيّر الشبكة/المزوّد.
-5. **قانونيًا:** إعادة نشر كانفيغات قنوات عامة قد يخالف شروط الخدمة في بعض البلدان.
-6. **لا يتصل التطبيق بنفسه** كـ VPN (لا VpnService بعد)؛ ينتج ملفات لعميل خارجي.
+## 5) مراجع وملاحظات مهمة
+- أفضل مستودعات الاشتراك المُتحقَّقة: [`sources.md`](sources.md)
+- مراجعة الأخطاء السابقة في الكود القديم: [`review.md`](review.md)
+- **الأمان:** مشغّل أي عقدة مجانية يرى وجهاتك وSNI — لا تسجّل دخولًا لحسابات بنكية أو حساسة عبر عقدة عامة.
+- **النتائج تخصّ شبكتك:** «أفضل 100» يتغيّر بتغيّر الشبكة/المزوّد؛ أعد الفحص من التطبيق متى تغيّرت شبكتك.

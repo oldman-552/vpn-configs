@@ -17,12 +17,19 @@ fetch() {           # $1 = ABI في jniLibs   $2 = اسم الأصل في إصد
   local abi="$1" asset="$2"
   local url="https://github.com/SagerNet/sing-box/releases/download/v${VERSION}/sing-box-${VERSION}-${asset}.tar.gz"
   local tmp; tmp="$(mktemp -d)"
-  echo "→ $abi  ←  $asset"
-  curl -fsSL --retry 3 -o "$tmp/sb.tar.gz" "$url"
+  echo "→ $abi  ←  $asset (v${VERSION})"
+  curl -fsSL --retry 4 --retry-delay 2 --retry-connrefused -o "$tmp/sb.tar.gz" "$url"
   tar xzf "$tmp/sb.tar.gz" -C "$tmp"
   mkdir -p "$JNI/$abi"
+  local bin_src
+  bin_src="$(find "$tmp" -type f -name sing-box | head -1)"
+  if [[ -z "$bin_src" || ! -s "$bin_src" ]]; then
+    echo "خطأ: لم يُعثر على الملف التنفيذي sing-box داخل الأرشيف!" >&2
+    rm -rf "$tmp"
+    exit 1
+  fi
   # اسم يبدأ بـ lib وينتهي بـ .so حتى يعامله أندرويد كمكتبة أصلية ويستخرجه
-  cp "$(find "$tmp" -type f -name sing-box | head -1)" "$JNI/$abi/libsingbox.so"
+  cp "$bin_src" "$JNI/$abi/libsingbox.so"
   chmod +x "$JNI/$abi/libsingbox.so"
   rm -rf "$tmp"
   ls -lh "$JNI/$abi/libsingbox.so" | awk '{print "   الحجم:", $5}'
@@ -35,4 +42,3 @@ fi
 
 echo
 echo "تم. الملفات في: $JNI"
-echo "ملاحظة: أضف jniLibs/ إلى .gitignore إن لم ترغب برفع ~80MB للمستودع."

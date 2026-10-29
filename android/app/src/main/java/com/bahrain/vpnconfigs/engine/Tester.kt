@@ -8,10 +8,13 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import java.net.InetAddress
+import java.net.ServerSocket
 
 data class TestProgress(
     val stage: String,
@@ -28,8 +31,11 @@ class Tester(private val ctx: Context) {
 
     /** توزيع عيّنة متوازنة بين البروتوكولات (round-robin) بدل أخذ أول N فقط. */
     fun pickBalanced(configs: List<String>, limit: Int): List<String> {
+        if (limit <= 0 || configs.isEmpty()) return emptyList()
         val groups = LinkedHashMap<String, MutableList<String>>()
-        configs.forEach { c -> groups.getOrPut(c.substringBefore("://")) { mutableListOf() }.add(c) }
+        configs.forEach { c ->
+            groups.getOrPut(Converters.schemeOf(c)) { mutableListOf() }.add(c)
+        }
         val idx = groups.keys.associateWith { 0 }.toMutableMap()
         val out = ArrayList<String>(minOf(limit, configs.size))
         while (out.size < limit) {
@@ -49,8 +55,33 @@ class Tester(private val ctx: Context) {
         return out
     }
 
+    /** تخصيص منافذ محلية متاحة وغير متصادمة بعدد العمليات المتوازية. */
+    private fun allocatePortPool(conc: Int, basePort: Int = 21000): Channel<Int> {
+        val pool = Channel<Int>(conc)
+        var candidate = basePort
+        var count = 0
+        val loopback = InetAddress.getByName("127.0.0.1")
+        while (count < conc && candidate < 60000) {
+            val free = try {
+                ServerSocket(candidate, 1, loopback).use { true }
+            } catch (_: Exception) {
+                false
+            }
+            if (free) {
+                pool.trySend(candidate)
+                count++
+            }
+            candidate++
+        }
+        while (count < conc) {
+            pool.trySend(basePort + count)
+            count++
+        }
+        return pool
+    }
+
     /**
-     * الفحص الكامل. onProgress يُنادى بعد كل عقدة (استخدمه لتحديث الواجهة).
+     * الفحص الكامل مع مجمّع منافذ آمن ضد التصادم ودعم الإيقاف الفوري.
      * @return قائمة مرتّبة (الأفضل أولًا) بالنتائج الناجحة فقط.
      */
     suspend fun run(
@@ -60,7 +91,7 @@ class Tester(private val ctx: Context) {
         concurrency: Int,
         timeoutSec: Int,
         rankBySpeed: Boolean,
-        onProgress: (TestProgress) -> Unit = {},
+        onProgress: suspend (TestProgress) -> Unit = {},
     ): List<TestResult> = withContext(Dispatchers.IO) {
         if (!engine.isAvailable) return@withContext emptyList()
 
@@ -68,27 +99,37 @@ class Tester(private val ctx: Context) {
         val candidates = pickBalanced(supported, testTop)
         if (candidates.isEmpty()) return@withContext emptyList()
 
+        val conc = concurrency.coerceIn(1, 12)
+        val ports = allocatePortPool(conc)
+
         // ── المرحلة 1: فحص الاتصال ──
-        val sem = Semaphore(concurrency.coerceIn(1, 12))
         var done = 0
         var alive = 0
-        val basePort = 21000
+        onProgress(TestProgress("فحص الاتصال", 0, candidates.size, 0))
 
         val firstStage = coroutineScope {
-            candidates.mapIndexed { i, cfg ->
+            candidates.map { cfg ->
                 async {
-                    sem.withPermit {
-                        val port = basePort + (i % concurrency.coerceIn(1, 12))
-                        val r = engine.test(cfg, port, timeoutSec, measureSpeed = false)
-                        synchronized(this@Tester) {
-                            done++
-                            if (r.ok) alive++
-                            if (done % 5 == 0 || done == candidates.size) {
-                                onProgress(TestProgress("فحص الاتصال", done, candidates.size, alive))
-                            }
+                    ensureActive()
+                    val port = ports.receive()
+                    val r = try {
+                        ensureActive()
+                        runInterruptible(Dispatchers.IO) {
+                            engine.test(cfg, port, timeoutSec, measureSpeed = false)
                         }
-                        r
+                    } finally {
+                        ports.trySend(port)
                     }
+                    var snap: TestProgress? = null
+                    synchronized(this@Tester) {
+                        done++
+                        if (r.ok) alive++
+                        if (done % 4 == 0 || done == candidates.size) {
+                            snap = TestProgress("فحص الاتصال", done, candidates.size, alive)
+                        }
+                    }
+                    snap?.let { onProgress(it) }
+                    r
                 }
             }.awaitAll()
         }
@@ -98,33 +139,47 @@ class Tester(private val ctx: Context) {
 
         // ── المرحلة 2: قياس السرعة ──
         val speedPool = okList.take(maxOf(speedTop, 0))
-        var sdone = 0
         val speedMap = HashMap<String, Double>()
 
-        coroutineScope {
-            speedPool.mapIndexed { i, res ->
-                async {
-                    sem.withPermit {
-                        val port = basePort + (i % concurrency.coerceIn(1, 12))
-                        val r = engine.test(res.cfg, port, timeoutSec, measureSpeed = true)
+        if (speedPool.isNotEmpty()) {
+            var sdone = 0
+            onProgress(TestProgress("قياس السرعة", 0, speedPool.size, 0))
+            coroutineScope {
+                speedPool.map { res ->
+                    async {
+                        ensureActive()
+                        val port = ports.receive()
+                        val r = try {
+                            ensureActive()
+                            runInterruptible(Dispatchers.IO) {
+                                engine.test(res.cfg, port, timeoutSec, measureSpeed = true)
+                            }
+                        } finally {
+                            ports.trySend(port)
+                        }
+                        var snap: TestProgress? = null
                         synchronized(this@Tester) {
                             if (r.ok && r.speedKbps > 0) speedMap[res.cfg] = r.speedKbps
                             sdone++
-                            onProgress(TestProgress("قياس السرعة", sdone, speedPool.size,
-                                speedMap.size))
+                            snap = TestProgress("قياس السرعة", sdone, speedPool.size, speedMap.size)
                         }
+                        snap?.let { onProgress(it) }
                     }
-                }
-            }.awaitAll()
+                }.awaitAll()
+            }
         }
+
+        ports.close()
 
         val merged = okList.map { r ->
             r.copy(speedKbps = speedMap[r.cfg] ?: 0.0)
         }
         if (rankBySpeed) {
-            merged.sortedWith(compareByDescending<TestResult> { it.speedKbps > 0 }
-                .thenByDescending { it.speedKbps }
-                .thenBy { it.latencyMs })
+            merged.sortedWith(
+                compareByDescending<TestResult> { it.speedKbps > 0 }
+                    .thenByDescending { it.speedKbps }
+                    .thenBy { it.latencyMs }
+            )
         } else {
             merged.sortedBy { it.latencyMs }
         }

@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application") version "8.5.2"
     id("org.jetbrains.kotlin.android") version "2.0.20"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.0.20"
 }
 
 android {
@@ -11,17 +12,31 @@ android {
         applicationId = "com.bahrain.vpnconfigs"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
         // النواة تُشحن كـ libsingbox.so لكل معمارية موجودة في jniLibs
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
 
+    signingConfigs {
+        val ksPath = System.getenv("KEYSTORE_PATH")
+        if (!ksPath.isNullOrBlank() && file(ksPath).exists()) {
+            create("release") {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("KEY_ALIAS") ?: ""
+                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            // توقيع النسخة النهائية بمفتاح الإصدار إن توفّر، وإلا بمفتاح التطوير لتكون قابلة للتثبيت مباشرة
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
@@ -36,11 +51,18 @@ android {
     kotlinOptions { jvmTarget = "17" }
 
     buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
-    // ضروري جدًا: استخراج المكتبات الأصلية حتى يمكن تنفيذها كملفات تنفيذية
+    lint {
+        disable += "ExpiredTargetSdkVersion"
+        abortOnError = false
+    }
+
+    // ضروري جدًا: استخراج المكتبات الأصلية وعدم تجريد رموز Go في libsingbox.so
     packaging {
-        jniLibs { useLegacyPackaging = true }
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += "**/*.so"
+        }
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
 }

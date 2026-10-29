@@ -10,32 +10,34 @@ class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     var owner: String
-        get() = sp.getString("owner", "") ?: ""
-        set(v) = sp.edit { putString("owner", v.trim()) }
+        get() = (sp.getString("owner", Repo.DEFAULT_OWNER) ?: Repo.DEFAULT_OWNER)
+            .ifBlank { Repo.DEFAULT_OWNER }
+        set(v) = sp.edit { putString("owner", v.trim().ifBlank { Repo.DEFAULT_OWNER }) }
 
     var repo: String
-        get() = sp.getString("repo", "") ?: ""
-        set(v) = sp.edit { putString("repo", v.trim()) }
+        get() = (sp.getString("repo", Repo.DEFAULT_REPO) ?: Repo.DEFAULT_REPO)
+            .ifBlank { Repo.DEFAULT_REPO }
+        set(v) = sp.edit { putString("repo", v.trim().ifBlank { Repo.DEFAULT_REPO }) }
 
     var testTop: Int
         get() = sp.getInt("test_top", 600)
-        set(v) = sp.edit { putInt("test_top", v) }
+        set(v) = sp.edit { putInt("test_top", v.coerceAtLeast(10)) }
 
     var speedTop: Int
         get() = sp.getInt("speed_top", 120)
-        set(v) = sp.edit { putInt("speed_top", v) }
+        set(v) = sp.edit { putInt("speed_top", v.coerceAtLeast(0)) }
 
     var bestN: Int
         get() = sp.getInt("best_n", 100)
-        set(v) = sp.edit { putInt("best_n", v) }
+        set(v) = sp.edit { putInt("best_n", v.coerceAtLeast(1)) }
 
     var concurrency: Int
         get() = sp.getInt("concurrency", 6)
-        set(v) = sp.edit { putInt("concurrency", v) }
+        set(v) = sp.edit { putInt("concurrency", v.coerceIn(1, 12)) }
 
     var timeoutSec: Int
         get() = sp.getInt("timeout", 6)
-        set(v) = sp.edit { putInt("timeout", v) }
+        set(v) = sp.edit { putInt("timeout", v.coerceIn(2, 30)) }
 
     var rankBySpeed: Boolean
         get() = sp.getBoolean("rank_speed", true)

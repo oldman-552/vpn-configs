@@ -4,17 +4,14 @@
 server/build_data.py — يُشغَّل على GitHub Actions كل 30 دقيقة.
 
 المهمة:
-  1) جمع كل الكانفيغات (277 قناة تلغرام + 13 مستودع GitHub) عبر collector.py
+  1) جمع كل الكانفيغات (قنوات تلغرام من channels.txt + مستودعات GitHub من github_sources.txt)
   2) تنظيف + إزالة تكرار
-  3) فحص اتصال حقيقي بعيّنة متوازنة (Xray + sing-box) لتقليص 39,000 → ~1,000 حيّة
+  3) فحص اتصال حقيقي بعيّنة متوازنة (Xray + sing-box) لتقليص عشرات الآلاف → ~1,000 حيّة
   4) نشر المخرجات في مجلد dist/ (يرفعها الـ workflow إلى فرع data)
-
-لماذا لا نقيس السرعة هنا؟ لأن سرعة الخادم ≠ سرعتك. التطبيق على الهاتف
-هو الذي يقيس فعليًا ويختار أفضل 100 لشبكتك. هنا نُقلّص العدد فقط.
 
 المخرجات في dist/:
   alive.txt        الكانفيغات الحيّة فقط (سطر لكل كانفيغ) ← ينزّلها التطبيق
-  alive.json       نفس القائمة + تأخير/سرعة الخادم + المحرّك (لعرضها في التطبيق)
+  alive.json       نفس القائمة + تأخير الخادم + المحرّك (لعرضها في التطبيق)
   sub.txt          نفس القائمة بترميز base64 (اشتراك جاهز لأي عميل)
   best100.txt      أفضل 100 حسب قياس الخادم (مع الـ remark)
   all.txt.gz       كل الكانفيغات النظيفة مضغوطة (نسخة احتياطية كاملة)
@@ -23,6 +20,7 @@ server/build_data.py — يُشغَّل على GitHub Actions كل 30 دقيقة
 
 from __future__ import annotations
 
+import base64
 import gzip
 import json
 import logging
@@ -51,13 +49,15 @@ MAX_PER_HOST = int(os.environ.get("MAX_PER_HOST", "3"))
 PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "").rstrip("/")
 
 
-def write_atomic(path: Path, text: str, binary: bool = False) -> None:
+def write_atomic(path: Path, data: str | bytes, binary: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     if binary:
-        tmp.write_bytes(text)                      # type: ignore[arg-type]
+        assert isinstance(data, (bytes, bytearray))
+        tmp.write_bytes(data)
     else:
-        tmp.write_text(text, encoding="utf-8")
+        assert isinstance(data, str)
+        tmp.write_text(data, encoding="utf-8")
     tmp.replace(path)
 
 
@@ -65,12 +65,14 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     t_start = time.perf_counter()
 
-    # ── 1) الجمع ──
-    urls = collector.channel_urls(collector.CHANNELS)
-    LOG.info("[1/5] جمع: %d قناة + %d مصدر GitHub", len(urls), len(collector.GITHUB_SOURCES))
+    # ── 1) الجمع (من channels.txt و github_sources.txt إن وُجدا) ──
+    raw_channels = collector.get_channels()
+    urls = collector.channel_urls(raw_channels)
+    gh_sources = collector.get_github_sources()
+    LOG.info("[1/5] جمع: %d قناة + %d مصدر GitHub", len(urls), len(gh_sources))
 
     tg_cfgs, ok, failed = collector.collect_telegram(urls, workers=12)
-    gh_cfgs, gh_stats = collector.collect_github(collector.GITHUB_SOURCES, workers=8)
+    gh_cfgs, gh_stats = collector.collect_github(gh_sources, workers=8)
     LOG.info("تلغرام: %d صفحة ناجحة / %d فاشلة → %d كانفيغ | GitHub → %d كانفيغ",
              ok, failed, len(tg_cfgs), len(gh_cfgs))
 
@@ -96,7 +98,7 @@ def main() -> int:
         xray_path=xray,
         singbox_path=sbox,
         test_top=TEST_TOP,
-        speed_top=0,                 # لا قياس سرعة على الخادم (غير مفيد لك)
+        speed_top=0,                 # لا قياس سرعة على الخادم (التطبيق يقيس على شبكتك)
         concurrency=CONCURRENCY,
         rank_by="latency",
         timeout=TEST_TIMEOUT,
@@ -116,9 +118,10 @@ def main() -> int:
     alive_cfgs = [r.cfg for r in alive]
     write_atomic(DIST / "alive.txt", "\n".join(alive_cfgs) + "\n")
 
-    import base64
-    write_atomic(DIST / "sub.txt",
-                 base64.b64encode("\n".join(alive_cfgs).encode()).decode() + "\n")
+    write_atomic(
+        DIST / "sub.txt",
+        base64.b64encode("\n".join(alive_cfgs).encode("utf-8")).decode("ascii") + "\n",
+    )
 
     write_atomic(DIST / "alive.json", json.dumps({
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -130,8 +133,17 @@ def main() -> int:
         ],
     }, ensure_ascii=False) + "\n")
 
-    # أفضل 100 حسب قياس الخادم (مع remark واضح)
-    best = tester.limit_per_host(alive, MAX_PER_HOST)[:BEST_N]
+    # أفضل N حسب قياس الخادم (مع تنويع المضيفين + تكملة القائمة إن لزم)
+    diversified = tester.limit_per_host(alive, MAX_PER_HOST)
+    best = diversified[:BEST_N]
+    if len(best) < min(BEST_N, len(alive)):
+        chosen = {id(r) for r in best}
+        for r in alive:
+            if id(r) not in chosen:
+                best.append(r)
+                if len(best) >= BEST_N:
+                    break
+
     stamp = time.strftime("%b-%d | %H:%M", time.gmtime())
     lines = [
         f"{r.cfg}#{i} | {r.latency_ms:.0f}ms | {r.engine} | {stamp}"
@@ -140,7 +152,7 @@ def main() -> int:
     write_atomic(DIST / "best100.txt", "\n".join(lines) + "\n")
 
     # كل الكانفيغات مضغوطة (احتياط كامل)
-    payload = ("\n".join(configs) + "\n").encode()
+    payload = ("\n".join(configs) + "\n").encode("utf-8")
     write_atomic(DIST / "all.txt.gz", gzip.compress(payload, compresslevel=9), binary=True)
 
     # ── 5) meta ──
@@ -150,7 +162,7 @@ def main() -> int:
         "channels_total": len(urls),
         "channels_ok": ok,
         "channels_failed": failed,
-        "github_sources": len(collector.GITHUB_SOURCES),
+        "github_sources": len(gh_sources),
         "raw_collected": len(raw),
         "unique_clean": len(configs),
         "tested": len(lat),
@@ -176,7 +188,6 @@ def main() -> int:
     LOG.info("[5/5] انتهى في %.1f ثانية | حيّة: %d | أفضل 100: %d",
              time.perf_counter() - t_start, len(alive), len(best))
 
-    # نسخة إلى مجلد data/ إن طلب الـ workflow ذلك
     keep = os.environ.get("COPY_TO")
     if keep:
         dest = ROOT / keep

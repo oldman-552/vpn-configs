@@ -1,4 +1,0 @@
-requests>=2.31
-beautifulsoup4>=4.12
-jdatetime>=4.1
-PySocks>=1.7
