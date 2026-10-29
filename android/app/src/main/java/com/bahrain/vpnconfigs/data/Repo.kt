@@ -526,10 +526,16 @@ class Repo(
     }
 
     companion object {
-        const val DEFAULT_OWNER = "oldman-552"
-        const val DEFAULT_REPO = "vpn-configs"
+        @JvmField
+        internal val DEFAULT_OWNER: String = "oldman-552"
+        @JvmField
+        internal val DEFAULT_REPO: String = "vpn-configs"
         private const val MAX_BODY_BYTES = 10L * 1024L * 1024L
         private const val MAX_BODY_CHARS = 8_000_000
         private const val MAX_PARSED_SERVERS = 5_000
+
+        fun containsSourceIdentifier(text: String): Boolean =
+            text.contains(DEFAULT_OWNER, ignoreCase = true) ||
+                text.contains(DEFAULT_REPO, ignoreCase = true)
     }
 }

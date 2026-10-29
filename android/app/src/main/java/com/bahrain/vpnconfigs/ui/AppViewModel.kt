@@ -179,7 +179,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun buildRepo(): Repo = Repo(getApplication(), Repo.DEFAULT_OWNER, Repo.DEFAULT_REPO)
+    private fun buildRepo(): Repo = Repo(getApplication())
 
     private fun computeCountryCounts(items: List<ServerItem>): List<Pair<String, Int>> {
         val counts = HashMap<String, Int>()

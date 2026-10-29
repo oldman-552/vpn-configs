@@ -21,15 +21,14 @@ data class ConnectionHistoryEntry(
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
-    var owner: String
-        get() = (sp.getString("owner", Repo.DEFAULT_OWNER) ?: Repo.DEFAULT_OWNER)
-            .ifBlank { Repo.DEFAULT_OWNER }
-        set(v) = sp.edit { putString("owner", v.trim().ifBlank { Repo.DEFAULT_OWNER }) }
-
-    var repo: String
-        get() = (sp.getString("repo", Repo.DEFAULT_REPO) ?: Repo.DEFAULT_REPO)
-            .ifBlank { Repo.DEFAULT_REPO }
-        set(v) = sp.edit { putString("repo", v.trim().ifBlank { Repo.DEFAULT_REPO }) }
+    init {
+        if (sp.contains("owner") || sp.contains("repo")) {
+            sp.edit {
+                remove("owner")
+                remove("repo")
+            }
+        }
+    }
 
     var feedProfile: String
         get() = (sp.getString("feed_profile", "smart") ?: "smart").ifBlank { "smart" }

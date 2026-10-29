@@ -702,7 +702,7 @@ class BahrainVpnService : VpnService() {
         val current = VpnStateManager.serverPool
         if (current.isNotEmpty()) return current
 
-        val repo = Repo(applicationContext, Repo.DEFAULT_OWNER, Repo.DEFAULT_REPO)
+        val repo = Repo(applicationContext)
         val savedBest = repo.loadSavedBest().sortedWith(
             compareByDescending<com.bahrain.vpnconfigs.engine.TestResult> { it.speedKbps > 0.0 }
                 .thenByDescending { it.speedKbps }

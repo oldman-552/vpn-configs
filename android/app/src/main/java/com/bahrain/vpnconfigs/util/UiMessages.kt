@@ -22,8 +22,7 @@ object UiMessages {
     private val TECHNICAL_LEAK_RE = Regex(
         "(" +
             "https?://|" +
-            "github\\.com|githubusercontent\\.com|github\\.io|jsdelivr\\.net|" +
-            "${Regex.escape(Repo.DEFAULT_OWNER)}|${Regex.escape(Repo.DEFAULT_REPO)}|@data|" +
+            "github\\.com|githubusercontent\\.com|github\\.io|jsdelivr\\.net|@data|" +
             "alive\\.(?:json|txt)|meta\\.json|reliable\\.txt|low_latency\\.txt|high_throughput\\.txt|" +
             "best100\\.txt|config\\.txt|sub\\.txt|libsingbox\\.so|" +
             "/data/|/storage/|/sdcard/|cache:|" +
@@ -36,7 +35,9 @@ object UiMessages {
     fun sanitizeError(raw: String?, fallback: String = MSG_UPDATE_FAILED): String {
         val trimmed = raw?.trim().orEmpty()
         if (trimmed.isEmpty()) return fallback
-        if (TECHNICAL_LEAK_RE.containsMatchIn(trimmed)) return fallback
+        if (Repo.containsSourceIdentifier(trimmed) || TECHNICAL_LEAK_RE.containsMatchIn(trimmed)) {
+            return fallback
+        }
         if (trimmed.contains('\n') && trimmed.length > 140) return fallback
         return trimmed
     }
