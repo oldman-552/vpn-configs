@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.bahrain.vpnconfigs"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 34
         versionCode = 3
         versionName = "2.0"

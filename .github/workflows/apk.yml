@@ -56,7 +56,14 @@ jobs:
 
       - name: Build debug & signed release APKs
         working-directory: android
-        run: gradle --no-daemon assembleDebug assembleRelease
+        run: |
+          set -o pipefail
+          gradle --no-daemon assembleDebug assembleRelease 2>&1 | tee gradle.log || {
+            grep -E '(^e: |FAILURE:|What went wrong:|^\* |> |Manifest merger)' gradle.log | head -n 40 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          }
 
       - name: Collect APKs
         run: |
