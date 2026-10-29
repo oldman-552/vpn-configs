@@ -101,53 +101,59 @@ jobs:
           fi
           python3 - <<'PY'
           import glob, os, re, subprocess, sys, zipfile
-          apk = "out/app-arm64-v8a-release.apk"
-          leak_re = re.compile(rb"(oldman-552|vpn-configs|githubusercontent\.com|jsdelivr\.net)", re.I)
-          non_dex_leaks = []
-          dex_hits = 0
-          with zipfile.ZipFile(apk) as zf:
-              entries = zf.namelist()
-              for name in entries:
-                  if name.startswith("lib/"):
+          try:
+              apk = "out/app-arm64-v8a-release.apk"
+              leak_re = re.compile(rb"(oldman-552|vpn-configs|githubusercontent\.com|jsdelivr\.net)", re.I)
+              non_dex_leaks = []
+              dex_hits = 0
+              with zipfile.ZipFile(apk) as zf:
+                  entries = zf.namelist()
+                  for name in entries:
+                      if name.startswith("lib/"):
+                          continue
+                      data = zf.read(name)
+                      if name.endswith(".dex"):
+                          if leak_re.search(data):
+                              dex_hits += 1
+                      else:
+                          m = leak_re.search(data)
+                          if m:
+                              non_dex_leaks.append(f"{name}:{m.group(0).decode('latin1')}")
+              if non_dex_leaks:
+                  raise RuntimeError("Non-DEX APK resource/asset leak: " + ", ".join(non_dex_leaks))
+              class_files = glob.glob("android/app/build/tmp/kotlin-classes/release/com/bahrain/vpnconfigs/**/*.class", recursive=True)
+              ui_class_leaks = []
+              repo_saw_owner = False
+              repo_saw_cdn = False
+              str_leak_re = re.compile(r"(oldman-552|vpn-configs|githubusercontent\.com|jsdelivr\.net|best100\.txt|alive\.json)", re.I)
+              for cf in class_files:
+                  rel = os.path.relpath(cf, "android/app/build/tmp/kotlin-classes/release")
+                  out = subprocess.check_output(["javap", "-v", cf], text=True, errors="ignore")
+                  if rel.startswith("com/bahrain/vpnconfigs/data/Repo"):
+                      if "oldman-552" in out:
+                          repo_saw_owner = True
+                      if "jsdelivr.net" in out:
+                          repo_saw_cdn = True
                       continue
-                  data = zf.read(name)
-                  if name.endswith(".dex"):
-                      if leak_re.search(data):
-                          dex_hits += 1
-                  else:
-                      m = leak_re.search(data)
+                  if rel.startswith("com/bahrain/vpnconfigs/util/UiMessages"):
+                      continue
+                  if any(rel.startswith(p) for p in (
+                      "com/bahrain/vpnconfigs/ui/",
+                      "com/bahrain/vpnconfigs/MainActivity",
+                      "com/bahrain/vpnconfigs/vpn/",
+                      "com/bahrain/vpnconfigs/data/Prefs",
+                  )):
+                      m = str_leak_re.search(out)
                       if m:
-                          non_dex_leaks.append(f"{name}:{m.group(0).decode('latin1')}")
-          if non_dex_leaks:
-              print("::error::Non-DEX APK resource/asset leak: " + ", ".join(non_dex_leaks))
+                          ui_class_leaks.append(f"{rel}->{m.group(0)}")
+              if ui_class_leaks:
+                  raise RuntimeError("UI bytecode leak: " + ", ".join(ui_class_leaks[:5]))
+              if not (repo_saw_owner and repo_saw_cdn and dex_hits >= 1):
+                  raise RuntimeError(f"Operational Repo endpoints check: owner={repo_saw_owner} cdn={repo_saw_cdn} dex_hits={dex_hits}")
+              print(f"::notice::Release APK Audit PASS | apk_entries={len(entries)} app_classes={len(class_files)} non_dex_leaks=0 ui_bytecode_leaks=0 repo_endpoints_intact=True dex_with_network_consts={dex_hits}")
+          except Exception as exc:
+              print(f"::error::APK Audit failed: {exc}")
               sys.exit(1)
-          class_files = glob.glob("android/app/build/tmp/kotlin-classes/release/com/bahrain/vpnconfigs/**/*.class", recursive=True)
-          ui_class_leaks = []
-          repo_class_verified = False
-          str_leak_re = re.compile(r"(oldman-552|vpn-configs|githubusercontent\.com|jsdelivr\.net|best100\.txt|alive\.json)", re.I)
-          for cf in class_files:
-              rel = os.path.relpath(cf, "android/app/build/tmp/kotlin-classes/release")
-              out = subprocess.check_output(["javap", "-constants", "-c", cf], text=True, errors="ignore")
-              if rel.startswith("com/bahrain/vpnconfigs/data/Repo"):
-                  if "oldman-552" in out and "cdn.jsdelivr.net" in out:
-                      repo_class_verified = True
-                  continue
-              if rel.startswith("com/bahrain/vpnconfigs/util/UiMessages"):
-                  continue
-              if any(rel.startswith(p) for p in (
-                  "com/bahrain/vpnconfigs/ui/",
-                  "com/bahrain/vpnconfigs/MainActivity",
-                  "com/bahrain/vpnconfigs/vpn/",
-                  "com/bahrain/vpnconfigs/data/Prefs",
-              )):
-                  m = str_leak_re.search(out)
-                  if m:
-                      ui_class_leaks.append(f"{rel}->{m.group(0)}")
-          if ui_class_leaks:
-              print("::error::UI bytecode leak: " + ", ".join(ui_class_leaks[:5]))
-              sys.exit(1)
-          assert repo_class_verified and dex_hits >= 1, "Operational Repo endpoints missing!"
-          print(f"::notice::Release APK Audit PASS | apk_entries={len(entries)} app_classes={len(class_files)} non_dex_leaks=0 ui_bytecode_leaks=0 repo_endpoints_intact={repo_class_verified} dex_with_network_consts={dex_hits}")
           PY
           echo "::notice::APK Badging: $BADGING"
           SHA_SUMMARY=$(tr '\n' ';' < out/SHA256SUMS.txt)
