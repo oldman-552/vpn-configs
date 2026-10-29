@@ -128,7 +128,8 @@ jobs:
               str_leak_re = re.compile(r"(oldman-552|vpn-configs|githubusercontent\.com|jsdelivr\.net|best100\.txt|alive\.json)", re.I)
               for cf in class_files:
                   rel = os.path.relpath(cf, "android/app/build/tmp/kotlin-classes/release")
-                  out = subprocess.check_output(["javap", "-v", cf], text=True, errors="ignore")
+                  raw_out = subprocess.check_output(["javap", "-v", cf], text=True, errors="ignore")
+                  out = "\n".join(l for l in raw_out.splitlines() if not l.strip().startswith("Classfile "))
                   if rel.startswith("com/bahrain/vpnconfigs/data/Repo"):
                       if "oldman-552" in out:
                           repo_saw_owner = True

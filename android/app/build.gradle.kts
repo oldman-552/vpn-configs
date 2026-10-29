@@ -54,9 +54,19 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions {
+        jvmTarget = "17"
+        freeCompilerArgs += listOf(
+            "-module-name", "bahrain_vpn_app",
+            "-Xno-source-debug-extension",
+        )
+    }
 
     buildFeatures { compose = true }
+
+    composeCompiler {
+        includeSourceInformation = false
+    }
 
     testOptions {
         unitTests {
@@ -76,7 +86,11 @@ android {
             useLegacyPackaging = true
             keepDebugSymbols += "**/*.so"
         }
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/*.kotlin_module"
+            excludes += "DebugProbesKt.bin"
+        }
     }
 }
 
