@@ -57,7 +57,7 @@
             </intent-filter>
         </service>
 
-        <!-- لمشاركة ملفات المخرجات (config.txt / best100.txt / sub.txt) -->
+        <!-- مزوّد مشاركة الملفات المحلية بأمان -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"

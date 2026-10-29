@@ -1,6 +1,7 @@
 // =====================================================================
-// AppViewModel.kt — إدارة السيرفرات الموحّدة (bahrain-vpn)، فلتر الدول،
-// مؤشرات الجودة والموثوقية، سجل الاتصالات، الفحص، المفضلة، واستثناء التطبيقات.
+// AppViewModel.kt — إدارة السيرفرات الموحّدة (bahrain-vpn)، نظام الترتيب
+// الخماسي الموزون، فلتر الدول، سجل الاتصالات، الفحص الفعلي، واستثناء التطبيقات
+// دون كشف تفاصيل المصدر الداخلي للمستخدم.
 // =====================================================================
 package com.bahrain.vpnconfigs.ui
 
@@ -21,9 +22,14 @@ import com.bahrain.vpnconfigs.data.Repo
 import com.bahrain.vpnconfigs.data.ResultLine
 import com.bahrain.vpnconfigs.data.ServerHint
 import com.bahrain.vpnconfigs.engine.Converters
+import com.bahrain.vpnconfigs.engine.RankableServer
+import com.bahrain.vpnconfigs.engine.ServerRanker
+import com.bahrain.vpnconfigs.engine.ServerSortMode
 import com.bahrain.vpnconfigs.engine.TestProgress
 import com.bahrain.vpnconfigs.engine.TestResult
 import com.bahrain.vpnconfigs.engine.Tester
+import com.bahrain.vpnconfigs.util.AppDiag
+import com.bahrain.vpnconfigs.util.UiMessages
 import com.bahrain.vpnconfigs.vpn.AppEntry
 import com.bahrain.vpnconfigs.vpn.BahrainVpnService
 import com.bahrain.vpnconfigs.vpn.InstalledApps
@@ -37,6 +43,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 data class ServerItem(
@@ -48,9 +55,11 @@ data class ServerItem(
     val jitterMs: Double = 0.0,
     val speedKbps: Double = 0.0,
     val score: Double = 0.0,
+    val overallScore: Double = 0.0,
     val country: String = "",
     val stabilityRuns: Int = 0,
     val verifiedAt: String = "",
+    val lastTestedAtMs: Long = 0L,
     val locallyTested: Boolean = false,
     val localFailed: Boolean = false,
     val isFavorite: Boolean = false,
@@ -68,12 +77,12 @@ data class UiState(
     val servers: List<ServerItem> = emptyList(),
     val availableCountries: List<Pair<String, Int>> = emptyList(),
     val filterCountry: String = "ALL",
-    val sortMode: String = "REAL_DELAY",
+    val sortMode: String = ServerSortMode.DEFAULT.key,
     val feedProfile: String = "smart",
+    val lastUpdatedLabel: String = "",
     val connectionHistory: List<ConnectionHistoryEntry> = emptyList(),
     val selectedCfg: String = "",
     val meta: RemoteMeta = RemoteMeta(),
-    val source: String = "—",
     val error: String? = null,
     val info: String? = null,
     val progress: TestProgress? = null,
@@ -82,10 +91,6 @@ data class UiState(
     val subFile: File? = null,
     val allFile: File? = null,
     val engineReady: Boolean = false,
-    val subUrl: String = "",
-    val reliableSubUrl: String = "",
-    val lowLatencyUrl: String = "",
-    val highThroughputUrl: String = "",
     val autoFailover: Boolean = true,
     val appsLoading: Boolean = false,
     val installedApps: List<AppEntry> = emptyList(),
@@ -107,29 +112,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val failedConfigs: MutableSet<String> = HashSet()
 
     var state by mutableStateOf(
-        run {
-            val r = buildRepo()
-            UiState(
-                engineReady = tester.engineAvailable,
-                sortMode = prefs.sortMode,
-                feedProfile = prefs.feedProfile,
-                connectionHistory = prefs.connectionHistory,
-                subUrl = r.subscriptionUrl,
-                reliableSubUrl = r.reliableSubUrl,
-                lowLatencyUrl = r.lowLatencyUrl,
-                highThroughputUrl = r.highThroughputUrl,
-                selectedCfg = prefs.selectedCfg,
-                autoFailover = prefs.autoFailover,
-                splitApps = prefs.splitApps,
-                splitIncludeOnly = prefs.splitIncludeOnly,
-            )
-        }
+        UiState(
+            engineReady = tester.engineAvailable,
+            sortMode = prefs.sortMode,
+            feedProfile = prefs.feedProfile,
+            lastUpdatedLabel = UiMessages.formatLastUpdated(null, prefs.lastRefreshWallMs),
+            connectionHistory = prefs.connectionHistory,
+            selectedCfg = prefs.selectedCfg,
+            autoFailover = prefs.autoFailover,
+            splitApps = prefs.splitApps,
+            splitIncludeOnly = prefs.splitIncludeOnly,
+        )
     )
         private set
 
     private var testJob: Job? = null
 
     init {
+        AppDiag.init(app)
+
         viewModelScope.launch {
             VpnStateManager.status.collectLatest {
                 val latestHistory = prefs.connectionHistory
@@ -151,41 +152,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             serverLatencies = cached?.serverLatencies ?: emptyMap()
             serverHints = cached?.serverHints ?: emptyMap()
             val cfgs = cached?.configs ?: emptyList()
-            val built = buildServerList(cfgs, savedResults)
+            val built = buildServerList(cfgs, savedResults, prefs.sortMode)
             val countries = computeCountryCounts(built)
             val chosen = resolveSelected(prefs.selectedCfg, built)
+            val metaObj = cached?.meta ?: RemoteMeta()
 
             state = state.copy(
                 configs = cfgs,
                 servers = built,
                 availableCountries = countries,
                 selectedCfg = chosen,
-                meta = cached?.meta ?: RemoteMeta(),
-                source = cached?.source ?: "—",
+                meta = metaObj,
+                lastUpdatedLabel = UiMessages.formatLastUpdated(metaObj.generatedAt, prefs.lastRefreshWallMs),
                 results = savedResults,
                 allFile = allF,
                 bestFile = bestF,
                 subFile = subF,
                 engineReady = tester.engineAvailable,
-                subUrl = r.subscriptionUrl,
-                reliableSubUrl = r.reliableSubUrl,
-                lowLatencyUrl = r.lowLatencyUrl,
-                highThroughputUrl = r.highThroughputUrl,
             )
 
             if (cached == null) {
-                refresh()
+                refresh(silent = false)
             } else {
                 refresh(silent = true)
             }
         }
     }
 
-    private fun buildRepo(): Repo {
-        val owner = prefs.owner.ifBlank { Repo.DEFAULT_OWNER }
-        val rep = prefs.repo.ifBlank { Repo.DEFAULT_REPO }
-        return Repo(getApplication(), owner, rep)
-    }
+    private fun buildRepo(): Repo = Repo(getApplication(), Repo.DEFAULT_OWNER, Repo.DEFAULT_REPO)
 
     private fun computeCountryCounts(items: List<ServerItem>): List<Pair<String, Int>> {
         val counts = HashMap<String, Int>()
@@ -200,26 +194,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .map { it.key to it.value }
     }
 
+    /**
+     * يحسم السيرفر المحدد دون أن يغيّر السيرفر المتصل به المستخدم حاليًا عند إعادة الترتيب أو التحديث.
+     */
     private fun resolveSelected(current: String, list: List<ServerItem>): String {
-        if (current.isNotBlank() && list.any { it.cfg == current }) return current
-        val first = list.firstOrNull()
-        if (first != null) {
-            prefs.selectedCfg = first.cfg
-            prefs.selectedLabel = first.name
-            return first.cfg
+        val vpnSt = VpnStateManager.status.value
+        val resolved = ServerRanker.resolveSelectedPreservingActive(
+            currentSelectedCfg = current,
+            activeVpnCfg = vpnSt.activeCfg,
+            isVpnActive = vpnSt.isActive,
+            sortedConfigs = list.map { it.cfg },
+        )
+        if (!vpnSt.isActive && resolved.isNotBlank() && resolved != prefs.selectedCfg) {
+            list.firstOrNull { it.cfg == resolved }?.let { picked ->
+                prefs.selectedCfg = picked.cfg
+                prefs.selectedLabel = picked.name
+            }
         }
-        return ""
+        return resolved
     }
 
     private fun buildServerList(
         remoteConfigs: List<String>,
         localResults: List<TestResult>,
-        mode: String = prefs.sortMode,
+        modeKey: String = prefs.sortMode,
     ): List<ServerItem> {
+        val nowMs = System.currentTimeMillis()
+        val sortMode = ServerSortMode.fromKey(modeKey)
         val favSet = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
         val customs = prefs.customConfigs.map { Converters.cleanUri(it) }
         val customSet = customs.toHashSet()
-        val resultMap = localResults.filter { it.ok && it.latencyMs > 0L }
+        val resultMap = localResults.filter { it.ok && (it.latencyMs > 0L || it.speedKbps > 0.0) }
             .associateBy { Converters.cleanUri(it.cfg) }
 
         val allUnique = LinkedHashSet<String>()
@@ -234,7 +239,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (Converters.isSupported(cleaned)) allUnique.add(cleaned)
         }
 
-        val unsorted = allUnique.map { cfg ->
+        val rankablePairs = allUnique.map { cfg ->
             val local = resultMap[cfg]
             val failed = local == null && cfg in failedConfigs
             val hint = serverHints[cfg]
@@ -244,70 +249,74 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 local != null && local.latencyMs > 0L -> local.latencyMs
                 else -> hintMs
             }
-            ServerItem(
+            val effectiveSpeed = when {
+                failed -> 0.0
+                local != null && local.speedKbps > 0.0 -> local.speedKbps
+                else -> hint?.speedKbps?.takeIf { it > 0.0 } ?: 0.0
+            }
+            val cloudTestedMs = UiMessages.parseIsoUtcMillis(hint?.verifiedAt)
+            val localTestedMs = local?.testedAtMs ?: 0L
+            val effectiveTestedMs = maxOf(localTestedMs, cloudTestedMs)
+
+            val rankable = RankableServer(
+                cfg = cfg,
+                latencyMs = effectiveLatency,
+                jitterMs = hint?.jitterMs ?: 0.0,
+                speedKbps = effectiveSpeed,
+                stabilityRuns = hint?.stabilityRuns ?: 0,
+                cloudQualityHint = hint?.score ?: 0.0,
+                locallyTested = local != null,
+                localFailed = failed,
+                isFavorite = cfg in favSet,
+                isCustom = cfg in customSet,
+                lastTestedAtMs = effectiveTestedMs,
+            )
+            val computedOverall = ServerRanker.computeOverallScore(rankable, nowMs)
+            val item = ServerItem(
                 cfg = cfg,
                 name = "",
                 proto = Converters.protocolBadge(cfg),
                 endpoint = Converters.endpointLabel(cfg),
                 latencyMs = effectiveLatency,
                 jitterMs = hint?.jitterMs ?: 0.0,
-                speedKbps = if ((local?.speedKbps ?: 0.0) > 0.0) local!!.speedKbps else (hint?.speedKbps ?: 0.0),
+                speedKbps = effectiveSpeed,
                 score = hint?.score ?: 0.0,
+                overallScore = computedOverall,
                 country = hint?.country.orEmpty(),
                 stabilityRuns = hint?.stabilityRuns ?: 0,
                 verifiedAt = hint?.verifiedAt.orEmpty(),
+                lastTestedAtMs = effectiveTestedMs,
                 locallyTested = local != null,
                 localFailed = failed,
                 isFavorite = cfg in favSet,
                 isCustom = cfg in customSet,
             )
+            rankable to item
         }
 
-        fun delayRank(ms: Long): Long = if (ms > 0L) ms else Long.MAX_VALUE
+        val comp = ServerRanker.comparatorFor(sortMode, nowMs)
+        val sortedItems = rankablePairs
+            .sortedWith { a, b -> comp.compare(a.first, b.first) }
+            .mapIndexed { idx, pair ->
+                pair.second.copy(name = "bahrain-vpn #${idx + 1}")
+            }
 
-        val metricComparator: Comparator<ServerItem> = when (mode) {
-            "SPEED" -> compareByDescending<ServerItem> { it.speedKbps > 0.0 }
-                .thenByDescending { it.locallyTested }
-                .thenByDescending { it.speedKbps }
-                .thenBy { delayRank(it.latencyMs) }
-                .thenByDescending { it.score }
-
-            "STABILITY" -> compareByDescending<ServerItem> { it.locallyTested }
-                .thenByDescending { it.stabilityRuns }
-                .thenByDescending { it.score }
-                .thenBy { delayRank(it.latencyMs) }
-
-            else -> compareByDescending<ServerItem> { it.locallyTested }
-                .thenBy { delayRank(it.latencyMs) }
-                .thenByDescending { it.speedKbps }
-                .thenByDescending { it.score }
-        }
-
-        val fullComparator = compareByDescending<ServerItem> { it.isFavorite }
-            .thenBy { it.localFailed }
-            .thenByDescending { it.isCustom && !it.locallyTested && it.latencyMs <= 0L }
-            .then(metricComparator)
-
-        val items = unsorted.sortedWith(fullComparator).mapIndexed { idx, item ->
-            item.copy(name = "bahrain-vpn #${idx + 1}")
-        }
-
-        VpnStateManager.serverPool = items.filterNot { it.localFailed }
-            .ifEmpty { items }
+        VpnStateManager.serverPool = sortedItems.filterNot { it.localFailed }
+            .ifEmpty { sortedItems }
             .map { ServerCandidate(it.cfg, it.name) }
-        return items
+        return sortedItems
     }
 
+    /**
+     * تغيير وضع الترتيب يعيد فرز القائمة فقط دون قطع أو تغيير السيرفر المتصل به المستخدم حاليًا.
+     */
     fun setSortMode(mode: String) {
-        val normalized = when (mode) {
-            "SPEED", "STABILITY", "REAL_DELAY" -> mode
-            else -> "REAL_DELAY"
-        }
-        prefs.sortMode = normalized
-        prefs.rankBySpeed = (normalized == "SPEED")
-        val rebuilt = buildServerList(state.configs, state.results, normalized)
+        val normalized = ServerSortMode.fromKey(mode)
+        prefs.sortMode = normalized.key
+        prefs.rankBySpeed = (normalized == ServerSortMode.FASTEST_DOWNLOAD)
+        val rebuilt = buildServerList(state.configs, state.results, normalized.key)
         val sel = resolveSelected(state.selectedCfg, rebuilt)
-        state = state.copy(sortMode = normalized, servers = rebuilt, selectedCfg = sel)
+        state = state.copy(sortMode = normalized.key, servers = rebuilt, selectedCfg = sel)
     }
 
     fun selectServer(item: ServerItem) {
@@ -335,28 +344,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val next = prefs.favorites.toMutableSet()
         if (!next.add(cfg)) next.remove(cfg)
         prefs.favorites = next
-        val rebuilt = buildServerList(state.configs, state.results)
-        state = state.copy(servers = rebuilt)
+        val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
+        val sel = resolveSelected(state.selectedCfg, rebuilt)
+        state = state.copy(servers = rebuilt, selectedCfg = sel)
     }
 
     fun removeCustomServer(cfg: String) {
         val next = prefs.customConfigs.filterNot { it == cfg }
         prefs.customConfigs = next
-        val rebuilt = buildServerList(state.configs, state.results)
+        val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
         val countries = computeCountryCounts(rebuilt)
         val sel = resolveSelected(state.selectedCfg, rebuilt)
         state = state.copy(
             servers = rebuilt,
             availableCountries = countries,
             selectedCfg = sel,
-            info = "تم حذف الكانفيغ المضاف يدويًا",
+            info = "تم حذف السيرفر المخصّص",
         )
     }
 
     fun importConfigsFromText(rawText: String) {
         val trimmed = rawText.trim().take(4_000_000)
         if (trimmed.isBlank()) {
-            state = state.copy(error = "الحافظة فارغة — انسخ رابط كانفيغ أو اشتراك أولًا")
+            state = state.copy(error = "الحافظة فارغة — انسخ رابط سيرفر أو حزمة اشتراك أولًا")
             return
         }
         val decodedText = if (!trimmed.contains("://")) {
@@ -379,19 +389,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .toList()
 
         if (extracted.isEmpty()) {
-            state = state.copy(error = "لم يُعثر على كانفيغ صالح وآمن في النص المنسوخ")
+            state = state.copy(error = "لم يُعثر على إعداد اتصال صالح وآمن في النص المدخل")
             return
         }
 
         val mergedCustom = (extracted + prefs.customConfigs).distinct().take(500)
         prefs.customConfigs = mergedCustom
-        val rebuilt = buildServerList(state.configs, state.results)
+        val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
         val countries = computeCountryCounts(rebuilt)
+        val vpnActive = VpnStateManager.status.value.isActive
         val firstAdded = rebuilt.firstOrNull { it.cfg == extracted.first() }
-        val newSel = firstAdded?.cfg ?: resolveSelected(state.selectedCfg, rebuilt)
-        if (firstAdded != null) {
+        val newSel = if (!vpnActive && firstAdded != null) {
             prefs.selectedCfg = firstAdded.cfg
             prefs.selectedLabel = firstAdded.name
+            firstAdded.cfg
+        } else {
+            resolveSelected(state.selectedCfg, rebuilt)
         }
 
         state = state.copy(
@@ -408,7 +421,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         state = state.copy(autoFailover = enabled)
     }
 
-    // ── تنزيل القائمة الحيّة مع دعم التحديث الصامت و ETag ──
+    // ── تحديث قائمة السيرفرات برسائل عامة بدون تسريب المصدر أو عرض نجاح مضلل ──
     fun refresh(silent: Boolean = false) {
         if (state.loading) return
         val r = buildRepo()
@@ -417,11 +430,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             state = state.copy(
                 loading = true,
                 error = null,
-                info = null,
-                subUrl = r.subscriptionUrl,
-                reliableSubUrl = r.reliableSubUrl,
-                lowLatencyUrl = r.lowLatencyUrl,
-                highThroughputUrl = r.highThroughputUrl,
+                info = "${UiMessages.MSG_UPDATING}…",
             )
         }
         viewModelScope.launch {
@@ -432,15 +441,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (res.serverHints.isNotEmpty()) {
                 serverHints = res.serverHints
             }
+
+            val refreshSucceededLive = res.error == null && !res.fromCacheFallback && res.configs.isNotEmpty()
+            if (refreshSucceededLive) {
+                prefs.lastRefreshWallMs = System.currentTimeMillis()
+            }
+
             val newConfigs = res.configs.ifEmpty { state.configs }
             val allFile = if (res.configs.isNotEmpty()) {
                 withContext(Dispatchers.IO) { runCatching { r.writeAll(res.configs) }.getOrNull() }
             } else {
                 state.allFile
             }
-            val rebuilt = buildServerList(newConfigs, state.results)
+            val rebuilt = buildServerList(newConfigs, state.results, state.sortMode)
             val countries = computeCountryCounts(rebuilt)
             val sel = resolveSelected(state.selectedCfg, rebuilt)
+            val metaObj = if (res.meta.generatedAt != "—") res.meta else state.meta
+            val updatedLbl = UiMessages.formatLastUpdated(metaObj.generatedAt, prefs.lastRefreshWallMs)
 
             state = state.copy(
                 loading = false,
@@ -448,30 +465,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 servers = rebuilt,
                 availableCountries = countries,
                 selectedCfg = sel,
-                meta = if (res.meta.generatedAt != "—") res.meta else state.meta,
-                source = res.source,
+                meta = metaObj,
+                lastUpdatedLabel = updatedLbl,
                 allFile = allFile,
-                error = if (!silent) res.error else null,
-                info = if (!silent && res.error == null && res.configs.isNotEmpty()) {
-                    if (countries.isNotEmpty()) {
-                        "تم تحديث ${rebuilt.size} سيرفر bahrain-vpn (${countries.size} دولة)"
-                    } else {
-                        "تم تحديث ${rebuilt.size} سيرفر bahrain-vpn جاهز"
-                    }
+                error = if (!silent && !refreshSucceededLive) {
+                    UiMessages.sanitizeError(res.error, UiMessages.MSG_UPDATE_FAILED)
+                } else null,
+                info = if (!silent) {
+                    if (refreshSucceededLive) {
+                        "تم تحديث قائمة السيرفرات (${rebuilt.size} سيرفر متاح)"
+                    } else null
                 } else state.info,
             )
         }
     }
 
-    // ── فحص سريع Real Delay (Current) بدون استهلاك بيانات السرعة ──
+    // ── فحص سريع للتأخير فقط ──
     fun startQuickPingTest() {
-        prefs.sortMode = "REAL_DELAY"
-        prefs.rankBySpeed = false
-        state = state.copy(sortMode = "REAL_DELAY")
         runTestInternal(quickPingOnly = true)
     }
 
-    // ── فحص شامل (Real Delay + سرعة التنزيل) ──
+    // ── فحص شامل (قياس فعلي لسرعة التنزيل عبر النفق + التأخير) ──
     fun startTest() {
         runTestInternal(quickPingOnly = false)
     }
@@ -479,11 +493,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun runTestInternal(quickPingOnly: Boolean) {
         val pool = (prefs.customConfigs + state.configs).distinct()
         if (pool.isEmpty()) {
-            state = state.copy(error = "حدّث القائمة أولًا بالضغط على زر التحديث")
+            state = state.copy(error = UiMessages.MSG_NO_SERVERS)
             return
         }
         if (!tester.engineAvailable) {
-            state = state.copy(error = "نواة sing-box غير مثبتة في هذا البناء (libsingbox.so مفقود)")
+            state = state.copy(error = UiMessages.MSG_ENGINE_UNAVAILABLE)
             return
         }
         testJob?.cancel()
@@ -491,8 +505,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         testJob = viewModelScope.launch {
             try {
                 val topLimit = if (quickPingOnly) minOf(prefs.testTop, 250) else prefs.testTop
-                val spdLimit = if (quickPingOnly) 0 else prefs.speedTop
-                val useSpeedRank = !quickPingOnly && (prefs.sortMode == "SPEED" || prefs.rankBySpeed)
+                val spdLimit = if (quickPingOnly) 0 else maxOf(prefs.speedTop, 20)
+                val useSpeedRank = !quickPingOnly && ServerSortMode.fromKey(prefs.sortMode) == ServerSortMode.FASTEST_DOWNLOAD
                 val results = tester.run(
                     configs = pool,
                     testTop = topLimit,
@@ -508,29 +522,39 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
 
-                // إزالة أي سيرفر نجح من قائمة الفشل المحلية
                 results.forEach { if (it.ok) failedConfigs.remove(Converters.cleanUri(it.cfg)) }
+
+                // دمج سرعة التنزيل المقاسة سابقًا إن كان الفحص الحالي للتأخير فقط دون اختلاق درجات
+                val prevSpeedByCfg = state.results.associate { Converters.cleanUri(it.cfg) to it.speedKbps }
+                val mergedResults = if (quickPingOnly) {
+                    results.map { r ->
+                        val prevSpd = prevSpeedByCfg[Converters.cleanUri(r.cfg)] ?: 0.0
+                        if (r.speedKbps <= 0.0 && prevSpd > 0.0) r.copy(speedKbps = prevSpd) else r
+                    }
+                } else {
+                    results
+                }
 
                 val r = buildRepo()
                 val allFile = withContext(Dispatchers.IO) {
                     runCatching { r.writeAll(pool) }.getOrNull()
                 }
-                val bestPair = if (results.isNotEmpty()) {
+                val bestPair = if (mergedResults.isNotEmpty()) {
                     withContext(Dispatchers.IO) {
                         runCatching {
                             r.writeBest(
-                                results.map { ResultLine(it.cfg, it.latencyMs, it.speedKbps) },
+                                mergedResults.map { ResultLine(it.cfg, it.latencyMs, it.speedKbps, it.testedAtMs) },
                                 prefs.bestN,
                             )
                         }.getOrNull()
                     }
                 } else null
 
-                val activeMode = if (quickPingOnly) "REAL_DELAY" else prefs.sortMode
-                val rebuilt = buildServerList(state.configs, results, activeMode)
+                val activeMode = prefs.sortMode
+                val rebuilt = buildServerList(state.configs, mergedResults, activeMode)
                 val countries = computeCountryCounts(rebuilt)
-                // اختيار أسرع سيرفر تلقائيًا إذا لم يكن الـ VPN متّصلًا حاليًا
-                val autoPicked = if (!VpnStateManager.status.value.isActive && results.isNotEmpty()) {
+                // عدم تغيير السيرفر المتصل به حاليًا عند انتهاء الفحص
+                val autoPicked = if (!VpnStateManager.status.value.isActive && mergedResults.isNotEmpty()) {
                     rebuilt.first().also {
                         prefs.selectedCfg = it.cfg
                         prefs.selectedLabel = it.name
@@ -543,7 +567,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 state = state.copy(
                     testing = false,
                     sortMode = activeMode,
-                    results = results,
+                    results = mergedResults,
                     servers = rebuilt,
                     availableCountries = countries,
                     selectedCfg = autoPicked,
@@ -551,18 +575,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     allFile = allFile ?: state.allFile,
                     bestFile = bestPair?.first ?: state.bestFile,
                     subFile = bestPair?.second ?: state.subFile,
-                    info = if (results.isNotEmpty() && topItem != null) {
-                        "نجح ${results.size} سيرفر — الأسرع ${topItem.name} (${topItem.latencyMs} ms)"
+                    info = if (mergedResults.isNotEmpty() && topItem != null) {
+                        val metricTxt = if (topItem.speedKbps >= 1024.0) {
+                            String.format(Locale.US, "%.2f MB/s • %d ms", topItem.speedKbps / 1024.0, topItem.latencyMs)
+                        } else if (topItem.speedKbps > 0.0) {
+                            "${topItem.speedKbps.toInt()} KB/s • ${topItem.latencyMs} ms"
+                        } else {
+                            "${topItem.latencyMs} ms"
+                        }
+                        "اكتمل فحص ${mergedResults.size} سيرفر — المتصدر ${topItem.name} ($metricTxt)"
                     } else null,
-                    error = if (results.isEmpty()) "لم تنجح أي عقدة — جرّب زيادة المهلة أو تحديث القائمة" else null,
+                    error = if (mergedResults.isEmpty()) "لم يستجب أي سيرفر حاليًا — حاول تحديث القائمة أو المحاولة لاحقًا" else null,
                 )
             } catch (_: CancellationException) {
                 state = state.copy(testing = false, progress = null, info = "تم إيقاف الفحص")
             } catch (e: Exception) {
+                AppDiag.w("AppViewModel", "batch server test failed", e)
                 state = state.copy(
                     testing = false,
                     progress = null,
-                    error = "خطأ أثناء الفحص: ${e.localizedMessage ?: e.javaClass.simpleName}",
+                    error = UiMessages.MSG_TEST_FAILED,
                 )
             }
         }
@@ -575,6 +607,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val res = tester.testSingle(
                 cfg = item.cfg,
                 timeoutSec = prefs.timeoutSec,
+                measureSpeed = true,
                 dnsServer = prefs.dnsServer,
                 useDoh = prefs.dnsDoh,
             )
@@ -582,28 +615,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (res.ok && res.latencyMs > 0L) {
                 failedConfigs.remove(cleanedCfg)
                 val prevSpeed = state.results.firstOrNull { Converters.cleanUri(it.cfg) == cleanedCfg }?.speedKbps ?: 0.0
-                val mergedRes = res.copy(speedKbps = prevSpeed)
+                val mergedRes = if (res.speedKbps > 0.0) res else res.copy(speedKbps = prevSpeed)
                 val updatedResults = buildList {
                     add(mergedRes)
                     state.results.forEach { if (Converters.cleanUri(it.cfg) != cleanedCfg) add(it) }
                 }
-                val rebuilt = buildServerList(state.configs, updatedResults)
+                val rebuilt = buildServerList(state.configs, updatedResults, state.sortMode)
+                val sel = resolveSelected(state.selectedCfg, rebuilt)
                 val newItem = rebuilt.firstOrNull { it.cfg == cleanedCfg }
+                val speedSummary = if (mergedRes.speedKbps >= 1024.0) {
+                    String.format(Locale.US, " • %.2f MB/s", mergedRes.speedKbps / 1024.0)
+                } else if (mergedRes.speedKbps > 0.0) {
+                    " • ${mergedRes.speedKbps.toInt()} KB/s"
+                } else ""
                 state = state.copy(
                     pingingSingleCfg = null,
                     results = updatedResults,
                     servers = rebuilt,
-                    info = "${newItem?.name ?: item.name}: Real Delay = ${res.latencyMs} ms",
+                    selectedCfg = sel,
+                    info = "${newItem?.name ?: item.name}: ${res.latencyMs} ms$speedSummary",
                 )
             } else {
+                AppDiag.d("AppViewModel", "single server check failed code=${res.error}")
                 failedConfigs.add(cleanedCfg)
                 val updatedResults = state.results.filterNot { Converters.cleanUri(it.cfg) == cleanedCfg }
-                val rebuilt = buildServerList(state.configs, updatedResults)
+                val rebuilt = buildServerList(state.configs, updatedResults, state.sortMode)
+                val sel = resolveSelected(state.selectedCfg, rebuilt)
                 state = state.copy(
                     pingingSingleCfg = null,
                     results = updatedResults,
                     servers = rebuilt,
-                    error = "${item.name}: لم يستجب (${res.error})",
+                    selectedCfg = sel,
+                    error = "${item.name}: ${UiMessages.MSG_SERVER_UNREACHABLE}",
                 )
             }
         }
@@ -655,10 +698,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         state = state.copy(tunnelNeedsReload = false, info = "تم تحديث قواعد التطبيقات في النفق النشط")
     }
 
-    // ── إعدادات شاملة ──
+    // ── حفظ الإعدادات دون تغيير هوية المستودع التشغيلي أو قطع السيرفر النشط بدون داعٍ ──
     fun saveSettings(
-        owner: String,
-        repoName: String,
         dnsServer: String,
         dnsDoh: Boolean,
         enableIpv6: Boolean,
@@ -669,11 +710,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         bestN: Int,
         concurrency: Int,
         timeoutSec: Int,
-        rankBySpeed: Boolean,
+        defaultSortMode: String,
         autoRefresh: Boolean,
     ) {
-        prefs.owner = owner
-        prefs.repo = repoName
+        val dnsOrTunChanged =
+            prefs.dnsServer != dnsServer ||
+                prefs.dnsDoh != dnsDoh ||
+                prefs.enableIpv6 != enableIpv6 ||
+                prefs.udpInTcp != udpInTcp
+
+        val normalizedSort = ServerSortMode.fromKey(defaultSortMode)
         prefs.dnsServer = dnsServer
         prefs.dnsDoh = dnsDoh
         prefs.enableIpv6 = enableIpv6
@@ -684,8 +730,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.bestN = bestN
         prefs.concurrency = concurrency
         prefs.timeoutSec = timeoutSec
-        prefs.rankBySpeed = rankBySpeed
-        prefs.sortMode = if (rankBySpeed) "SPEED" else "REAL_DELAY"
+        prefs.sortMode = normalizedSort.key
+        prefs.rankBySpeed = (normalizedSort == ServerSortMode.FASTEST_DOWNLOAD)
         prefs.autoRefresh = autoRefresh
 
         val wm = WorkManager.getInstance(getApplication())
@@ -696,21 +742,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             wm.cancelUniqueWork("refresh")
         }
 
-        if (VpnStateManager.status.value.isActive) {
+        if (dnsOrTunChanged && VpnStateManager.status.value.isActive) {
             BahrainVpnService.reloadTunnelIfConnected(getApplication())
         }
 
-        val r = buildRepo()
-        val rebuilt = buildServerList(state.configs, state.results, prefs.sortMode)
+        val rebuilt = buildServerList(state.configs, state.results, normalizedSort.key)
+        val sel = resolveSelected(state.selectedCfg, rebuilt)
         state = state.copy(
             error = null,
             info = "تم حفظ الإعدادات بنجاح",
-            sortMode = prefs.sortMode,
+            sortMode = normalizedSort.key,
             servers = rebuilt,
-            subUrl = r.subscriptionUrl,
-            reliableSubUrl = r.reliableSubUrl,
-            lowLatencyUrl = r.lowLatencyUrl,
-            highThroughputUrl = r.highThroughputUrl,
+            selectedCfg = sel,
             autoFailover = autoFailover,
         )
     }

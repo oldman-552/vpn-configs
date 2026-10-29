@@ -22,6 +22,7 @@ data class TestResult(
     val speedKbps: Double = 0.0,
     val error: String = "",
     val engine: String = "sing-box",
+    val testedAtMs: Long = System.currentTimeMillis(),
 )
 
 data class RunningDaemon(

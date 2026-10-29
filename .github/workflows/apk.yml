@@ -59,18 +59,18 @@ jobs:
         working-directory: android
         run: bash scripts/fetch-engines.sh --all
 
-      - name: Build debug & signed release APKs
+      - name: Run Android unit tests & build debug + signed release APKs
         working-directory: android
         run: |
           set -o pipefail
-          gradle --no-daemon assembleDebug assembleRelease 2>&1 | tee gradle.log || {
-            grep -E '(^e: |FAILURE:|What went wrong:|^\* |> |Manifest merger)' gradle.log | head -n 40 | while IFS= read -r line; do
+          gradle --no-daemon testReleaseUnitTest assembleDebug assembleRelease 2>&1 | tee gradle.log || {
+            grep -E '(^e: |FAILURE:|What went wrong:|^\* |> |Manifest merger|FAILED)' gradle.log | head -n 50 | while IFS= read -r line; do
               echo "::error::$line"
             done
             exit 1
           }
 
-      - name: Collect APKs & compute SHA-256 digests
+      - name: Collect APKs, compute SHA-256 & audit release APK resources
         run: |
           mkdir -p out
           find android/app/build/outputs/apk -name "*.apk" -exec cp {} out/ \;
@@ -78,6 +78,14 @@ jobs:
             cp out/app-universal-release.apk out/app-release.apk
           fi
           (cd out && sha256sum *.apk > SHA256SUMS.txt)
+          AAPT2=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort -V | tail -n 1)
+          if [ -n "$AAPT2" ]; then
+            "$AAPT2" dump badging out/app-arm64-v8a-release.apk | head -n 5
+            if "$AAPT2" dump strings out/app-arm64-v8a-release.apk | grep -iE "oldman-552|vpn-configs|githubusercontent|jsdelivr"; then
+              echo "::error::Repository details leaked into compiled Android resources.arsc!"
+              exit 1
+            fi
+          fi
           ls -lh out/
           cat out/SHA256SUMS.txt
 
@@ -104,5 +112,5 @@ jobs:
           else
             gh release create "$TAG" out/*.apk out/SHA256SUMS.txt \
               --title "bahrain-vpn APK ($TAG)" \
-              --notes "تطبيق **bahrain-vpn v2.1** المتكامل للأندرويد — يتّصل مباشرة بضغطة زر مع قائمة سيرفرات حيّة محدّثة تلقائيًا، فلترة حسب الدولة، مؤشرات الاعتمادية، وسجل الاتصالات. لمعظم الهواتف الحديثة ثبّت النسخة الخفيفة \`app-arm64-v8a-release.apk\` أو النسخة الشاملة \`app-release.apk\`."
+              --notes "تطبيق **bahrain-vpn v2.3** المتكامل للأندرويد — يتّصل مباشرة بضغطة زر مع قائمة سيرفرات محدّثة تلقائيًا، ونظام ترتيب خماسي موزون (الأسرع في التنزيل، الأقل تأخيرًا، الأكثر استقرارًا، الأفضل إجمالًا، الأحدث اختبارًا). لمعظم الهواتف الحديثة ثبّت النسخة الخفيفة \`app-arm64-v8a-release.apk\` أو النسخة الشاملة \`app-release.apk\`."
           fi

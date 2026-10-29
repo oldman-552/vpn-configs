@@ -32,6 +32,7 @@ import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.RunningDaemon
 import com.bahrain.vpnconfigs.engine.SingBox
 import com.bahrain.vpnconfigs.engine.Socks
+import com.bahrain.vpnconfigs.util.UiMessages
 import hev.htproxy.TProxyService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -268,7 +269,7 @@ class BahrainVpnService : VpnService() {
             ?: pool.firstOrNull()?.cfg
 
         if (chosenCfg.isNullOrBlank()) {
-            teardownInternal("لا يوجد سيرفر متاح — حدّث القائمة أولًا", null)
+            teardownInternal(UiMessages.MSG_NO_SERVERS, null)
             stopSelf()
             return
         }
@@ -701,18 +702,24 @@ class BahrainVpnService : VpnService() {
         val current = VpnStateManager.serverPool
         if (current.isNotEmpty()) return current
 
-        val repo = Repo(applicationContext, prefs.owner, prefs.repo)
+        val repo = Repo(applicationContext, Repo.DEFAULT_OWNER, Repo.DEFAULT_REPO)
         val savedBest = repo.loadSavedBest().sortedWith(
-            compareBy<com.bahrain.vpnconfigs.engine.TestResult> { if (it.latencyMs > 0L) it.latencyMs else Long.MAX_VALUE }
+            compareByDescending<com.bahrain.vpnconfigs.engine.TestResult> { it.speedKbps > 0.0 }
                 .thenByDescending { it.speedKbps }
+                .thenBy { if (it.latencyMs > 0L) it.latencyMs else Long.MAX_VALUE }
         ).map { it.cfg }
         val cached = repo.loadCached(prefs.feedProfile)
         val hints = cached?.serverHints ?: emptyMap()
         val cachedAll = (cached?.configs ?: emptyList()).sortedWith(
-            compareBy<String> {
+            compareByDescending<String> {
+                val spd = hints[ConvergedKey(it)]?.speedKbps ?: hints[it]?.speedKbps ?: 0.0
+                spd > 0.0
+            }.thenByDescending {
+                hints[ConvergedKey(it)]?.speedKbps ?: hints[it]?.speedKbps ?: 0.0
+            }.thenBy {
                 val lat = hints[ConvergedKey(it)]?.latencyMs ?: hints[it]?.latencyMs ?: 0L
                 if (lat > 0L) lat else Long.MAX_VALUE
-            }.thenByDescending { hints[ConvergedKey(it)]?.score ?: hints[it]?.score ?: 0.0 }
+            }
         )
         val merged = (prefs.customConfigs + savedBest + cachedAll)
             .distinct()
@@ -733,7 +740,8 @@ class BahrainVpnService : VpnService() {
         singBox.stopDaemon(daemon)
         daemon = null
         stopTunLayer()
-        VpnStateManager.resetDisconnected(errorMsg = errorMsg, infoMsg = infoMsg)
+        val cleanErr = errorMsg?.let { UiMessages.sanitizeError(it, UiMessages.MSG_SERVER_UNREACHABLE) }
+        VpnStateManager.resetDisconnected(errorMsg = cleanErr, infoMsg = infoMsg)
         QuickTileService.requestTileUpdate(applicationContext)
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {

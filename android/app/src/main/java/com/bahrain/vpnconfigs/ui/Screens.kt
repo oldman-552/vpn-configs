@@ -99,6 +99,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bahrain.vpnconfigs.engine.ServerSortMode
+import com.bahrain.vpnconfigs.util.UiMessages
 import com.bahrain.vpnconfigs.vpn.VpnPhase
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import com.bahrain.vpnconfigs.vpn.VpnStatus
@@ -187,8 +189,14 @@ fun ConnectHomeScreen(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold,
                     )
+                    val homeSub = buildString {
+                        append("${state.servers.size} سيرفر متاح")
+                        if (state.lastUpdatedLabel.isNotBlank()) {
+                            append(" • ").append(state.lastUpdatedLabel)
+                        }
+                    }
                     Text(
-                        "${state.servers.size} سيرفر متاح",
+                        homeSub,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary,
                     )
@@ -436,7 +444,7 @@ fun ConnectHomeScreen(
                     }
                 } else {
                     Text(
-                        "لم يتم تحميل السيرفرات بعد — اضغط «تحديث القائمة» بالأسفل.",
+                        "${UiMessages.MSG_NO_SERVERS}. اضغط «تحديث القائمة» بالأسفل.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -481,7 +489,7 @@ fun ConnectHomeScreen(
                     ) {
                         Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(if (state.loading) "جارٍ الجلب…" else "تحديث القائمة")
+                        Text(if (state.loading) "جارٍ التحديث…" else "تحديث القائمة")
                     }
 
                     if (state.testing) {
@@ -496,13 +504,13 @@ fun ConnectHomeScreen(
                         }
                     } else {
                         Button(
-                            onClick = { vm.startQuickPingTest() },
+                            onClick = { vm.startTest() },
                             enabled = !state.loading && state.servers.isNotEmpty() && state.engineReady,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("فحص الأسرع")
+                            Text("فحص السرعة")
                         }
                     }
                 }
@@ -676,9 +684,9 @@ fun ServersListScreen(
         ) {
             Column {
                 Text("قائمة سيرفرات bahrain-vpn", style = MaterialTheme.typography.titleLarge)
-                val updatedLabel = if (state.meta.generatedAt != "—") " • آخر تحديث سحابي: ${state.meta.generatedAt.take(16).replace('T', ' ')}" else ""
+                val updatedPart = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
                 Text(
-                    "اضغط للاتصال أو التبديل الفوري (${filteredServers.size})$updatedLabel",
+                    "اضغط للاتصال أو التبديل الفوري (${filteredServers.size})$updatedPart",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )
@@ -706,24 +714,24 @@ fun ServersListScreen(
                 }
             } else {
                 Button(
-                    onClick = { vm.startQuickPingTest() },
+                    onClick = { vm.startTest() },
                     enabled = state.servers.isNotEmpty() && state.engineReady,
                     modifier = Modifier.weight(1.15f),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                 ) {
-                    Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Real Delay")
+                    Text("فحص السرعة")
                 }
                 OutlinedButton(
-                    onClick = { vm.startTest() },
+                    onClick = { vm.startQuickPingTest() },
                     enabled = state.servers.isNotEmpty() && state.engineReady,
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                 ) {
-                    Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("فحص سرعة")
+                    Text("فحص التأخير")
                 }
             }
             OutlinedButton(
@@ -769,12 +777,7 @@ fun ServersListScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        // ── شريط طريقة الترتيب (Real Delay Current افتراضيًا للأسرع) ──
-        val sortOptions = listOf(
-            "REAL_DELAY" to "⚡ Real Delay (الأسرع)",
-            "SPEED" to "🚀 الأعلى سرعة",
-            "STABILITY" to "🛡️ الأكثر استقرارًا",
-        )
+        // ── شريط خيارات الترتيب الخمسة («الأسرع في التنزيل» افتراضيًا) ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -787,11 +790,11 @@ fun ServersListScreen(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.secondary,
             )
-            sortOptions.forEach { (modeKey, modeTitle) ->
+            ServerSortMode.entries.forEach { mode ->
                 FilterChip(
-                    selected = state.sortMode == modeKey,
-                    onClick = { vm.setSortMode(modeKey) },
-                    label = { Text(modeTitle) },
+                    selected = ServerSortMode.fromKey(state.sortMode) == mode,
+                    onClick = { vm.setSortMode(mode.key) },
+                    label = { Text(mode.titleAr) },
                 )
             }
         }
@@ -856,8 +859,11 @@ fun ServersListScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    if (state.loading) "جارٍ تنزيل السيرفرات الحيّة…"
-                    else "لا توجد سيرفرات مطابقة للفلتر الحالي.",
+                    when {
+                        state.loading -> "${UiMessages.MSG_UPDATING}…"
+                        state.servers.isEmpty() -> "${UiMessages.MSG_NO_SERVERS}."
+                        else -> "لا توجد سيرفرات مطابقة للفلتر الحالي."
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
@@ -1007,17 +1013,26 @@ private fun ServerCard(
                             "${item.speedKbps.toInt()} KB/s"
                         }
                         Text(
-                            text = "السرعة المقاسة: $spdTxt",
+                            text = "سرعة التنزيل: $spdTxt",
                             style = MaterialTheme.typography.labelSmall,
                             color = VpnConnectedGreen,
                         )
                     }
                     val telemetryParts = buildList {
                         if (item.locallyTested) add("✓ فُحص على شبكتك")
-                        if (item.score > 0.0) add("الجودة ${item.score.toInt()}/100")
+                        if (item.overallScore > 0.0) add("الإجمالي ${item.overallScore.toInt()}%")
                         if (item.stabilityRuns >= 2) add("مستقر ×${item.stabilityRuns}")
                         if (item.jitterMs > 0.5) add("تذبذب ±${item.jitterMs.toInt()}ms")
-                        if (item.verifiedAt.length >= 16) add("آخر فحص ${item.verifiedAt.substring(11, 16)}")
+                        if (item.lastTestedAtMs > 0L) {
+                            val agoMin = ((System.currentTimeMillis() - item.lastTestedAtMs) / 60_000L).coerceAtLeast(0L)
+                            val testedLbl = when {
+                                agoMin < 1L -> "اختُبر الآن"
+                                agoMin < 60L -> "اختُبر منذ ${agoMin}د"
+                                agoMin < 1440L -> "اختُبر منذ ${agoMin / 60L}س"
+                                else -> "اختُبر منذ ${agoMin / 1440L}ي"
+                            }
+                            add(testedLbl)
+                        }
                     }
                     if (telemetryParts.isNotEmpty()) {
                         Text(
@@ -1267,8 +1282,6 @@ fun SettingsAndExportScreen(
     onShareFile: (File) -> Unit,
 ) {
     val p = vm.settings()
-    var owner by remember { mutableStateOf(p.owner) }
-    var repo by remember { mutableStateOf(p.repo) }
     var dnsServer by remember { mutableStateOf(p.dnsServer) }
     var dnsDoh by remember { mutableStateOf(p.dnsDoh) }
     var enableIpv6 by remember { mutableStateOf(p.enableIpv6) }
@@ -1279,8 +1292,44 @@ fun SettingsAndExportScreen(
     var bestN by remember { mutableStateOf(p.bestN.toString()) }
     var conc by remember { mutableStateOf(p.concurrency.toString()) }
     var timeout by remember { mutableStateOf(p.timeoutSec.toString()) }
-    var bySpeed by remember { mutableStateOf(p.rankBySpeed) }
+    var defaultSort by remember(state.sortMode) { mutableStateOf(ServerSortMode.fromKey(state.sortMode).key) }
     var autoRef by remember { mutableStateOf(p.autoRefresh) }
+    var showLicensesDialog by remember { mutableStateOf(false) }
+
+    if (showLicensesDialog) {
+        AlertDialog(
+            onDismissRequest = { showLicensesDialog = false },
+            title = { Text("الإشعارات القانونية والتراخيص مفتوحة المصدر") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "يستخدم تطبيق bahrain-vpn المكوّنات مفتوحة المصدر التالية وفق تراخيصها القانونية المعتمدة:",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "• sing-box — Copyright © SagerNet Contributors (GNU General Public License v3.0 or later).",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Text(
+                        "• hev-socks5-tunnel — Copyright © Heiher (MIT License).",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Text(
+                        "• AndroidX & Jetpack Compose Material 3 — Copyright © The Android Open Source Project (Apache License 2.0).",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLicensesDialog = false }) {
+                    Text("إغلاق")
+                }
+            },
+        )
+    }
 
     Column(
         modifier = modifier
@@ -1344,31 +1393,41 @@ fun SettingsAndExportScreen(
             }
         }
 
-        // ── إعدادات الفحص والمصدر ──
+        // ── إعدادات الفحص والترتيب والتحديث التلقائي ──
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("معاملات الفحص والتحديث", style = MaterialTheme.typography.titleMedium)
+                Text("معاملات الفحص والترتيب والتحديث", style = MaterialTheme.typography.titleMedium)
                 NumField(testTop, { testTop = it }, "عدد السيرفرات المفحوصة في الفحص الشامل")
-                NumField(speedTop, { speedTop = it }, "عدد السيرفرات المقاسة سرعتها (0 = بدون سرعة)")
-                NumField(conc, { conc = it }, "التوازي (1–12)")
-                NumField(timeout, { timeout = it }, "مهلة كل سيرفر بالثواني")
-                NumField(bestN, { bestN = it }, "حجم ملف الأفضل best100.txt")
+                NumField(speedTop, { speedTop = it }, "عدد السيرفرات المقاسة سرعة تنزيلها عبر النفق")
+                NumField(conc, { conc = it }, "التوازي أثناء الفحص (1–12)")
+                NumField(timeout, { timeout = it }, "مهلة اختبار كل سيرفر بالثواني")
+                NumField(bestN, { bestN = it }, "عدد أفضل السيرفرات المحفوظة للتصدير")
+
+                Text("معيار الترتيب الافتراضي للقائمة", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    ServerSortMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = ServerSortMode.fromKey(defaultSort) == mode,
+                            onClick = { defaultSort = mode.key },
+                            label = { Text(mode.titleAr) },
+                        )
+                    }
+                }
 
                 SettingToggleRow(
-                    title = "الترتيب حسب السرعة بدل البينغ",
-                    subtitle = "يرتّب نتائج الفحص الشامل بالأعلى سرعة تنزيل",
-                    checked = bySpeed,
-                    onCheckedChange = { bySpeed = it },
-                )
-                SettingToggleRow(
-                    title = "تحديث القائمة الحيّة تلقائيًا في الخلفية",
-                    subtitle = "يجلب أحدث سيرفرات bahrain-vpn كل ساعة بدون استهلاك بطارية",
+                    title = "تحديث قائمة السيرفرات تلقائيًا في الخلفية",
+                    subtitle = "يجلب أحدث سيرفرات bahrain-vpn دوريًا دون استهلاك بطارية",
                     checked = autoRef,
                     onCheckedChange = { autoRef = it },
                 )
 
                 HorizontalDivider()
-                Text("نمط القائمة السحابية المفضّلة", style = MaterialTheme.typography.labelSmall)
+                Text("نمط التغذية المفضّل", style = MaterialTheme.typography.labelSmall)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1388,33 +1447,12 @@ fun SettingsAndExportScreen(
                         )
                     }
                 }
-
-                HorizontalDivider()
-                Text("مصدر البيانات السحابي (GitHub)", style = MaterialTheme.typography.labelSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = owner,
-                        onValueChange = { owner = it },
-                        label = { Text("المالك") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = repo,
-                        onValueChange = { repo = it },
-                        label = { Text("المستودع") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
             }
         }
 
         Button(
             onClick = {
                 vm.saveSettings(
-                    owner = owner,
-                    repoName = repo,
                     dnsServer = dnsServer,
                     dnsDoh = dnsDoh,
                     enableIpv6 = enableIpv6,
@@ -1425,7 +1463,7 @@ fun SettingsAndExportScreen(
                     bestN = bestN.toIntOrNull() ?: 100,
                     concurrency = conc.toIntOrNull() ?: 8,
                     timeoutSec = timeout.toIntOrNull() ?: 5,
-                    rankBySpeed = bySpeed,
+                    defaultSortMode = defaultSort,
                     autoRefresh = autoRef,
                 )
             },
@@ -1434,53 +1472,37 @@ fun SettingsAndExportScreen(
             Text("حفظ الإعدادات وتطبيقها")
         }
 
-        // ── التصدير والمشاركة (روابط وملفات bahrain-vpn) ──
+        // ── التصدير والمشاركة المحلية بدون كشف المصدر ──
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("تصدير ومشاركة كانفيغات bahrain-vpn", style = MaterialTheme.typography.titleMedium)
+                Text("تصدير ومشاركة قوائم bahrain-vpn", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "جميع الملفات وروابط الاشتراك تحمل الاسم الموحّد bahrain-vpn.",
+                    "يمكنك نسخ أو مشاركة القوائم المولّدة محليًا على جهازك بالاسم الموحّد bahrain-vpn.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )
-                OutlinedButton(
-                    onClick = { onCopy(state.subUrl, "نُسخ رابط الاشتراك السحابي للحافظة") },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("نسخ رابط الاشتراك السحابي (sub.txt)")
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = { onCopy(state.reliableSubUrl, "نُسخ رابط السيرفرات المستقرة للحافظة") },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                    ) {
-                        Text("المستقرة", fontSize = 12.sp)
-                    }
-                    OutlinedButton(
-                        onClick = { onCopy(state.lowLatencyUrl, "نُسخ رابط الأقل تأخيرًا للحافظة") },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                    ) {
-                        Text("أقل بينغ", fontSize = 12.sp)
-                    }
-                    OutlinedButton(
-                        onClick = { onCopy(state.highThroughputUrl, "نُسخ رابط الأعلى سرعة للحافظة") },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                    ) {
-                        Text("أعلى سرعة", fontSize = 12.sp)
-                    }
-                }
+                ExportFileRow("قائمة أفضل السيرفرات المفحوصة", state.bestFile, onCopyFile, onShareFile)
+                ExportFileRow("حزمة الاشتراك المحلية (Base64)", state.subFile, onCopyFile, onShareFile)
+                ExportFileRow("قائمة جميع السيرفرات المتاحة", state.allFile, onCopyFile, onShareFile)
+            }
+        }
 
-                ExportFileRow("best100.txt — أفضل السيرفرات المفحوصة", state.bestFile, onCopyFile, onShareFile)
-                ExportFileRow("sub.txt — اشتراك Base64 محلي", state.subFile, onCopyFile, onShareFile)
-                ExportFileRow("config.txt — جميع السيرفرات الحيّة", state.allFile, onCopyFile, onShareFile)
+        // ── حول التطبيق والإشعارات القانونية المطلوبة ──
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("حول التطبيق والتراخيص القانونية", style = MaterialTheme.typography.titleMedium)
+                val aboutUpdated = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
+                Text(
+                    "bahrain-vpn v2.3$aboutUpdated",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                OutlinedButton(
+                    onClick = { showLicensesDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("عرض تراخيص المكوّنات مفتوحة المصدر")
+                }
             }
         }
     }
