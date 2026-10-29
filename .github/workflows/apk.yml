@@ -40,21 +40,30 @@ jobs:
         with:
           gradle-version: "8.7"
 
-      - name: Cache sing-box Android binaries
+      - name: Cache native VPN engines (sing-box + hev-socks5-tunnel)
         id: cache-sbx
         uses: actions/cache@v4
         with:
-          path: android/app/src/main/jniLibs
-          key: singbox-android-1.14.4-v1
+          path: |
+            android/app/src/main/jniLibs
+            android/app/libs
+          key: engines-sb1.14.4-hev2.19.3-v1
 
-      - name: Fetch sing-box engine (arm64 + x86_64)
+      - name: Fetch native engines (arm64 + x86_64 + hev-socks5-tunnel AAR)
         if: steps.cache-sbx.outputs.cache-hit != 'true'
         working-directory: android
         run: bash scripts/fetch-engines.sh --all
 
       - name: Build debug & signed release APKs
         working-directory: android
-        run: gradle --no-daemon assembleDebug assembleRelease
+        run: |
+          set -o pipefail
+          gradle --no-daemon assembleDebug assembleRelease 2>&1 | tee gradle.log || {
+            grep -E '(^e: |FAILURE:|What went wrong:|^\* |> |Manifest merger)' gradle.log | head -n 40 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          }
 
       - name: Collect APKs
         run: |
@@ -82,6 +91,6 @@ jobs:
             gh release upload "$TAG" out/*.apk --clobber
           else
             gh release create "$TAG" out/*.apk \
-              --title "Bahrain Configs APK ($TAG)" \
-              --notes "تطبيق أندرويد جاهز للتثبيت المباشر (مضبوط تلقائيًا على المستودع \`${GITHUB_REPOSITORY}\`). ثبّت \`app-release.apk\` مباشرة على هاتفك."
+              --title "bahrain-vpn APK ($TAG)" \
+              --notes "تطبيق **bahrain-vpn** المتكامل للأندرويد — يتّصل مباشرة بضغطة زر مع قائمة سيرفرات حيّة محدّثة تلقائيًا وتبديل ذكي واستثناء للتطبيقات. ثبّت \`app-release.apk\` مباشرة على هاتفك."
           fi

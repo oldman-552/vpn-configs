@@ -1165,9 +1165,22 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.best_out)
     out.parent.mkdir(parents=True, exist_ok=True)
     lines = []
-    for i, r in enumerate(best[:args.best]):
+    for i, r in enumerate(best[:args.best], 1):
         speed = f"{r.speed_kbps:.0f}KB/s" if r.speed_kbps > 0 else "—"
-        lines.append(f"{r.cfg}#{i + 1} | {r.latency_ms:.0f}ms | {speed}")
+        label = f"bahrain-vpn {i} | {r.latency_ms:.0f}ms | {speed}"
+        if r.cfg.startswith("vmess://"):
+            try:
+                j = json.loads(_b64(r.cfg[8:]).decode("utf-8", "replace"))
+                if isinstance(j, dict):
+                    j["ps"] = label
+                    enc = base64.b64encode(
+                        json.dumps(j, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                    ).decode("ascii")
+                    lines.append(f"vmess://{enc}")
+                    continue
+            except Exception:
+                pass
+        lines.append(f"{r.cfg}#{label}")
     tmp = out.with_name(out.name + ".tmp")
     tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
     tmp.replace(out)

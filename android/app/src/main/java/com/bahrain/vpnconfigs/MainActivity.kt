@@ -1,24 +1,32 @@
 // =====================================================================
-// MainActivity.kt — نقطة الدخول: Material 3 + RTL + 4 تبويبات.
+// MainActivity.kt — نقطة الدخول لتطبيق bahrain-vpn: Material 3 + RTL + 4 تبويبات.
 // =====================================================================
 package com.bahrain.vpnconfigs
 
+import android.Manifest
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import android.content.pm.PackageManager
+import android.net.VpnService
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -26,14 +34,18 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -42,10 +54,13 @@ import androidx.work.WorkManager
 import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.ui.AppTheme
 import com.bahrain.vpnconfigs.ui.AppViewModel
-import com.bahrain.vpnconfigs.ui.FilesScreen
-import com.bahrain.vpnconfigs.ui.HomeScreen
-import com.bahrain.vpnconfigs.ui.ResultsScreen
-import com.bahrain.vpnconfigs.ui.SettingsScreen
+import com.bahrain.vpnconfigs.ui.AppsSplitScreen
+import com.bahrain.vpnconfigs.ui.ConnectHomeScreen
+import com.bahrain.vpnconfigs.ui.ServerItem
+import com.bahrain.vpnconfigs.ui.ServersListScreen
+import com.bahrain.vpnconfigs.ui.SettingsAndExportScreen
+import com.bahrain.vpnconfigs.vpn.BahrainVpnService
+import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import com.bahrain.vpnconfigs.work.RefreshWorker
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -82,6 +97,53 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
     var tab by remember { mutableIntStateOf(0) }
     val ctx = LocalContext.current
     val state = vm.state
+    val vpnStatus by VpnStateManager.status.collectAsState()
+
+    var pendingTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    val notifLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { /* اختياري لإظهار إشعار السرعة في أندرويد 13+ */ }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                ctx,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    val vpnPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { res ->
+        val target = pendingTarget
+        pendingTarget = null
+        if (res.resultCode == Activity.RESULT_OK && target != null) {
+            BahrainVpnService.startConnect(ctx, target.first, target.second)
+        } else if (res.resultCode != Activity.RESULT_OK) {
+            Toast.makeText(ctx, "يجب الموافقة على صلاحية الـ VPN لبدء الاتصال", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun requestConnect(server: ServerItem?) {
+        if (server == null) {
+            Toast.makeText(ctx, "انتظر تحميل قائمة السيرفرات أو اضغط تحديث", Toast.LENGTH_SHORT).show()
+            vm.refresh()
+            return
+        }
+        vm.selectServer(server)
+        val prep = VpnService.prepare(ctx)
+        if (prep != null) {
+            pendingTarget = server.cfg to server.name
+            vpnPermissionLauncher.launch(prep)
+        } else {
+            BahrainVpnService.startConnect(ctx, server.cfg, server.name)
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -89,20 +151,43 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                 NavigationBarItem(
                     selected = tab == 0,
                     onClick = { tab = 0 },
-                    icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                    label = { Text("الرئيسية") },
+                    icon = { Icon(Icons.Filled.Shield, contentDescription = null) },
+                    label = { Text("الاتصال") },
                 )
                 NavigationBarItem(
                     selected = tab == 1,
                     onClick = { tab = 1 },
-                    icon = { Icon(Icons.Filled.CheckCircle, contentDescription = null) },
-                    label = { Text("النتائج") },
+                    icon = {
+                        BadgedBox(
+                            badge = {
+                                if (state.servers.isNotEmpty()) {
+                                    Badge { Text("${state.servers.size}") }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Filled.Dns, contentDescription = null)
+                        }
+                    },
+                    label = { Text("السيرفرات") },
                 )
                 NavigationBarItem(
                     selected = tab == 2,
-                    onClick = { tab = 2 },
-                    icon = { Icon(Icons.Filled.Description, contentDescription = null) },
-                    label = { Text("الملفات") },
+                    onClick = {
+                        tab = 2
+                        vm.ensureAppsLoaded()
+                    },
+                    icon = {
+                        BadgedBox(
+                            badge = {
+                                if (state.splitApps.isNotEmpty()) {
+                                    Badge { Text("${state.splitApps.size}") }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Filled.Apps, contentDescription = null)
+                        }
+                    },
+                    label = { Text("التطبيقات") },
                 )
                 NavigationBarItem(
                     selected = tab == 3,
@@ -115,33 +200,57 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
     ) { pad ->
         val m = Modifier.padding(pad)
         when (tab) {
-            0 -> HomeScreen(
+            0 -> ConnectHomeScreen(
+                state = state,
+                vpnStatus = vpnStatus,
+                vm = vm,
+                modifier = m,
+                onToggleConnect = {
+                    if (vpnStatus.isActive) {
+                        BahrainVpnService.stopVpn(ctx)
+                    } else {
+                        requestConnect(state.selectedServer)
+                    }
+                },
+                onNextServer = { BahrainVpnService.switchNextServer(ctx) },
+                onOpenServersTab = { tab = 1 },
+                onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
+            )
+            1 -> ServersListScreen(
+                state = state,
+                vpnStatus = vpnStatus,
+                vm = vm,
+                modifier = m,
+                onConnectServer = { srv -> requestConnect(srv) },
+                onReadClipboard = { readClipboardText(ctx) },
+                onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
+            )
+            2 -> AppsSplitScreen(
                 state = state,
                 vm = vm,
                 modifier = m,
-                onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
-                onOpenUri = { uri -> openExternalUri(ctx, uri) },
             )
-            1 -> ResultsScreen(
+            else -> SettingsAndExportScreen(
+                vm = vm,
                 state = state,
                 modifier = m,
                 onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
-                onOpenUri = { uri -> openExternalUri(ctx, uri) },
-            )
-            2 -> FilesScreen(
-                state = state,
-                modifier = m,
                 onCopyFile = { file -> copyFileContent(ctx, file) },
-                onShare = { file -> shareFile(ctx, file) },
+                onShareFile = { file -> shareFile(ctx, file) },
             )
-            else -> SettingsScreen(vm, state, m)
         }
     }
 }
 
+private fun readClipboardText(ctx: Context): String {
+    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val item = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+    return item?.coerceToText(ctx)?.toString() ?: ""
+}
+
 private fun copyToClipboard(ctx: Context, text: String, toastMsg: String = "تم النسخ للحافظة") {
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("config", text))
+    cm.setPrimaryClip(ClipData.newPlainText("bahrain-vpn", text))
     Toast.makeText(ctx, toastMsg, Toast.LENGTH_SHORT).show()
 }
 
@@ -151,17 +260,6 @@ private fun copyFileContent(ctx: Context, file: File) {
         copyToClipboard(ctx, content, "نُسخ محتوى ${file.name} للحافظة")
     }.onFailure {
         Toast.makeText(ctx, "تعذّرت قراءة الملف", Toast.LENGTH_SHORT).show()
-    }
-}
-
-private fun openExternalUri(ctx: Context, rawUri: String) {
-    try {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(rawUri)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        ctx.startActivity(intent)
-    } catch (_: Exception) {
-        copyToClipboard(ctx, rawUri, "لا يوجد تطبيق متوافق مثبت؛ تم نسخ الرابط للحافظة")
     }
 }
 

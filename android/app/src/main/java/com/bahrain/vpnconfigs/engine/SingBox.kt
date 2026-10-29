@@ -1,9 +1,9 @@
 // =====================================================================
-// SingBox.kt — تشغيل نواة sing-box محليًا لفحص كانفيغ واحد.
+// SingBox.kt — تشغيل نواة sing-box محليًا (للفحص المتوازي أو لنفق الـ VPN).
 //
-// الطريقة: النواة تأتي كـ libsingbox.so داخل jniLibs (لأن أندرويد يمنع
-// تنفيذ ملفات من مجلد بيانات التطبيق). نشغّلها مع inbound من نوع mixed
-// على منفذ محلي، ثم نمرّر طلب generate_204 عبره عبر Socks.get().
+// النواة تُشحن كـ libsingbox.so داخل jniLibs لتكون قابلة للتنفيذ في أندرويد.
+// تضم إعداد DNS متوافق مع sing-box 1.14+ (domain_resolver) لضمان عمل العُقد
+// التي تستخدم أسماء نطاقات بدل عناوين IP على أندرويد بدون /etc/resolv.conf.
 // =====================================================================
 package com.bahrain.vpnconfigs.engine
 
@@ -24,11 +24,18 @@ data class TestResult(
     val engine: String = "sing-box",
 )
 
+data class RunningDaemon(
+    val process: Process,
+    val configFile: File,
+    val port: Int,
+)
+
 class SingBox(private val ctx: Context) {
 
     companion object {
         const val TEST_URL = "https://www.gstatic.com/generate_204"
         const val SPEED_URL = "https://speed.cloudflare.com/__down?bytes=1000000"
+        const val VPN_SOCKS_PORT = 20808
         private const val SPEED_BYTES = 1_000_000L
     }
 
@@ -44,12 +51,47 @@ class SingBox(private val ctx: Context) {
         File(ctx.cacheDir, "sbx").apply { mkdirs() }
     }
 
-    /** بناء ملف إعداد كامل لكانفيغ واحد على منفذ محلي محدّد. */
-    private fun buildConfig(cfg: String, port: Int): String? {
+    private val ipv4LiteralRe = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
+
+    private fun isIpLiteral(host: String): Boolean {
+        val h = host.trim().removeSurrounding("[", "]")
+        return ipv4LiteralRe.matches(h) || h.contains(':')
+    }
+
+    /** بناء ملف إعداد كامل متوافق مع sing-box 1.14.4 لكانفيغ واحد على منفذ محلي محدّد. */
+    fun buildConfig(
+        cfg: String,
+        port: Int,
+        dnsServer: String = "1.1.1.1",
+        useDoh: Boolean = false,
+    ): String? {
         val out = Converters.toOutbound(cfg) ?: return null
+        val safeDns = dnsServer.trim().removePrefix("https://").substringBefore("/").ifBlank { "1.1.1.1" }
+        val dnsServers = JSONArray()
+        val dnsEntry = JSONObject()
+            .put("type", if (useDoh) "https" else "udp")
+            .put("tag", "bootstrap")
+            .put("server", safeDns)
+
+        if (!isIpLiteral(safeDns)) {
+            // إذا أدخل المستخدم اسم نطاق مثل dns.google أو cloudflare-dns.com نضيف محلّل IP احتياطي
+            dnsServers.put(
+                JSONObject()
+                    .put("type", "udp")
+                    .put("tag", "ip-fallback")
+                    .put("server", "1.1.1.1")
+            )
+            dnsEntry.put("domain_resolver", "ip-fallback")
+        }
+        dnsServers.put(dnsEntry)
+
         out.put("tag", "proxy")
+        out.put("domain_resolver", "bootstrap")
+
         val conf = JSONObject()
             .put("log", JSONObject().put("level", "error").put("timestamp", false))
+            .put("dns", JSONObject().put("servers", dnsServers).put("final", "bootstrap"))
+            .put("route", JSONObject().put("default_domain_resolver", "bootstrap"))
             .put(
                 "inbounds",
                 JSONArray().put(
@@ -65,12 +107,92 @@ class SingBox(private val ctx: Context) {
     }
 
     /**
+     * تشغيل sing-box كعملية خلفية لنفق الـ VPN والانتظار حتى يفتح المنفذ المحلي.
+     */
+    fun startDaemon(
+        cfg: String,
+        port: Int = VPN_SOCKS_PORT,
+        dnsServer: String = "1.1.1.1",
+        useDoh: Boolean = false,
+        tag: String = "vpn",
+        waitMs: Long = 3500L,
+    ): RunningDaemon? {
+        if (!isAvailable) return null
+        val json = buildConfig(cfg, port, dnsServer, useDoh) ?: return null
+        val confFile = File(tmpDir, "cfg-$tag-$port.json")
+        confFile.writeText(json, Charsets.UTF_8)
+
+        val devNull = File("/dev/null")
+        var proc: Process? = null
+        try {
+            val pb = ProcessBuilder(binaryPath, "run", "-c", confFile.absolutePath)
+            if (devNull.exists()) {
+                pb.redirectOutput(devNull)
+                pb.redirectError(devNull)
+            } else {
+                pb.redirectErrorStream(true)
+            }
+            proc = pb.start()
+
+            val deadline = System.currentTimeMillis() + waitMs
+            var up = false
+            while (System.currentTimeMillis() < deadline) {
+                if (!proc.isAlive) break
+                try {
+                    Socket().use { s ->
+                        s.connect(InetSocketAddress("127.0.0.1", port), 80)
+                        up = true
+                    }
+                    if (up) break
+                } catch (_: Exception) {
+                    Thread.sleep(30)
+                }
+            }
+            if (!up) {
+                stopProcess(proc, confFile)
+                return null
+            }
+            return RunningDaemon(proc, confFile, port)
+        } catch (_: Exception) {
+            stopProcess(proc, confFile)
+            return null
+        }
+    }
+
+    fun stopDaemon(daemon: RunningDaemon?) {
+        if (daemon == null) return
+        stopProcess(daemon.process, daemon.configFile)
+    }
+
+    private fun stopProcess(proc: Process?, confFile: File?) {
+        proc?.let {
+            try {
+                it.destroy()
+                if (!it.waitFor(1200, TimeUnit.MILLISECONDS)) {
+                    it.destroyForcibly()
+                    it.waitFor(400, TimeUnit.MILLISECONDS)
+                }
+            } catch (_: Exception) {
+                runCatching { it.destroyForcibly() }
+            }
+        }
+        runCatching { confFile?.delete() }
+    }
+
+    /**
      * فحص كانفيغ واحد: يشغّل النواة، ينتظر المنفذ، يطلب generate_204،
      * ثم (اختياريًا) يقيس سرعة تنزيل 1MB.
      */
-    fun test(cfg: String, port: Int, timeoutSec: Int = 6, measureSpeed: Boolean = false): TestResult {
+    fun test(
+        cfg: String,
+        port: Int,
+        timeoutSec: Int = 6,
+        measureSpeed: Boolean = false,
+        dnsServer: String = "1.1.1.1",
+        useDoh: Boolean = false,
+    ): TestResult {
         if (!isAvailable) return TestResult(cfg, error = "engine-missing")
-        val json = buildConfig(cfg, port) ?: return TestResult(cfg, error = "unsupported")
+        val json = buildConfig(cfg, port, dnsServer, useDoh) ?: return TestResult(cfg, error = "unsupported")
 
         val confFile = File(tmpDir, "cfg-$port.json")
         confFile.writeText(json, Charsets.UTF_8)
@@ -87,7 +209,6 @@ class SingBox(private val ctx: Context) {
             }
             proc = pb.start()
 
-            // انتظار فتح منفذ socks
             val deadline = System.currentTimeMillis() + 2500
             var up = false
             while (System.currentTimeMillis() < deadline) {
@@ -128,18 +249,7 @@ class SingBox(private val ctx: Context) {
         } catch (e: Exception) {
             TestResult(cfg, error = e.javaClass.simpleName)
         } finally {
-            proc?.let {
-                try {
-                    it.destroy()
-                    if (!it.waitFor(1500, TimeUnit.MILLISECONDS)) {
-                        it.destroyForcibly()
-                        it.waitFor(500, TimeUnit.MILLISECONDS)
-                    }
-                } catch (_: Exception) {
-                    runCatching { it.destroyForcibly() }
-                }
-            }
-            confFile.delete()
+            stopProcess(proc, confFile)
         }
     }
 }

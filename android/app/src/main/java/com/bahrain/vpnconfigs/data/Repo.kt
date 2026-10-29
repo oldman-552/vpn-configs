@@ -1,6 +1,6 @@
 // =====================================================================
 // Repo.kt — تنزيل القائمة الحيّة من GitHub (عبر jsDelivr مع بدائل)
-// وتخزينها محليًا، وكتابة ملفات المخرجات (config.txt / best100.txt / sub.txt).
+// وتخزينها محليًا، وتصدير الكانفيغات باسم موحّد (bahrain-vpn).
 // =====================================================================
 package com.bahrain.vpnconfigs.data
 
@@ -30,6 +30,7 @@ data class ResultLine(
 
 data class LoadResult(
     val configs: List<String>,
+    val serverLatencies: Map<String, Long>,
     val meta: RemoteMeta,
     val source: String,
     val error: String? = null,
@@ -59,7 +60,7 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
                 connectTimeout = timeoutMs
                 readTimeout = timeoutMs
                 requestMethod = "GET"
-                setRequestProperty("User-Agent", "BahrainConfigs/1.1")
+                setRequestProperty("User-Agent", "bahrain-vpn/2.0")
                 instanceFollowRedirects = true
             }
             if (conn.responseCode !in 200..299) return null
@@ -116,12 +117,24 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
         }
     }
 
-    private fun parseConfigLines(rawText: String): List<String> =
-        rawText.lineSequence()
-            .map { Converters.cleanUri(it) }
-            .filter { it.contains("://") }
-            .distinct()
-            .toList()
+    /** قراءة الأسطر واستخلاص أي زمن استجابة مبدئي مرفق من الخادم (إن وُجد). */
+    private fun parseConfigLinesWithHints(rawText: String): Pair<List<String>, Map<String, Long>> {
+        val cfgs = LinkedHashSet<String>()
+        val hints = HashMap<String, Long>()
+        val msRegex = Regex("(\\d+)\\s*ms", RegexOption.IGNORE_CASE)
+        rawText.lineSequence().forEach { rawLine ->
+            val trimmed = rawLine.trim()
+            if (!trimmed.contains("://")) return@forEach
+            val cleaned = Converters.cleanUri(trimmed)
+            if (!cleaned.contains("://")) return@forEach
+            cfgs.add(cleaned)
+            val remark = Converters.extractRemark(trimmed)
+            msRegex.find(remark)?.groupValues?.getOrNull(1)?.toLongOrNull()?.let { ms ->
+                if (ms > 0) hints.putIfAbsent(cleaned, ms)
+            }
+        }
+        return cfgs.toList() to hints
+    }
 
     /** قراءة الكاش المحلي فورًا عند فتح التطبيق بدون طلب شبكي. */
     fun loadCached(): LoadResult? {
@@ -129,9 +142,9 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
         if (!listFile.exists()) return null
         val metaFile = File(dir, "meta.json")
         val meta = if (metaFile.exists()) parseMeta(metaFile.readText(Charsets.UTF_8)) else RemoteMeta()
-        val cfgs = parseConfigLines(listFile.readText(Charsets.UTF_8))
+        val (cfgs, hints) = parseConfigLinesWithHints(listFile.readText(Charsets.UTF_8))
         if (cfgs.isEmpty()) return null
-        return LoadResult(cfgs, meta, "cache:alive.txt")
+        return LoadResult(cfgs, hints, meta, "cache:alive.txt")
     }
 
     /** تنزيل القائمة الحيّة + البيانات الوصفية. */
@@ -142,16 +155,17 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
         if (listRaw == null) {
             return LoadResult(
                 emptyList(),
+                emptyMap(),
                 meta,
                 "—",
-                "تعذّر تنزيل القائمة الحيّة حاليًا (تأكّد من اتصال الإنترنت أو من انتهاء أول دورة في فرع data)",
+                "تعذّر تنزيل القائمة الحيّة حاليًا — تأكّد من اتصال الإنترنت وحاول مجددًا",
             )
         }
-        val cfgs = parseConfigLines(listRaw.first)
-        return LoadResult(cfgs, meta, listRaw.second)
+        val (cfgs, hints) = parseConfigLinesWithHints(listRaw.first)
+        return LoadResult(cfgs, hints, meta, listRaw.second)
     }
 
-    // ─────────── كتابة واسترجاع الملفات النهائية ───────────
+    // ─────────── كتابة واسترجاع الملفات النهائية باسم موحّد bahrain-vpn ───────────
     val outDir: File
         get() = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "configs")
             .apply { mkdirs() }
@@ -162,7 +176,10 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
 
     fun writeAll(configs: List<String>): File {
         val f = File(outDir, "config.txt")
-        writeAtomic(f, configs.joinToString("\n") + "\n")
+        val named = configs.mapIndexed { idx, cfg ->
+            Converters.namedUri(cfg, "bahrain-vpn ${idx + 1}")
+        }
+        writeAtomic(f, named.joinToString("\n") + "\n")
         return f
     }
 
@@ -192,14 +209,12 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
 
     fun writeBest(results: List<ResultLine>, limit: Int): Pair<File, File> {
         val bestList = diversify(results, limit)
-        val sb = StringBuilder()
-        bestList.forEachIndexed { i, r ->
+        val lines = bestList.mapIndexed { i, r ->
             val speed = if (r.speedKbps > 0) "${r.speedKbps.toInt()}KB/s" else "—"
-            sb.append(r.cfg).append("#").append(i + 1)
-                .append(" | ").append(r.latencyMs).append("ms")
-                .append(" | ").append(speed).append('\n')
+            val label = "bahrain-vpn ${i + 1} | ${r.latencyMs}ms | $speed"
+            Converters.namedUri(r.cfg, label)
         }
-        val plainText = sb.toString()
+        val plainText = lines.joinToString("\n") + "\n"
         val bestFile = File(outDir, "best100.txt")
         writeAtomic(bestFile, plainText)
 
@@ -217,8 +232,8 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
             f.readLines(Charsets.UTF_8).mapNotNull { line ->
                 val trimmed = line.trim()
                 if (!trimmed.contains("://")) return@mapNotNull null
-                val cfg = trimmed.substringBefore("#")
-                val remark = trimmed.substringAfter("#", "")
+                val cfg = Converters.cleanUri(trimmed)
+                val remark = Converters.extractRemark(trimmed)
                 val parts = remark.split("|").map { it.trim() }
                 val lat = parts.getOrNull(1)?.removeSuffix("ms")?.trim()?.toLongOrNull() ?: 0L
                 val spd = parts.getOrNull(2)?.removeSuffix("KB/s")?.trim()?.toDoubleOrNull() ?: 0.0

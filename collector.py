@@ -417,17 +417,59 @@ def stamp(calendar: str) -> tuple[str, str]:
     return now.strftime("%b-%d | %H:%M"), now.strftime("%b-%d")
 
 
+def set_uri_remark(cfg: str, label: str) -> str:
+    """
+    تعيين الاسم الظاهر للمستخدم (مثل 'bahrain-vpn 1 | 45ms') بطريقة متوافقة مع كل البروتوكولات:
+    • vmess://  → تعديل حقل "ps" داخل JSON المرمّز بـ base64 دون إلحاق #fragment يفسد فكّ الترميز.
+    • ssr://    → تعديل معامل remarks داخل حمولة SSR المرمّزة بـ base64url دون إلحاق #fragment.
+    • البقية   → إزالة أي #fragment سابق وإلحاق #{label}.
+    """
+    base = FRAGMENT_RE.sub("", cfg).strip()
+    scheme, sep, body = base.partition("://")
+    if not sep:
+        return cfg
+
+    if scheme == "vmess":
+        raw = b64_decode(body)
+        if raw:
+            try:
+                j = json.loads(raw)
+                if isinstance(j, dict):
+                    j["ps"] = label
+                    encoded = base64.b64encode(
+                        json.dumps(j, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                    ).decode("ascii")
+                    return f"vmess://{encoded}"
+            except Exception:
+                pass
+        return base
+
+    if scheme == "ssr":
+        raw = b64_decode(body)
+        if raw and "/?" in raw:
+            main_part, q_part = raw.split("/?", 1)
+            b64_label = base64.urlsafe_b64encode(label.encode("utf-8")).decode("ascii").rstrip("=")
+            params = [p for p in q_part.split("&") if p and not p.startswith("remarks=")]
+            params.append(f"remarks={b64_label}")
+            rebuilt = f"{main_part}/?{'&'.join(params)}"
+            encoded = base64.urlsafe_b64encode(rebuilt.encode("utf-8")).decode("ascii").rstrip("=")
+            return f"ssr://{encoded}"
+        return base
+
+    return f"{base}#{label}"
+
+
 def write_outputs(configs: list[str], out_path: Path, calendar: str,
                   header_note: str, tag: str) -> None:
-    """بناء الأسطر (كانفيغ + remark) وكتابة الملف بشكل ذرّي."""
+    """بناء الأسطر (كانفيغ + remark باسم موحّد bahrain-vpn) وكتابة الملف بشكل ذرّي."""
     full_ts, date_only = stamp(calendar)
     lines = []
-    for i, cfg in enumerate(configs):
-        if i == 0:
-            remark = f"#{full_ts} | {header_note}"
+    for i, cfg in enumerate(configs, 1):
+        if i == 1:
+            label = f"{tag} {i} | {full_ts} | {header_note}"
         else:
-            remark = f"#{tag} {i} | {date_only} | {tag}"
-        lines.append(f"{cfg}{remark}")
+            label = f"{tag} {i} | {date_only}"
+        lines.append(set_uri_remark(cfg, label))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = out_path.with_name(out_path.name + ".tmp")
@@ -437,15 +479,15 @@ def write_outputs(configs: list[str], out_path: Path, calendar: str,
 
 def write_best(results, out_path: Path, limit: int, calendar: str, tag: str) -> int:
     """
-    كتابة أفضل N كانفيغ في ملف منفصل، مع سرعة/تأخير كل عقدة في الـ remark.
+    كتابة أفضل N كانفيغ في ملف منفصل باسم موحّد (bahrain-vpn)، مع السرعة والتأخير.
     يُرجع عدد الأسطر المكتوبة.
     """
     _, date_only = stamp(calendar)
     lines = []
-    for i, r in enumerate(results[:limit]):
+    for i, r in enumerate(results[:limit], 1):
         speed = f"{r.speed_kbps:.0f}KB/s" if r.speed_kbps > 0 else "—"
-        remark = f"#{i + 1} | {r.latency_ms:.0f}ms | {speed} | {date_only} | {tag}"
-        lines.append(f"{r.cfg}{remark}")
+        label = f"{tag} {i} | {r.latency_ms:.0f}ms | {speed} | {date_only}"
+        lines.append(set_uri_remark(r.cfg, label))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = out_path.with_name(out_path.name + ".tmp")
@@ -550,7 +592,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="إبقاء كانفيغ واحد فقط لكل host:port (ملف أصغر وأنظف)")
     ap.add_argument("--calendar", choices=("jalali", "gregorian"), default="jalali")
     ap.add_argument("--header-note", default="تحديث كل نصف ساعة")
-    ap.add_argument("--tag", default="@vpn-bahrain", help="الوسم المستخدم في الـ remark")
+    ap.add_argument("--tag", default="bahrain-vpn", help="الاسم الموحّد الظاهر للمستخدم في الـ remark")
 
     # ── الفحص الحقيقي واختيار الأسرع ──
     ap.add_argument("--test", action="store_true",
