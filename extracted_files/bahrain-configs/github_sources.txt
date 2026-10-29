@@ -1,0 +1,17 @@
+# قائمة مصادر GitHub — سطر لكل مصدر:  «اسم  رابط»
+# كلها مُتحقَّق منها بتاريخ 2026-10-29. عطّل أي سطر بـ # أو احذفه.
+# الاستخدام:  python collector.py --sources-file github_sources.txt
+
+matin-super          https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/super-sub.txt
+au1rxx-verified      https://github.com/Au1rxx/free-vpn-subscriptions/raw/main/output/v2ray-base64.txt
+mahdibland-eternity  https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity
+ermaozi              https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/v2ray.txt
+solispirit-all       https://raw.githubusercontent.com/SoliSpirit/v2ray-configs/main/all_configs.txt
+alilapro             https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/sub.txt
+matin-all            https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/all_sub.txt
+matin-hysteria2      https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/hysteria2.txt
+barryfar-sub1        https://raw.githubusercontent.com/barry-far/V2ray-config/main/Sub1.txt
+leon406-vless        https://raw.githubusercontent.com/Leon406/SubCrawler/master/sub/share/vless
+leon406-hysteria2    https://raw.githubusercontent.com/Leon406/SubCrawler/master/sub/share/hysteria2
+leon406-mixed        https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/a11
+openproxylist        https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_RAW.txt
