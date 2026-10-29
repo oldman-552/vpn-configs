@@ -814,4 +814,12 @@ def test_source_candidate_governance_and_discovery():
     assert fresh_verdict["decision"] == "pending_validation"
 
 
+def test_tester_context_manager_cleans_tempdir():
+    with tester.Tester(xray_path="/usr/bin/true", singbox_path="/usr/bin/true", concurrency=2) as t:
+        tmp_dir = t._tmp
+        assert tmp_dir.is_dir()
+    assert not tmp_dir.exists()
+
+
+
 

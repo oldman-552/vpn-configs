@@ -33,6 +33,7 @@ sys.path.insert(0, str(ROOT))
 import collector  # noqa: E402
 import tester  # noqa: E402
 from dedupe import MultiLayerDeduplicator, canonical_protocol, parse_identity  # noqa: E402
+from pipeline_security import redact_text  # noqa: E402
 from scoring import (  # noqa: E402
     NodeHistoryStore,
     ScoredNode,
@@ -554,4 +555,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Exception as exc:
+        print(f"::error::Unhandled build_data error: {redact_text(repr(exc))}", file=sys.stderr)
+        raise

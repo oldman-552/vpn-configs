@@ -23,6 +23,7 @@ import os
 import platform
 import queue
 import re
+import shutil
 import socket
 import ssl
 import stat
