@@ -8,8 +8,11 @@
 package com.bahrain.vpnconfigs.engine
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.concurrent.TimeUnit
 
 data class TestResult(
@@ -34,26 +37,30 @@ class SingBox(private val ctx: Context) {
         File(ctx.applicationInfo.nativeLibraryDir, "libsingbox.so").absolutePath
     }
 
-    val isAvailable: Boolean by lazy { File(binaryPath).canExecute() }
+    val isAvailable: Boolean
+        get() = File(binaryPath).let { it.exists() && it.canExecute() }
 
     private val tmpDir: File by lazy {
         File(ctx.cacheDir, "sbx").apply { mkdirs() }
     }
 
-    /** بناء ملف إعداد كامل لكانفيغ واحد على منفذ socks محدّد. */
+    /** بناء ملف إعداد كامل لكانفيغ واحد على منفذ محلي محدّد. */
     private fun buildConfig(cfg: String, port: Int): String? {
         val out = Converters.toOutbound(cfg) ?: return null
         out.put("tag", "proxy")
         val conf = JSONObject()
             .put("log", JSONObject().put("level", "error").put("timestamp", false))
-            .put("inbounds", org.json.JSONArray().put(
-                JSONObject()
-                    .put("type", "mixed")
-                    .put("tag", "in")
-                    .put("listen", "127.0.0.1")
-                    .put("listen_port", port)
-            ))
-            .put("outbounds", org.json.JSONArray().put(out))
+            .put(
+                "inbounds",
+                JSONArray().put(
+                    JSONObject()
+                        .put("type", "mixed")
+                        .put("tag", "in")
+                        .put("listen", "127.0.0.1")
+                        .put("listen_port", port)
+                ),
+            )
+            .put("outbounds", JSONArray().put(out))
         return conf.toString()
     }
 
@@ -66,21 +73,33 @@ class SingBox(private val ctx: Context) {
         val json = buildConfig(cfg, port) ?: return TestResult(cfg, error = "unsupported")
 
         val confFile = File(tmpDir, "cfg-$port.json")
-        confFile.writeText(json)
+        confFile.writeText(json, Charsets.UTF_8)
 
+        val devNull = File("/dev/null")
         var proc: Process? = null
         return try {
-            proc = ProcessBuilder(binaryPath, "run", "-c", confFile.absolutePath)
-                .redirectErrorStream(true)
-                .start()
+            val pb = ProcessBuilder(binaryPath, "run", "-c", confFile.absolutePath)
+            if (devNull.exists()) {
+                pb.redirectOutput(devNull)
+                pb.redirectError(devNull)
+            } else {
+                pb.redirectErrorStream(true)
+            }
+            proc = pb.start()
 
             // انتظار فتح منفذ socks
             val deadline = System.currentTimeMillis() + 2500
             var up = false
             while (System.currentTimeMillis() < deadline) {
+                if (Thread.currentThread().isInterrupted) {
+                    return TestResult(cfg, error = "cancelled")
+                }
                 if (!proc.isAlive) return TestResult(cfg, error = "engine-exit")
                 try {
-                    java.net.Socket("127.0.0.1", port).use { up = true }
+                    Socket().use { s ->
+                        s.connect(InetSocketAddress("127.0.0.1", port), 60)
+                        up = true
+                    }
                     if (up) break
                 } catch (_: Exception) {
                     Thread.sleep(30)
@@ -94,7 +113,7 @@ class SingBox(private val ctx: Context) {
             }
 
             var speed = 0.0
-            if (measureSpeed) {
+            if (measureSpeed && !Thread.currentThread().isInterrupted) {
                 val t0 = System.nanoTime()
                 val sp = Socks.get(port, SPEED_URL, 8000, SPEED_BYTES)
                 val dt = maxOf((System.nanoTime() - t0) / 1e9, 0.001)
@@ -103,12 +122,22 @@ class SingBox(private val ctx: Context) {
                 }
             }
             TestResult(cfg, ok = true, latencyMs = probe.elapsedMs, speedKbps = speed)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            TestResult(cfg, error = "cancelled")
         } catch (e: Exception) {
             TestResult(cfg, error = e.javaClass.simpleName)
         } finally {
             proc?.let {
-                it.destroy()
-                if (!it.waitFor(2, TimeUnit.SECONDS)) it.destroyForcibly()
+                try {
+                    it.destroy()
+                    if (!it.waitFor(1500, TimeUnit.MILLISECONDS)) {
+                        it.destroyForcibly()
+                        it.waitFor(500, TimeUnit.MILLISECONDS)
+                    }
+                } catch (_: Exception) {
+                    runCatching { it.destroyForcibly() }
+                }
             }
             confFile.delete()
         }

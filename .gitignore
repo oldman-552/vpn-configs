@@ -5,10 +5,16 @@ android/.gradle/
 android/build/
 android/app/build/
 android/local.properties
-# مخرجات التشغيل
-dist/
+
+# بيئات التطوير والاختبار
+.venv/
+.pytest_cache/
 __pycache__/
 *.pyc
+
+# مخرجات التشغيل
+dist/
+out/
 config.txt
 best.txt
 test-report.csv

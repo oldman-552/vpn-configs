@@ -15,11 +15,14 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
     override suspend fun doWork(): Result {
         val prefs = Prefs(applicationContext)
         if (!prefs.autoRefresh) return Result.success()
-        val owner = prefs.owner.ifBlank { "OWNER" }
-        val repo = prefs.repo.ifBlank { "REPO" }
-        if (owner == "OWNER" || repo == "REPO") return Result.success()
 
-        val res = Repo(applicationContext, owner, repo).loadRemote()
-        return if (res.configs.isEmpty()) Result.retry() else Result.success()
+        val owner = prefs.owner.ifBlank { Repo.DEFAULT_OWNER }
+        val repoName = prefs.repo.ifBlank { Repo.DEFAULT_REPO }
+        val repo = Repo(applicationContext, owner, repoName)
+
+        val res = repo.loadRemote()
+        if (res.configs.isEmpty()) return Result.retry()
+        runCatching { repo.writeAll(res.configs) }
+        return Result.success()
     }
 }

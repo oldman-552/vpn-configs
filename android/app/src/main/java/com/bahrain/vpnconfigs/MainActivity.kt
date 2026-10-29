@@ -7,6 +7,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -33,17 +34,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.bahrain.vpnconfigs.data.Prefs
+import com.bahrain.vpnconfigs.ui.AppTheme
 import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.FilesScreen
 import com.bahrain.vpnconfigs.ui.HomeScreen
 import com.bahrain.vpnconfigs.ui.ResultsScreen
 import com.bahrain.vpnconfigs.ui.SettingsScreen
-import com.bahrain.vpnconfigs.ui.AppTheme
 import com.bahrain.vpnconfigs.work.RefreshWorker
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
@@ -51,7 +55,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        scheduleRefresh()
+        scheduleRefreshIfEnabled()
 
         setContent {
             AppTheme {
@@ -62,10 +66,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun scheduleRefresh() {
-        val req = PeriodicWorkRequestBuilder<RefreshWorker>(1, TimeUnit.HOURS).build()
-        WorkManager.getInstance(this)
-            .enqueueUniquePeriodicWork("refresh", ExistingPeriodicWorkPolicy.KEEP, req)
+    private fun scheduleRefreshIfEnabled() {
+        val wm = WorkManager.getInstance(this)
+        if (Prefs(this).autoRefresh) {
+            val req = PeriodicWorkRequestBuilder<RefreshWorker>(1, TimeUnit.HOURS).build()
+            wm.enqueueUniquePeriodicWork("refresh", ExistingPeriodicWorkPolicy.KEEP, req)
+        } else {
+            wm.cancelUniqueWork("refresh")
+        }
     }
 }
 
@@ -107,28 +115,66 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
     ) { pad ->
         val m = Modifier.padding(pad)
         when (tab) {
-            0 -> HomeScreen(state, vm, m)
-            1 -> ResultsScreen(state, m, onCopy = { cfg -> copyToClipboard(ctx, cfg) })
-            2 -> FilesScreen(state, m, onShare = { file -> shareFile(ctx, file) })
-            else -> SettingsScreen(vm, m)
+            0 -> HomeScreen(
+                state = state,
+                vm = vm,
+                modifier = m,
+                onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
+                onOpenUri = { uri -> openExternalUri(ctx, uri) },
+            )
+            1 -> ResultsScreen(
+                state = state,
+                modifier = m,
+                onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
+                onOpenUri = { uri -> openExternalUri(ctx, uri) },
+            )
+            2 -> FilesScreen(
+                state = state,
+                modifier = m,
+                onCopyFile = { file -> copyFileContent(ctx, file) },
+                onShare = { file -> shareFile(ctx, file) },
+            )
+            else -> SettingsScreen(vm, state, m)
         }
     }
 }
 
-private fun copyToClipboard(ctx: Context, text: String) {
+private fun copyToClipboard(ctx: Context, text: String, toastMsg: String = "تم النسخ للحافظة") {
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("config", text))
-    Toast.makeText(ctx, "نُسخ الكانفيغ", Toast.LENGTH_SHORT).show()
+    Toast.makeText(ctx, toastMsg, Toast.LENGTH_SHORT).show()
 }
 
-private fun shareFile(ctx: Context, file: java.io.File) {
-    val uri = androidx.core.content.FileProvider.getUriForFile(
-        ctx, "${ctx.packageName}.files", file,
-    )
-    val i = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+private fun copyFileContent(ctx: Context, file: File) {
+    runCatching {
+        val content = file.readText(Charsets.UTF_8)
+        copyToClipboard(ctx, content, "نُسخ محتوى ${file.name} للحافظة")
+    }.onFailure {
+        Toast.makeText(ctx, "تعذّرت قراءة الملف", Toast.LENGTH_SHORT).show()
     }
-    ctx.startActivity(Intent.createChooser(i, "مشاركة الملف"))
+}
+
+private fun openExternalUri(ctx: Context, rawUri: String) {
+    try {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(rawUri)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
+    } catch (_: Exception) {
+        copyToClipboard(ctx, rawUri, "لا يوجد تطبيق متوافق مثبت؛ تم نسخ الرابط للحافظة")
+    }
+}
+
+private fun shareFile(ctx: Context, file: File) {
+    runCatching {
+        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
+        val i = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        ctx.startActivity(Intent.createChooser(i, "مشاركة ${file.name}"))
+    }.onFailure {
+        Toast.makeText(ctx, "تعذّرت مشاركة الملف", Toast.LENGTH_SHORT).show()
+    }
 }
