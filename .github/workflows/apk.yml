@@ -9,7 +9,6 @@ on:
       - ".github/workflows/apk.yml"
   push:
     branches: [main]
-    tags: ["v*"]
     paths:
       - "android/**"
       - ".github/workflows/apk.yml"
@@ -176,14 +175,35 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          if [ "$TAG" = "main" ]; then
-            TAG="latest-apk"
-          fi
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" out/*.apk out/SHA256SUMS.txt --clobber
+          VER_NAME=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)
+          VER_TAG="v${VER_NAME:-2.3}"
+          NOTES="تطبيق **bahrain-vpn ${VER_TAG}** المتكامل للأندرويد — يتّصل مباشرة بضغطة زر مع قائمة سيرفرات محدّثة تلقائيًا، ونظام ترتيب خماسي موزون (الأسرع في التنزيل، الأقل تأخيرًا، الأكثر استقرارًا، الأفضل إجمالًا، الأحدث اختبارًا). لمعظم الهواتف الحديثة ثبّت النسخة الخفيفة \`app-arm64-v8a-release.apk\` أو النسخة الشاملة \`app-release.apk\`."
+
+          publish_release() {
+            local tag="$1"
+            local title="$2"
+            local latest_flag="$3"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" -f sha="${GITHUB_SHA}" -F force=true >/dev/null 2>&1 || true
+              gh release upload "$tag" out/*.apk out/SHA256SUMS.txt --clobber
+              gh release edit "$tag" --title "$title" --notes "$NOTES" "$latest_flag"
+            else
+              gh release create "$tag" out/*.apk out/SHA256SUMS.txt \
+                --target "${GITHUB_SHA}" \
+                --title "$title" \
+                --notes "$NOTES" \
+                "$latest_flag"
+            fi
+          }
+
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            if gh release view "latest-apk" >/dev/null 2>&1; then
+              gh release delete-asset "latest-apk" "app-debug.apk" --yes >/dev/null 2>&1 || true
+            fi
+            publish_release "latest-apk" "bahrain-vpn ${VER_TAG} (latest-apk)" "--latest=false"
+            publish_release "${VER_TAG}" "bahrain-vpn ${VER_TAG}" "--latest"
+            echo "::notice::Published tags: ${VER_TAG} (Latest) and latest-apk -> ${GITHUB_SHA}"
           else
-            gh release create "$TAG" out/*.apk out/SHA256SUMS.txt \
-              --title "bahrain-vpn APK ($TAG)" \
-              --notes "تطبيق **bahrain-vpn v2.3** المتكامل للأندرويد — يتّصل مباشرة بضغطة زر مع قائمة سيرفرات محدّثة تلقائيًا، ونظام ترتيب خماسي موزون (الأسرع في التنزيل، الأقل تأخيرًا، الأكثر استقرارًا، الأفضل إجمالًا، الأحدث اختبارًا). لمعظم الهواتف الحديثة ثبّت النسخة الخفيفة \`app-arm64-v8a-release.apk\` أو النسخة الشاملة \`app-release.apk\`."
+            publish_release "${GITHUB_REF_NAME}" "bahrain-vpn ${GITHUB_REF_NAME}" "--latest"
+            echo "::notice::Published tag: ${GITHUB_REF_NAME} -> ${GITHUB_SHA}"
           fi
