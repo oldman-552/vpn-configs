@@ -34,9 +34,9 @@ class SingBox(private val ctx: Context) {
 
     companion object {
         const val TEST_URL = "https://www.gstatic.com/generate_204"
-        const val SPEED_URL = "https://speed.cloudflare.com/__down?bytes=1000000"
+        const val SPEED_URL = "https://speed.cloudflare.com/__down?bytes=600000"
         const val VPN_SOCKS_PORT = 20808
-        private const val SPEED_BYTES = 1_000_000L
+        private const val SPEED_BYTES = 600_000L
     }
 
     /** مسار النواة داخل مجلد المكتبات الأصلية (قابل للتنفيذ). */
@@ -228,18 +228,17 @@ class SingBox(private val ctx: Context) {
             }
             if (!up) return TestResult(cfg, error = "no-listen")
 
-            val probe = Socks.get(port, TEST_URL, timeoutSec * 1000, 4096)
+            val probe = Socks.measureRealDelay(port, TEST_URL, timeoutSec * 1000)
             if (probe.status !in listOf(200, 204)) {
                 return TestResult(cfg, error = "http-${probe.status}")
             }
 
             var speed = 0.0
             if (measureSpeed && !Thread.currentThread().isInterrupted) {
-                val t0 = System.nanoTime()
                 val sp = Socks.get(port, SPEED_URL, 8000, SPEED_BYTES)
-                val dt = maxOf((System.nanoTime() - t0) / 1e9, 0.001)
-                if (sp.status in listOf(200, 206) && sp.bytes > 0) {
-                    speed = (sp.bytes / 1024.0) / dt
+                val dtSec = maxOf(sp.transferMs / 1000.0, 0.005)
+                if (sp.status in listOf(200, 206) && sp.bytes >= 8192L) {
+                    speed = (sp.bytes / 1024.0) / dtSec
                 }
             }
             TestResult(cfg, ok = true, latencyMs = probe.elapsedMs, speedKbps = speed)
@@ -248,6 +247,59 @@ class SingBox(private val ctx: Context) {
             TestResult(cfg, error = "cancelled")
         } catch (e: Exception) {
             TestResult(cfg, error = e.javaClass.simpleName)
+        } finally {
+            stopProcess(proc, confFile)
+        }
+    }
+
+    /** قياس سرعة التنزيل مباشرةً لعقدة تم التحقّق من عملها للتوّ دون تكرار نبضة البينغ. */
+    fun measureSpeedOnly(
+        cfg: String,
+        port: Int,
+        timeoutSec: Int = 6,
+        dnsServer: String = "1.1.1.1",
+        useDoh: Boolean = false,
+    ): Double {
+        if (!isAvailable) return 0.0
+        val json = buildConfig(cfg, port, dnsServer, useDoh) ?: return 0.0
+        val confFile = File(tmpDir, "cfg-spd-$port.json")
+        confFile.writeText(json, Charsets.UTF_8)
+
+        val devNull = File("/dev/null")
+        var proc: Process? = null
+        return try {
+            val pb = ProcessBuilder(binaryPath, "run", "-c", confFile.absolutePath)
+            if (devNull.exists()) {
+                pb.redirectOutput(devNull)
+                pb.redirectError(devNull)
+            } else {
+                pb.redirectErrorStream(true)
+            }
+            proc = pb.start()
+
+            val deadline = System.currentTimeMillis() + 2500
+            var up = false
+            while (System.currentTimeMillis() < deadline) {
+                if (Thread.currentThread().isInterrupted || !proc.isAlive) return 0.0
+                try {
+                    Socket().use { s ->
+                        s.connect(InetSocketAddress("127.0.0.1", port), 60)
+                        up = true
+                    }
+                    if (up) break
+                } catch (_: Exception) {
+                    Thread.sleep(25)
+                }
+            }
+            if (!up) return 0.0
+
+            val sp = Socks.get(port, SPEED_URL, maxOf(timeoutSec * 1000, 7500), SPEED_BYTES)
+            val dtSec = maxOf(sp.transferMs / 1000.0, 0.005)
+            if (sp.status in listOf(200, 206) && sp.bytes >= 8192L) {
+                (sp.bytes / 1024.0) / dtSec
+            } else 0.0
+        } catch (_: Exception) {
+            0.0
         } finally {
             stopProcess(proc, confFile)
         }

@@ -1,6 +1,7 @@
 // =====================================================================
-// Socks.kt — طلب HTTP عبر socks5h محلي (بدون مكتبات خارجية).
-// يستخدمه المُختبِر لطلب generate_204 عبر النفق وقياس الزمن/السرعة.
+// Socks.kt — طلب HTTP عبر socks5h محلي + قياس Real Delay (Current) الدقيق.
+// يفصل زمن تأسيس الجلسة الأولى (DNS + TCP + TLS) عن زمن الاستجابة الفعلي
+// للنفق المفتوح (Real Delay) تمامًا كما في v2rayNG / Clash Unified Delay.
 // =====================================================================
 package com.bahrain.vpnconfigs.engine
 
@@ -18,36 +19,24 @@ data class HttpProbe(
     val elapsedMs: Long,
     val bytes: Long,
     val bodyText: String = "",
+    val transferMs: Long = elapsedMs,
 )
 
 object Socks {
 
-    /**
-     * GET عبر socks5h (تحليل الاسم عند البروكسي) على 127.0.0.1:[proxyPort].
-     * يغلق المقابس في جميع الحالات ولا يعلّق بانتظار جسم لردود 204/304 أو Content-Length: 0.
-     */
-    fun get(
+    private fun openTunnelSocket(
         proxyPort: Int,
-        url: String,
+        host: String,
+        port: Int,
+        isHttps: Boolean,
         timeoutMs: Int,
-        maxBytes: Long = 0,
-        captureText: Boolean = false,
-    ): HttpProbe {
-        val uri = java.net.URI(url)
-        val host = uri.host ?: throw IllegalArgumentException("Invalid URL host: $url")
-        val isHttps = uri.scheme.equals("https", true)
-        val port = if (uri.port > 0) uri.port else if (isHttps) 443 else 80
-        val path = (uri.rawPath.ifBlank { "/" }) + (uri.rawQuery?.let { "?$it" } ?: "")
-
-        val started = System.nanoTime()
+    ): Pair<Socket, Socket> {
         val raw = Socket()
-        var sslSock: Socket? = null
-
         try {
+            raw.tcpNoDelay = true
             raw.soTimeout = timeoutMs
             raw.connect(InetSocketAddress("127.0.0.1", proxyPort), timeoutMs)
 
-            // ── مصافحة socks5 مباشرة على التدفق الخام دون تخزين مؤقت يبتلع بيانات TLS ──
             val rawOut = raw.getOutputStream()
             val rawIn = raw.getInputStream()
 
@@ -85,45 +74,150 @@ object Socks {
             val activeSock: Socket = if (isHttps) {
                 val f = SSLSocketFactory.getDefault() as SSLSocketFactory
                 (f.createSocket(raw, host, port, true) as SSLSocket).apply {
+                    tcpNoDelay = true
                     soTimeout = timeoutMs
                     sslParameters = sslParameters.apply {
                         endpointIdentificationAlgorithm = "HTTPS"
                     }
                     startHandshake()
-                }.also { sslSock = it }
+                }
             } else {
                 raw
             }
+            return raw to activeSock
+        } catch (e: Exception) {
+            runCatching { raw.close() }
+            throw e
+        }
+    }
+
+    /**
+     * قياس Real Delay (Current) الحقيقي مثل v2rayNG / Hiddify:
+     * 1) يؤسس النفق ومصافحة TLS كاملةً أولًا (للتأكد أن السيرفر شغّال فعليًا ويمرر HTTPS).
+     * 2) يقيس زمن ذهاب وعودة طلب HTTP generate_204 الصافي عبر النفق الدافئ (Keep-Alive)
+     *    بحيث لا يتضخّم الرقم بزمن DNS ومصافحات التأسيس الباردة.
+     */
+    fun measureRealDelay(
+        proxyPort: Int,
+        url: String = SingBox.TEST_URL,
+        timeoutMs: Int = 5000,
+    ): HttpProbe {
+        val uri = java.net.URI(url)
+        val host = uri.host ?: throw IllegalArgumentException("Invalid URL host: $url")
+        val isHttps = uri.scheme.equals("https", true)
+        val port = if (uri.port > 0) uri.port else if (isHttps) 443 else 80
+        val path = (uri.rawPath.ifBlank { "/" }) + (uri.rawQuery?.let { "?$it" } ?: "")
+
+        var raw: Socket? = null
+        var activeSock: Socket? = null
+        try {
+            val pair = openTunnelSocket(proxyPort, host, port, isHttps, timeoutMs)
+            raw = pair.first
+            activeSock = pair.second
+
+            val out = activeSock.getOutputStream()
+            val input = BufferedInputStream(activeSock.getInputStream())
+
+            // النبضة 1: بعد انتهاء مصافحة TLS، نقيس أول رحلة HTTP فعلية ونبقي الجلسة دافئة
+            val req1 = buildString {
+                append("GET ").append(path).append(" HTTP/1.1\r\n")
+                append("Host: ").append(host).append("\r\n")
+                append("User-Agent: bahrain-vpn/2.2\r\n")
+                append("Accept: */*\r\n")
+                append("Connection: keep-alive\r\n\r\n")
+            }.toByteArray(Charsets.US_ASCII)
+
+            val t1 = System.nanoTime()
+            out.write(req1)
+            out.flush()
+
+            val (status1, contentLen1, connClose1) = readResponseHeaders(input)
+            if (status1 !in listOf(200, 204)) {
+                return HttpProbe(status1, 0L, 0L)
+            }
+            if (status1 != 204 && contentLen1 != null && contentLen1 > 0L) {
+                skipFully(input, minOf(contentLen1, 4096L).toInt())
+            }
+            val rtt1 = ((System.nanoTime() - t1) / 1_000_000L).coerceAtLeast(1L)
+
+            // النبضة 2 (Keep-Alive Warm Delay): قياس RTT النفق الصافي بدون أي عبء تأسيس
+            var bestRtt = rtt1
+            if (!connClose1 && (status1 == 204 || contentLen1 != null)) {
+                runCatching {
+                    activeSock.soTimeout = minOf(timeoutMs, 2500)
+                    val req2 = buildString {
+                        append("GET ").append(path).append(" HTTP/1.1\r\n")
+                        append("Host: ").append(host).append("\r\n")
+                        append("User-Agent: bahrain-vpn/2.2\r\n")
+                        append("Accept: */*\r\n")
+                        append("Connection: close\r\n\r\n")
+                    }.toByteArray(Charsets.US_ASCII)
+                    val t2 = System.nanoTime()
+                    out.write(req2)
+                    out.flush()
+                    val (status2, _, _) = readResponseHeaders(input)
+                    if (status2 in listOf(200, 204)) {
+                        val rtt2 = ((System.nanoTime() - t2) / 1_000_000L).coerceAtLeast(1L)
+                        bestRtt = minOf(rtt1, rtt2)
+                    }
+                }
+            }
+
+            return HttpProbe(status = status1, elapsedMs = bestRtt, bytes = 0L, transferMs = bestRtt)
+        } finally {
+            runCatching { if (activeSock !== raw) activeSock?.close() }
+            runCatching { raw?.close() }
+        }
+    }
+
+    /**
+     * GET عبر socks5h على 127.0.0.1:[proxyPort] لتحميل البيانات (قياس السرعة أو trace).
+     * يحسب transferMs بدقة من لحظة إرسال طلب HTTP بعد اكتمال مصافحة TLS.
+     */
+    fun get(
+        proxyPort: Int,
+        url: String,
+        timeoutMs: Int,
+        maxBytes: Long = 0,
+        captureText: Boolean = false,
+    ): HttpProbe {
+        val uri = java.net.URI(url)
+        val host = uri.host ?: throw IllegalArgumentException("Invalid URL host: $url")
+        val isHttps = uri.scheme.equals("https", true)
+        val port = if (uri.port > 0) uri.port else if (isHttps) 443 else 80
+        val path = (uri.rawPath.ifBlank { "/" }) + (uri.rawQuery?.let { "?$it" } ?: "")
+
+        val started = System.nanoTime()
+        var raw: Socket? = null
+        var activeSock: Socket? = null
+
+        try {
+            val pair = openTunnelSocket(proxyPort, host, port, isHttps, timeoutMs)
+            raw = pair.first
+            activeSock = pair.second
 
             val request = buildString {
                 append("GET ").append(path).append(" HTTP/1.1\r\n")
                 append("Host: ").append(host).append("\r\n")
-                append("User-Agent: BahrainConfigs/1.1\r\n")
+                append("User-Agent: bahrain-vpn/2.2\r\n")
                 append("Accept: */*\r\n")
                 append("Connection: close\r\n\r\n")
             }
+
+            val transferStarted = System.nanoTime()
             activeSock.getOutputStream().apply {
                 write(request.toByteArray(Charsets.US_ASCII))
                 flush()
             }
 
             val input = BufferedInputStream(activeSock.getInputStream())
-            val statusLine = readLine(input)
-            val status = statusLine.split(" ").getOrNull(1)?.toIntOrNull() ?: 0
-
-            var contentLength: Long? = null
-            while (true) {
-                val line = readLine(input)
-                if (line.isEmpty()) break
-                if (line.startsWith("Content-Length:", true)) {
-                    contentLength = line.substringAfter(":").trim().toLongOrNull()
-                }
-            }
+            val (status, contentLength, _) = readResponseHeaders(input)
 
             val noBody = status == 204 || status == 304 || status in 100..199 || contentLength == 0L
             if (noBody) {
-                val elapsed = (System.nanoTime() - started) / 1_000_000
-                return HttpProbe(status, elapsed, 0L)
+                val transferElapsed = ((System.nanoTime() - transferStarted) / 1_000_000L).coerceAtLeast(1L)
+                val totalElapsed = ((System.nanoTime() - started) / 1_000_000L).coerceAtLeast(1L)
+                return HttpProbe(status, totalElapsed, 0L, transferMs = transferElapsed)
             }
 
             val limit = when {
@@ -133,6 +227,7 @@ object Socks {
                 else -> 64L * 1024L
             }
 
+            val firstByteStarted = System.nanoTime()
             val buf = ByteArray(16 * 1024)
             val captured = if (captureText) ByteArrayOutputStream() else null
             var read = 0L
@@ -145,13 +240,32 @@ object Socks {
                 read += n
             }
 
-            val elapsed = (System.nanoTime() - started) / 1_000_000
+            val totalElapsed = ((System.nanoTime() - started) / 1_000_000L).coerceAtLeast(1L)
+            val bodyTransferMs = ((System.nanoTime() - firstByteStarted) / 1_000_000L)
+                .let { if (it >= 15L) it else ((System.nanoTime() - transferStarted) / 1_000_000L).coerceAtLeast(1L) }
             val text = captured?.toString(Charsets.UTF_8.name()) ?: ""
-            return HttpProbe(status, elapsed, read, text)
+            return HttpProbe(status, totalElapsed, read, text, transferMs = bodyTransferMs)
         } finally {
-            try { sslSock?.close() } catch (_: Exception) { }
-            try { raw.close() } catch (_: Exception) { }
+            runCatching { if (activeSock !== raw) activeSock?.close() }
+            runCatching { raw?.close() }
         }
+    }
+
+    private fun readResponseHeaders(input: BufferedInputStream): Triple<Int, Long?, Boolean> {
+        val statusLine = readLine(input)
+        val status = statusLine.split(" ").getOrNull(1)?.toIntOrNull() ?: 0
+        var contentLength: Long? = null
+        var connClose = false
+        while (true) {
+            val line = readLine(input)
+            if (line.isEmpty()) break
+            if (line.startsWith("Content-Length:", true)) {
+                contentLength = line.substringAfter(":").trim().toLongOrNull()
+            } else if (line.startsWith("Connection:", true)) {
+                connClose = line.substringAfter(":").contains("close", ignoreCase = true)
+            }
+        }
+        return Triple(status, contentLength, connClose)
     }
 
     private fun readFully(input: InputStream, dst: ByteArray) {

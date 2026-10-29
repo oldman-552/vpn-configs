@@ -309,7 +309,7 @@ class BahrainVpnService : VpnService() {
 
         val initialPing = if (newDaemon != null) {
             val probe = runCatching {
-                Socks.get(SingBox.VPN_SOCKS_PORT, SingBox.TEST_URL, 3800, 512)
+                Socks.measureRealDelay(SingBox.VPN_SOCKS_PORT, SingBox.TEST_URL, 4200)
             }.getOrNull()
             if (probe != null && probe.status in listOf(200, 204)) probe.elapsedMs else -1L
         } else {
@@ -609,7 +609,7 @@ class BahrainVpnService : VpnService() {
                 val aliveProc = daemon?.process?.isAlive == true
                 val probe = if (aliveProc) {
                     runCatching {
-                        Socks.get(SingBox.VPN_SOCKS_PORT, SingBox.TEST_URL, 5000, 512)
+                        Socks.measureRealDelay(SingBox.VPN_SOCKS_PORT, SingBox.TEST_URL, 5000)
                     }.getOrNull()
                 } else null
 
@@ -702,8 +702,18 @@ class BahrainVpnService : VpnService() {
         if (current.isNotEmpty()) return current
 
         val repo = Repo(applicationContext, prefs.owner, prefs.repo)
-        val savedBest = repo.loadSavedBest().map { it.cfg }
-        val cachedAll = repo.loadCached(prefs.feedProfile)?.configs ?: emptyList()
+        val savedBest = repo.loadSavedBest().sortedWith(
+            compareBy<com.bahrain.vpnconfigs.engine.TestResult> { if (it.latencyMs > 0L) it.latencyMs else Long.MAX_VALUE }
+                .thenByDescending { it.speedKbps }
+        ).map { it.cfg }
+        val cached = repo.loadCached(prefs.feedProfile)
+        val hints = cached?.serverHints ?: emptyMap()
+        val cachedAll = (cached?.configs ?: emptyList()).sortedWith(
+            compareBy<String> {
+                val lat = hints[ConvergedKey(it)]?.latencyMs ?: hints[it]?.latencyMs ?: 0L
+                if (lat > 0L) lat else Long.MAX_VALUE
+            }.thenByDescending { hints[ConvergedKey(it)]?.score ?: hints[it]?.score ?: 0.0 }
+        )
         val merged = (prefs.customConfigs + savedBest + cachedAll)
             .distinct()
             .filter { Converters.isSupported(it) }
@@ -713,6 +723,8 @@ class BahrainVpnService : VpnService() {
         VpnStateManager.serverPool = built
         return built
     }
+
+    private fun ConvergedKey(uri: String): String = Converters.cleanUri(uri)
 
     private fun teardownInternal(errorMsg: String?, infoMsg: String?) {
         monitorJob?.cancel()

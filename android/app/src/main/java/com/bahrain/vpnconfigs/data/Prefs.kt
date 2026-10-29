@@ -55,8 +55,12 @@ class Prefs(ctx: Context) {
         set(v) = sp.edit { putInt("timeout", v.coerceIn(2, 30)) }
 
     var rankBySpeed: Boolean
-        get() = sp.getBoolean("rank_speed", true)
+        get() = sp.getBoolean("rank_speed", false)
         set(v) = sp.edit { putBoolean("rank_speed", v) }
+
+    var sortMode: String
+        get() = (sp.getString("sort_mode", "REAL_DELAY") ?: "REAL_DELAY").ifBlank { "REAL_DELAY" }
+        set(v) = sp.edit { putString("sort_mode", v.trim().ifBlank { "REAL_DELAY" }) }
 
     var autoRefresh: Boolean
         get() = sp.getBoolean("auto_refresh", true)

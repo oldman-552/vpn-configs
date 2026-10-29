@@ -791,8 +791,8 @@ def http_via_socks(port: int, url: str, timeout: float, max_bytes: int = 0) -> t
     dst_port = u.port or (443 if use_tls else 80)
     path = (u.path or "/") + (f"?{u.query}" if u.query else "")
 
-    t0 = time.perf_counter()
-    deadline = t0 + max(timeout, 1.0)
+    t_start = time.perf_counter()
+    deadline = t_start + max(timeout, 1.0)
     conn = None
     try:
         conn = _open_socks_stream(port, host, dst_port, use_tls, timeout)
@@ -802,6 +802,7 @@ def http_via_socks(port: int, url: str, timeout: float, max_bytes: int = 0) -> t
             f"User-Agent: Mozilla/5.0\r\n"
             f"Connection: close\r\n\r\n"
         )
+        t_req = time.perf_counter()
         conn.sendall(req.encode("ascii"))
 
         buf = bytearray()
@@ -821,7 +822,7 @@ def http_via_socks(port: int, url: str, timeout: float, max_bytes: int = 0) -> t
         status = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 0
 
         if status in (204, 304) or b"content-length: 0" in head.lower():
-            return status, (time.perf_counter() - t0) * 1000.0, 0
+            return status, max(0.5, (time.perf_counter() - t_req) * 1000.0), 0
 
         cap = min(max_bytes, MAX_SPEED_BYTES) if max_bytes > 0 else MAX_SPEED_BYTES
         body_len = len(rest)
@@ -835,7 +836,7 @@ def http_via_socks(port: int, url: str, timeout: float, max_bytes: int = 0) -> t
                 break
             body_len += len(chunk)
 
-        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        elapsed_ms = max(0.5, (time.perf_counter() - t_req) * 1000.0)
         return status, elapsed_ms, body_len
     finally:
         if conn is not None:
@@ -859,7 +860,6 @@ def trace_via_socks(port: int, timeout: float = 4.0) -> tuple[bool, float, str, 
     dst_port = u.port or (443 if use_tls else 80)
     path = u.path or "/cdn-cgi/trace"
 
-    t0 = time.perf_counter()
     conn = None
     try:
         conn = _open_socks_stream(port, host, dst_port, use_tls, timeout)
@@ -869,6 +869,7 @@ def trace_via_socks(port: int, timeout: float = 4.0) -> tuple[bool, float, str, 
             f"User-Agent: curl/8.5.0\r\n"
             f"Connection: close\r\n\r\n"
         )
+        t_req = time.perf_counter()
         conn.sendall(req.encode("ascii"))
         buf = bytearray()
         while len(buf) < 4096:
@@ -876,7 +877,7 @@ def trace_via_socks(port: int, timeout: float = 4.0) -> tuple[bool, float, str, 
             if not chunk:
                 break
             buf.extend(chunk)
-        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        elapsed_ms = max(0.5, (time.perf_counter() - t_req) * 1000.0)
         head, _, body = bytes(buf).partition(b"\r\n\r\n")
         status_line = head.split(b"\r\n", 1)[0].decode("latin1", "ignore")
         parts = status_line.split()

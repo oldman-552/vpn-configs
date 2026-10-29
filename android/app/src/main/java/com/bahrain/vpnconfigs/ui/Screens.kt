@@ -708,12 +708,12 @@ fun ServersListScreen(
                 Button(
                     onClick = { vm.startQuickPingTest() },
                     enabled = state.servers.isNotEmpty() && state.engineReady,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.15f),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                 ) {
                     Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("فحص سريع")
+                    Text("Real Delay")
                 }
                 OutlinedButton(
                     onClick = { vm.startTest() },
@@ -768,6 +768,33 @@ fun ServersListScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+
+        // ── شريط طريقة الترتيب (Real Delay Current افتراضيًا للأسرع) ──
+        val sortOptions = listOf(
+            "REAL_DELAY" to "⚡ Real Delay (الأسرع)",
+            "SPEED" to "🚀 الأعلى سرعة",
+            "STABILITY" to "🛡️ الأكثر استقرارًا",
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "الترتيب:",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.secondary,
+            )
+            sortOptions.forEach { (modeKey, modeTitle) ->
+                FilterChip(
+                    selected = state.sortMode == modeKey,
+                    onClick = { vm.setSortMode(modeKey) },
+                    label = { Text(modeTitle) },
+                )
+            }
+        }
 
         // ── شرائح الفلترة (البروتوكولات + المفضلة + المستقرة) ──
         val chips = listOf(
@@ -950,8 +977,12 @@ private fun ServerCard(
                     }
                 }
 
-                if (item.latencyMs > 0) {
-                    LatencyBadge(item.latencyMs)
+                if (item.localFailed || item.latencyMs > 0L) {
+                    LatencyBadge(
+                        ms = item.latencyMs,
+                        locallyTested = item.locallyTested,
+                        localFailed = item.localFailed,
+                    )
                 }
             }
 
@@ -1537,18 +1568,29 @@ private fun ProtoChip(proto: String) {
 }
 
 @Composable
-private fun LatencyBadge(ms: Long) {
+private fun LatencyBadge(
+    ms: Long,
+    locallyTested: Boolean = false,
+    localFailed: Boolean = false,
+) {
+    val isDead = localFailed || ms < 0L
     val color = when {
-        ms <= 160L -> VpnConnectedGreen
-        ms <= 350L -> VpnConnectingAmber
+        isDead -> VpnDangerRed
+        ms <= 250L -> VpnConnectedGreen
+        ms <= 500L -> VpnConnectingAmber
         else -> VpnDangerRed
+    }
+    val label = when {
+        isDead -> "غير مستجيب"
+        locallyTested -> "⚡ $ms ms"
+        else -> "$ms ms"
     }
     Surface(
         color = color.copy(alpha = 0.14f),
         shape = RoundedCornerShape(8.dp),
     ) {
         Text(
-            text = "$ms ms",
+            text = label,
             color = color,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
