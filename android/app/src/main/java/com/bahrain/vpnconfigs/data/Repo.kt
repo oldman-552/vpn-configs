@@ -1,6 +1,6 @@
 // =====================================================================
-// Repo.kt — تنزيل القائمة الحيّة من GitHub (عبر jsDelivr مع بدائل)
-// وتخزينها محليًا، وتصدير الكانفيغات باسم موحّد (bahrain-vpn).
+// Repo.kt — تنزيل القائمة الحيّة الغنية بالمؤشرات (alive.json + القوائم المتخصّصة)
+// مع التخزين المؤقت التدريجي (ETag / 304) والحماية من المدخلات المشوّهة أو الضخمة.
 // =====================================================================
 package com.bahrain.vpnconfigs.data
 
@@ -8,6 +8,7 @@ import android.content.Context
 import android.util.Base64
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.TestResult
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -20,6 +21,18 @@ data class RemoteMeta(
     val channelsOk: Int = 0,
     val channelsTotal: Int = 0,
     val byProtocol: Map<String, Int> = emptyMap(),
+    val byCountry: Map<String, Int> = emptyMap(),
+    val degradedMode: Boolean = false,
+)
+
+data class ServerHint(
+    val latencyMs: Long = 0L,
+    val jitterMs: Double = 0.0,
+    val speedKbps: Double = 0.0,
+    val score: Double = 0.0,
+    val country: String = "",
+    val stabilityRuns: Int = 0,
+    val verifiedAt: String = "",
 )
 
 data class ResultLine(
@@ -34,6 +47,7 @@ data class LoadResult(
     val meta: RemoteMeta,
     val source: String,
     val error: String? = null,
+    val serverHints: Map<String, ServerHint> = emptyMap(),
 )
 
 class Repo(private val ctx: Context, private val owner: String, private val repo: String) {
@@ -43,28 +57,62 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
     val subscriptionUrl: String
         get() = "https://cdn.jsdelivr.net/gh/$owner/$repo@data/sub.txt"
 
+    val reliableSubUrl: String
+        get() = "https://cdn.jsdelivr.net/gh/$owner/$repo@data/reliable_sub.txt"
+
+    val lowLatencyUrl: String
+        get() = "https://cdn.jsdelivr.net/gh/$owner/$repo@data/low_latency.txt"
+
+    val highThroughputUrl: String
+        get() = "https://cdn.jsdelivr.net/gh/$owner/$repo@data/high_throughput.txt"
+
     val best100Url: String
         get() = "https://cdn.jsdelivr.net/gh/$owner/$repo@data/best100.txt"
 
-    /** كل الروابط المرشّحة بالترتيب: jsDelivr ثم raw ثم GitHub Pages. */
     private fun candidates(file: String): List<String> = listOf(
         "https://cdn.jsdelivr.net/gh/$owner/$repo@data/$file",
         "https://raw.githubusercontent.com/$owner/$repo/data/$file",
         "https://$owner.github.io/$repo/$file",
     )
 
-    private fun httpGet(url: String, timeoutMs: Int = 20000): String? {
+    private data class HttpResp(
+        val status: Int,
+        val body: String? = null,
+        val etag: String? = null,
+    )
+
+    /** قراءة HTTP محدودة الحجم مع دعم If-None-Match لتوفير استهلاك البيانات والزمن. */
+    private fun httpGetBounded(url: String, etag: String?, timeoutMs: Int = 20000): HttpResp? {
         var conn: HttpURLConnection? = null
         return try {
             conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = timeoutMs
                 readTimeout = timeoutMs
                 requestMethod = "GET"
-                setRequestProperty("User-Agent", "bahrain-vpn/2.0")
+                setRequestProperty("User-Agent", "bahrain-vpn/2.1")
+                if (!etag.isNullOrBlank()) {
+                    setRequestProperty("If-None-Match", etag)
+                }
                 instanceFollowRedirects = true
             }
-            if (conn.responseCode !in 200..299) return null
-            conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val code = conn.responseCode
+            if (code == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                return HttpResp(status = 304, etag = conn.getHeaderField("ETag") ?: etag)
+            }
+            if (code !in 200..299) return null
+            val contentLength = conn.contentLengthLong
+            if (contentLength > MAX_BODY_BYTES) return null
+
+            val sb = StringBuilder()
+            conn.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                val buf = CharArray(8192)
+                var read: Int
+                while (reader.read(buf).also { read = it } != -1) {
+                    if (sb.length + read > MAX_BODY_CHARS) break
+                    sb.append(buf, 0, read)
+                }
+            }
+            HttpResp(status = code, body = sb.toString(), etag = conn.getHeaderField("ETag"))
         } catch (_: Exception) {
             null
         } finally {
@@ -82,17 +130,32 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
         }
     }
 
-    /** يجلب ملفًا من أول مصدر ينجح ويحفظه محليًا (كاش احتياطي). */
+    /** يجلب ملفًا مع دعم ETag ويعود للكاش المحلي تلقائيًا عند عدم التغيّر أو انقطاع الشبكة. */
     private fun fetch(file: String): Pair<String, String>? {
+        val cachedFile = File(dir, file)
+        val etagFile = File(dir, "$file.etag")
+        val savedEtag = if (cachedFile.exists() && etagFile.exists()) {
+            runCatching { etagFile.readText(Charsets.UTF_8).trim() }.getOrNull()
+        } else null
+
         for (url in candidates(file)) {
-            val body = httpGet(url)
-            if (!body.isNullOrBlank()) {
-                writeAtomic(File(dir, file), body)
-                return body to url
+            val resp = httpGetBounded(url, savedEtag)
+            if (resp != null) {
+                if (resp.status == 304 && cachedFile.exists()) {
+                    return cachedFile.readText(Charsets.UTF_8) to "304:$url"
+                }
+                if (!resp.body.isNullOrBlank()) {
+                    writeAtomic(cachedFile, resp.body)
+                    if (!resp.etag.isNullOrBlank()) {
+                        writeAtomic(etagFile, resp.etag)
+                    }
+                    return resp.body to url
+                }
             }
         }
-        val cached = File(dir, file)
-        if (cached.exists()) return cached.readText(Charsets.UTF_8) to "cache:${cached.name}"
+        if (cachedFile.exists()) {
+            return runCatching { cachedFile.readText(Charsets.UTF_8) to "cache:${cachedFile.name}" }.getOrNull()
+        }
         return null
     }
 
@@ -104,6 +167,10 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
             o.optJSONObject("alive_by_protocol")?.let { p ->
                 p.keys().forEach { k -> byProto[k] = p.optInt(k) }
             }
+            val byCountry = LinkedHashMap<String, Int>()
+            o.optJSONObject("countries_summary")?.let { c ->
+                c.keys().forEach { k -> byCountry[k] = c.optInt(k) }
+            }
             RemoteMeta(
                 generatedAt = o.optString("generated_at", "—"),
                 alive = o.optInt("alive"),
@@ -111,47 +178,174 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
                 channelsOk = o.optInt("channels_ok"),
                 channelsTotal = o.optInt("channels_total"),
                 byProtocol = byProto,
+                byCountry = byCountry,
+                degradedMode = o.optBoolean("degraded_mode", false),
             )
         } catch (_: Exception) {
             RemoteMeta()
         }
     }
 
-    /** قراءة الأسطر واستخلاص أي زمن استجابة مبدئي مرفق من الخادم (إن وُجد). */
-    private fun parseConfigLinesWithHints(rawText: String): Pair<List<String>, Map<String, Long>> {
+    /** تحليل alive.json الغني بالمؤشرات (يدعم صيغة الكائن {"servers":[...]} وصيغة المصفوفة [...]). */
+    private fun parseAliveJson(rawJson: String): Pair<List<String>, Map<String, ServerHint>> {
         val cfgs = LinkedHashSet<String>()
-        val hints = HashMap<String, Long>()
+        val hints = HashMap<String, ServerHint>()
+        runCatching {
+            val trimmed = rawJson.trim()
+            val arr: JSONArray = if (trimmed.startsWith("[")) {
+                JSONArray(trimmed)
+            } else {
+                JSONObject(trimmed).optJSONArray("servers") ?: JSONArray()
+            }
+            for (i in 0 until minOf(arr.length(), MAX_PARSED_SERVERS)) {
+                val item = arr.optJSONObject(i) ?: continue
+                val rawUri = item.optString("cfg").ifBlank { item.optString("uri") }
+                if (!rawUri.contains("://")) continue
+                val cleaned = Converters.cleanUri(rawUri)
+                if (!cleaned.contains("://")) continue
+                cfgs.add(cleaned)
+                val cc = item.optString("exit_country", "").uppercase().let {
+                    if (it == "XX" || it.length != 2) "" else it
+                }
+                hints.putIfAbsent(
+                    cleaned,
+                    ServerHint(
+                        latencyMs = item.optLong("median_latency_ms", item.optLong("latency_ms", 0L)).coerceAtLeast(0L),
+                        jitterMs = item.optDouble("jitter_ms", 0.0).let { if (it.isNaN()) 0.0 else it },
+                        speedKbps = item.optDouble("speed_kbps", 0.0).let { if (it.isNaN()) 0.0 else it },
+                        score = item.optDouble("score", 0.0).let { if (it.isNaN()) 0.0 else it },
+                        country = cc,
+                        stabilityRuns = item.optInt("stability_runs", item.optInt("consecutive_alive", 0)),
+                        verifiedAt = item.optString("verified_at", ""),
+                    ),
+                )
+            }
+        }
+        return cfgs.toList() to hints
+    }
+
+    /** قراءة الأسطر النصية بمرونة واستخلاص زمن الاستجابة والدولة من الوسم إن وُجدا. */
+    private fun parseConfigLinesWithHints(rawText: String): Pair<List<String>, Map<String, ServerHint>> {
+        val cfgs = LinkedHashSet<String>()
+        val hints = HashMap<String, ServerHint>()
         val msRegex = Regex("(\\d+)\\s*ms", RegexOption.IGNORE_CASE)
-        rawText.lineSequence().forEach { rawLine ->
+        val ccRegex = Regex("\\b([A-Z]{2})\\b")
+        var count = 0
+        for (rawLine in rawText.lineSequence()) {
+            if (count >= MAX_PARSED_SERVERS) break
             val trimmed = rawLine.trim()
-            if (!trimmed.contains("://")) return@forEach
+            if (!trimmed.contains("://")) continue
             val cleaned = Converters.cleanUri(trimmed)
-            if (!cleaned.contains("://")) return@forEach
+            if (!cleaned.contains("://")) continue
             cfgs.add(cleaned)
+            count++
             val remark = Converters.extractRemark(trimmed)
-            msRegex.find(remark)?.groupValues?.getOrNull(1)?.toLongOrNull()?.let { ms ->
-                if (ms > 0) hints.putIfAbsent(cleaned, ms)
+            val ms = msRegex.find(remark)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
+            val cc = ccRegex.findAll(remark)
+                .map { it.groupValues[1] }
+                .firstOrNull { it !in setOf("MS", "KB", "MB", "SS", "WS") }
+                ?: ""
+            if (ms > 0 || cc.isNotEmpty()) {
+                hints.putIfAbsent(cleaned, ServerHint(latencyMs = ms, country = cc))
             }
         }
         return cfgs.toList() to hints
     }
 
     /** قراءة الكاش المحلي فورًا عند فتح التطبيق بدون طلب شبكي. */
-    fun loadCached(): LoadResult? {
+    fun loadCached(feedProfile: String = "smart"): LoadResult? {
+        val metaFile = File(dir, "meta.json")
+        val meta = if (metaFile.exists()) parseMeta(runCatching { metaFile.readText(Charsets.UTF_8) }.getOrNull()) else RemoteMeta()
+
+        val jsonFile = File(dir, "alive.json")
+        val jsonPair = if (jsonFile.exists()) {
+            parseAliveJson(runCatching { jsonFile.readText(Charsets.UTF_8) }.getOrDefault(""))
+        } else emptyList<String>() to emptyMap()
+
+        val profileFile = profileFileName(feedProfile)
+        if (profileFile != "alive.json") {
+            val pf = File(dir, profileFile)
+            if (pf.exists()) {
+                val (pCfgs, pHints) = parseConfigLinesWithHints(runCatching { pf.readText(Charsets.UTF_8) }.getOrDefault(""))
+                if (pCfgs.isNotEmpty()) {
+                    val mergedHints = HashMap(pHints).apply { putAll(jsonPair.second) }
+                    return LoadResult(
+                        configs = pCfgs,
+                        serverLatencies = mergedHints.mapValues { it.value.latencyMs }.filterValues { it > 0L },
+                        meta = meta,
+                        source = "cache:$profileFile",
+                        serverHints = mergedHints,
+                    )
+                }
+            }
+        }
+
+        if (jsonPair.first.isNotEmpty()) {
+            return LoadResult(
+                configs = jsonPair.first,
+                serverLatencies = jsonPair.second.mapValues { it.value.latencyMs }.filterValues { it > 0L },
+                meta = meta,
+                source = "cache:alive.json",
+                serverHints = jsonPair.second,
+            )
+        }
+
         val listFile = File(dir, "alive.txt")
         if (!listFile.exists()) return null
-        val metaFile = File(dir, "meta.json")
-        val meta = if (metaFile.exists()) parseMeta(metaFile.readText(Charsets.UTF_8)) else RemoteMeta()
-        val (cfgs, hints) = parseConfigLinesWithHints(listFile.readText(Charsets.UTF_8))
+        val (cfgs, hints) = parseConfigLinesWithHints(runCatching { listFile.readText(Charsets.UTF_8) }.getOrDefault(""))
         if (cfgs.isEmpty()) return null
-        return LoadResult(cfgs, hints, meta, "cache:alive.txt")
+        return LoadResult(
+            configs = cfgs,
+            serverLatencies = hints.mapValues { it.value.latencyMs }.filterValues { it > 0L },
+            meta = meta,
+            source = "cache:alive.txt",
+            serverHints = hints,
+        )
     }
 
-    /** تنزيل القائمة الحيّة + البيانات الوصفية. */
-    fun loadRemote(): LoadResult {
+    private fun profileFileName(profile: String): String = when (profile) {
+        "reliable" -> "reliable.txt"
+        "low_latency" -> "low_latency.txt"
+        "high_throughput" -> "high_throughput.txt"
+        else -> "alive.json"
+    }
+
+    /** تنزيل القائمة الحيّة + مؤشرات الجودة والدول. */
+    fun loadRemote(feedProfile: String = "smart"): LoadResult {
         val metaRaw = fetch("meta.json")
-        val listRaw = fetch("alive.txt")
         val meta = parseMeta(metaRaw?.first)
+        val jsonRaw = fetch("alive.json")
+        val jsonParsed = if (jsonRaw != null) parseAliveJson(jsonRaw.first) else (emptyList<String>() to emptyMap())
+
+        val targetFile = profileFileName(feedProfile)
+        if (targetFile != "alive.json") {
+            val specialRaw = fetch(targetFile)
+            if (specialRaw != null) {
+                val (sCfgs, sHints) = parseConfigLinesWithHints(specialRaw.first)
+                if (sCfgs.isNotEmpty()) {
+                    val mergedHints = HashMap(sHints).apply { putAll(jsonParsed.second) }
+                    return LoadResult(
+                        configs = sCfgs,
+                        serverLatencies = mergedHints.mapValues { it.value.latencyMs }.filterValues { it > 0L },
+                        meta = meta,
+                        source = specialRaw.second,
+                        serverHints = mergedHints,
+                    )
+                }
+            }
+        }
+
+        if (jsonParsed.first.isNotEmpty()) {
+            return LoadResult(
+                configs = jsonParsed.first,
+                serverLatencies = jsonParsed.second.mapValues { it.value.latencyMs }.filterValues { it > 0L },
+                meta = meta,
+                source = jsonRaw?.second ?: "alive.json",
+                serverHints = jsonParsed.second,
+            )
+        }
+
+        val listRaw = fetch("alive.txt")
         if (listRaw == null) {
             return LoadResult(
                 emptyList(),
@@ -162,7 +356,13 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
             )
         }
         val (cfgs, hints) = parseConfigLinesWithHints(listRaw.first)
-        return LoadResult(cfgs, hints, meta, listRaw.second)
+        return LoadResult(
+            configs = cfgs,
+            serverLatencies = hints.mapValues { it.value.latencyMs }.filterValues { it > 0L },
+            meta = meta,
+            source = listRaw.second,
+            serverHints = hints,
+        )
     }
 
     // ─────────── كتابة واسترجاع الملفات النهائية باسم موحّد bahrain-vpn ───────────
@@ -183,7 +383,6 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
         return f
     }
 
-    /** تنويع المضيفين بحد أقصى لكل مضيف مع استكمال العدد إن لزم. */
     private fun diversify(results: List<ResultLine>, limit: Int, maxPerHost: Int = 3): List<ResultLine> {
         if (maxPerHost <= 0 || results.size <= 1) return results.take(limit)
         val counts = HashMap<String, Int>()
@@ -225,7 +424,6 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
         return bestFile to subFile
     }
 
-    /** استرجاع نتائج آخر فحص محفوظة في best100.txt عند إعادة فتح التطبيق. */
     fun loadSavedBest(): List<TestResult> {
         val f = existingBestFile() ?: return emptyList()
         return runCatching {
@@ -245,5 +443,8 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
     companion object {
         const val DEFAULT_OWNER = "oldman-552"
         const val DEFAULT_REPO = "vpn-configs"
+        private const val MAX_BODY_BYTES = 10L * 1024L * 1024L
+        private const val MAX_BODY_CHARS = 8_000_000
+        private const val MAX_PARSED_SERVERS = 5_000
     }
 }

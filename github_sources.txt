@@ -1,17 +1,39 @@
-# قائمة مصادر GitHub — سطر لكل مصدر:  «اسم  رابط»
-# كلها مُتحقَّق منها بتاريخ 2026-10-29. عطّل أي سطر بـ # أو احذفه.
-# الاستخدام:  python collector.py --sources-file github_sources.txt
+# ═══════════════════════════════════════════════════════════════════════════════
+# مصادر GitHub المُدقَّقة لجمع الكانفيغات — صيغة السطر: <الاسم> <الرابط>
+# الترتيب مقصود ومدروس هندسيًا:
+#   الطبقة 1 (Verified): مصادر تفحص العُقد فعليًا قبل النشر (أعلى كثافة عُقد حيّة)
+#   الطبقة 2 (Protocol-Focused): مصادر متخصّصة عالية التفرّد لتنويع البروتوكولات
+#   الطبقة 3 (Broad Unique): مجمّعات واسعة ذات إضافة صافية مثبتة ومنخفضة التكرار
+# ═══════════════════════════════════════════════════════════════════════════════
 
-matin-super          https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/super-sub.txt
-au1rxx-verified      https://github.com/Au1rxx/free-vpn-subscriptions/raw/main/output/v2ray-base64.txt
-mahdibland-eternity  https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity
-ermaozi              https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/v2ray.txt
-solispirit-all       https://raw.githubusercontent.com/SoliSpirit/v2ray-configs/main/all_configs.txt
-alilapro             https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/sub.txt
-matin-all            https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/all_sub.txt
-matin-hysteria2      https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/hysteria2.txt
-barryfar-sub1        https://raw.githubusercontent.com/barry-far/V2ray-config/main/Sub1.txt
-leon406-vless        https://raw.githubusercontent.com/Leon406/SubCrawler/master/sub/share/vless
-leon406-hysteria2    https://raw.githubusercontent.com/Leon406/SubCrawler/master/sub/share/hysteria2
-leon406-mixed        https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/a11
-openproxylist        https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_RAW.txt
+# ── الطبقة 1: مصادر مفحوصة مسبقًا (Pre-Verified / High Alive Density) ──
+matin-super https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/subs/merged/super-sub.txt
+4n0nymou3-verified https://raw.githubusercontent.com/4n0nymou3/multi-proxy-config-fetcher/main/configs/proxy_configs_tested.txt
+mahdibland-eternity https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity
+ermaozi-reachable https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/reachable/v2ray.txt
+mahdi0024-tested https://raw.githubusercontent.com/Mahdi0024/ProxyCollector/master/sub/proxies.txt
+delta-kronecker https://raw.githubusercontent.com/Delta-Kronecker/V2ray-Config/main/config/all_configs.txt
+igareck-rus-vless https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt
+igareck-rus-all https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_SS+All_RUS.txt
+itsyebekhe-psg https://raw.githubusercontent.com/itsyebekhe/PSG/main/config.txt
+openproxylist https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_RAW.txt
+
+# ── الطبقة 2: مصادر متخصّصة عالية التفرّد (Compact High-Exclusivity Protocol Feeds) ──
+leon406-mixed https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/a11
+leon406-v2 https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/v2
+leon406-ss https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/ss
+leon406-tr https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/tr
+leon406-hysteria2 https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/hysteria2
+matin-hysteria2 https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/hysteria2.txt
+v2rayroot-vless https://raw.githubusercontent.com/V2RayRoot/V2RayConfig/main/Config/vless.txt
+v2rayroot-ss https://raw.githubusercontent.com/V2RayRoot/V2RayConfig/main/Config/shadowsocks.txt
+free18 https://raw.githubusercontent.com/free18/v2ray/main/v.txt
+mheidari98-ss https://raw.githubusercontent.com/mheidari98/.proxy/main/ss
+mheidari98-trojan https://raw.githubusercontent.com/mheidari98/.proxy/main/trojan
+
+# ── الطبقة 3: مجمّعات واسعة ذات تغطية فريدة مثبتة (Broad Low-Overlap Aggregators) ──
+barabama-freenodes https://raw.githubusercontent.com/Barabama/FreeNodes/main/nodes/merged.txt
+0xradikal-all https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/all/configs.txt
+solispirit-all https://raw.githubusercontent.com/SoliSpirit/v2ray-configs/main/all_configs.txt
+matin-all https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/all_sub.txt
+leon406-vless https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/vless

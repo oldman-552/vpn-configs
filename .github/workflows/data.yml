@@ -1,6 +1,6 @@
 name: data
 
-# كل 30 دقيقة: جمع + فحص اتصال حقيقي + نشر في فرع data
+# كل 30 دقيقة: جمع محصّن + فحص متعدّد الجولات + استقرار طولي + نشر آمن في فرع data
 on:
   schedule:
     - cron: "*/30 * * * *"
@@ -10,6 +10,9 @@ on:
     paths:
       - "collector.py"
       - "tester.py"
+      - "dedupe.py"
+      - "scoring.py"
+      - "pipeline_security.py"
       - "channels.txt"
       - "github_sources.txt"
       - "requirements.txt"
@@ -21,67 +24,105 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: write
 
     env:
       TEST_TOP: "1200"
+      SPEED_TOP: "150"
       CONCURRENCY: "40"
       TEST_TIMEOUT: "5"
       BEST_N: "100"
       MAX_PER_HOST: "3"
+      MIN_ALIVE: "5"
       PYTHONUNBUFFERED: "1"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Restore previous data snapshot (longitudinal state & last-known-good fallback)
+        run: |
+          mkdir -p prev_dist
+          if git ls-remote --exit-code --heads origin data >/dev/null 2>&1; then
+            git fetch --depth=1 origin data
+            git archive origin/data | tar -x -C prev_dist || true
+            echo "Restored previous data snapshot ($(ls -1 prev_dist | wc -l) entries)."
+          else
+            echo "No prior data branch found — starting fresh."
+          fi
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Cache Xray & sing-box binaries
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: bin
-          key: engines-${{ runner.os }}-${{ runner.arch }}-v1
+          key: engines-${{ runner.os }}-${{ runner.arch }}-v2
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build data (scrape + test + publish files)
+      - name: Build data (collect + 5-layer dedupe + multi-stage validate + rank)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLIC_BASE: https://cdn.jsdelivr.net/gh/${{ github.repository }}@data
-        run: python server/build_data.py
+          PREV_DIST: prev_dist
+        run: python server/build_data.py --prev-dir prev_dist
+
+      - name: Verify generated artifacts before publishing
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          dist = Path("dist")
+          for req in ("alive.txt", "best100.txt", "sub.txt", "alive.json", "meta.json", "source_health.json"):
+              p = dist / req
+              assert p.is_file() and p.stat().st_size > 0, f"Missing or empty artifact: {req}"
+          meta = json.loads((dist / "meta.json").read_text(encoding="utf-8"))
+          if not meta.get("degraded_mode", False):
+              gz = dist / "all.txt.gz"
+              assert gz.is_file() and gz.stat().st_size > 0, "Missing or empty all.txt.gz"
+          alive_j = json.loads((dist / "alive.json").read_text(encoding="utf-8"))
+          assert alive_j.get("count", 0) >= 1 and len(alive_j.get("servers", [])) >= 1, "Empty alive.json servers!"
+          print(f"Verified dist/ artifacts: alive={alive_j['count']}, degraded={meta.get('degraded_mode', False)}")
+          PY
 
       - name: Show summary
         if: always()
         run: |
-          echo "### نتيجة الدورة" >> $GITHUB_STEP_SUMMARY
+          echo "### نتيجة الدورة" >> "$GITHUB_STEP_SUMMARY"
           if [ -f dist/meta.json ]; then
-            python - <<'PY' >> $GITHUB_STEP_SUMMARY
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json
-          m = json.load(open("dist/meta.json"))
-          print(f"- **وقت التوليد:** {m['generated_at']}  ({m['duration_sec']}s)")
-          print(f"- **القنوات:** {m['channels_ok']}/{m['channels_total']} ناجحة")
-          print(f"- **جُمع:** {m['raw_collected']} → **نظيف:** {m['unique_clean']}")
-          print(f"- **فُحص:** {m['tested']} → **حيّ:** {m['alive']}")
-          print(f"- **البروتوكولات الحيّة:** {m['alive_by_protocol']}")
+          m = json.load(open("dist/meta.json", encoding="utf-8"))
+          print(f"- **وقت التوليد:** {m.get('generated_at')}  ({m.get('duration_sec')}s)")
+          print(f"- **وضع الطوارئ (Degraded):** {m.get('degraded_mode', False)}")
+          print(f"- **القنوات:** {m.get('channels_ok')}/{m.get('channels_total')} ناجحة | **GitHub:** {m.get('github_sources_ok', m.get('github_sources'))}/{m.get('github_sources')}")
+          print(f"- **جُمع:** {m.get('raw_collected')} → **فريد صالح:** {m.get('unique_clean')}")
+          print(f"- **فُحص:** {m.get('tested')} → **حيّ:** {m.get('alive')}")
+          print(f"- **البروتوكولات الحيّة:** {m.get('alive_by_protocol')}")
+          print(f"- **الدول الأعلى:** {m.get('countries_summary', {})}")
+          print(f"- **صحّة المصادر:** {m.get('source_health_summary', {})}")
           PY
           else
-            echo "لا يوجد meta.json — فشلت الدورة قبل إنتاج الملفات." >> $GITHUB_STEP_SUMMARY
+            echo "لا يوجد meta.json — فشلت الدورة قبل إنتاج الملفات." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Publish to data branch (single commit, force push)
+      - name: Publish to data branch (single commit, header-authenticated push)
         if: success() && (github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,33 +132,41 @@ jobs:
           cp -r dist/. "$OUT"/
 
           cat > "$OUT/README.md" <<EOF
-          # data — مخرجات مولّدة آليًا
+          # data — مخرجات مولّدة ومُدقَّقة آليًا (bahrain-vpn)
 
-          لا تعدّل هذا الفرع يدويًا. يُعاد كتابته بالكامل كل 30 دقيقة من \`.github/workflows/data.yml\`.
+          لا تعدّل هذا الفرع يدويًا. يُعاد بناؤه والتحقّق منه كل 30 دقيقة عبر \`.github/workflows/data.yml\`.
 
           | الملف | الوصف | الرابط المباشر |
           |---|---|---|
-          | \`alive.txt\` | الكانفيغات الحيّة فقط | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/alive.txt |
-          | \`best100.txt\` | أفضل 100 حسب قياس الخادم | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/best100.txt |
-          | \`sub.txt\` | اشتراك Base64 جاهز للعملاء | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/sub.txt |
-          | \`alive.json\` | القائمة مع زمن الاستجابة والمحرّك | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/alive.json |
-          | \`all.txt.gz\` | كل الكانفيغات النظيفة مضغوطة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/all.txt.gz |
-          | \`meta.json\` | وقت التوليد والأعداد | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/meta.json |
+          | \`alive.txt\` | جميع العُقد الحيّة مرتّبة حسب الدرجة المركّبة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/alive.txt |
+          | \`best100.txt\` | أفضل 100 عقدة متنوّعة المضيفين والشبكات الفرعية | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/best100.txt |
+          | \`sub.txt\` | اشتراك Base64 جاهز لجميع تطبيقات العميل | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/sub.txt |
+          | \`reliable.txt\` | الأعلى استقرارًا واعتمادية عبر الدورات المتتالية | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/reliable.txt |
+          | \`low_latency.txt\` | الأقلّ زمن استجابة وتذبذبًا (Low Jitter/RTT) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/low_latency.txt |
+          | \`high_throughput.txt\` | الأعلى سرعة تنزيل موثّقة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/high_throughput.txt |
+          | \`alive.json\` | القائمة الكاملة مع الدولة والدرجة والاستقرار لتطبيق bahrain-vpn | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/alive.json |
+          | \`countries.json\` | فهرس الدول المُحقّقة عبر النفق الفعلي | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/countries.json |
+          | \`source_health.json\` | تقرير صحّة وتفرّد وتداخل المصادر (بدون أسرار) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/source_health.json |
+          | \`all.txt.gz\` | المجمع البنيوي النظيف الكامل مضغوطًا | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/all.txt.gz |
+          | \`meta.json\` | إحصاءات ومؤشرات الجودة الشاملة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/meta.json |
           EOF
 
           cd "$OUT"
           git init -q -b data
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          AUTH_B64="$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)"
+          git config --local "http.https://github.com/.extraheader" "AUTHORIZATION: basic ${AUTH_B64}"
           git add -A
           git commit -q -m "data: $(date -u +'%Y-%m-%dT%H:%M:%SZ') | $(python -c "import json;print(json.load(open('meta.json'))['alive'])" 2>/dev/null || echo '?') alive"
-          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data:data
+          git push --force "https://github.com/${GITHUB_REPOSITORY}.git" data:data
+          git config --local --unset-all "http.https://github.com/.extraheader" || true
           echo "نُشر بنجاح → https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/meta.json"
 
       - name: Purge jsDelivr cache
         if: success() && (github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         run: |
-          for f in alive.txt alive.json sub.txt best100.txt meta.json; do
+          for f in alive.txt alive.json sub.txt best100.txt reliable.txt reliable_sub.txt low_latency.txt high_throughput.txt countries.json source_health.json meta.json; do
             curl -s -m 20 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/$f" > /dev/null || true
           done
           echo "تم إرسال طلبات تحديث الكاش."

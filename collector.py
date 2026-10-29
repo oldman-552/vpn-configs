@@ -1,34 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-collector.py — جمع كانفيغات VPN من قنوات تلغرام + مستودعات GitHub في ملف واحد.
+collector.py — جامع كانفيغات VPN محصّن أمنيًا من قنوات تلغرام ومستودعات GitHub المُدقَّقة.
 
-المصادر المدعومة:
-  • قنوات تلغرام العامة (web preview: https://t.me/s/NAME)
-  • مستودعات اشتراك على GitHub (روابط raw / jsDelivr) — نص عادي أو base64
-
-المميزات:
-  1) استخراج كل كانفيغ على حدة بواسطة regex — حتى لو كانت عدة كانفيغات داخل رسالة واحدة.
-  2) يجد الكانفيغات خارج <code> أيضًا (نص عادي داخل الرسالة، أو داخل روابط <a href>).
-  3) يفكّ ملفات الاشتراك المُرمّزة بـ base64 القياسي و URL-safe تلقائيًا.
-  4) ينظّف الكيانات النصية (&amp;) والمحارف الخفية (ZWNJ/RLM) وعلامات الترقيم الزائدة.
-  5) طلبات متوازية + timeout + إعادة محاولة مع backoff (لا تعليق على 429/403).
-  6) تنقية الأسماء وحذف التكرار قبل إرسال أي طلب — لا طلب مكرّر.
-  7) كتابة ذرّية للملف (tmp ثم replace) وحماية آخر نسخة سليمة عند الفراغ.
-
-أمثلة التشغيل:
-    python collector.py                                   # تلغرام + GitHub (الافتراضي)
-    python collector.py --no-telegram                     # مستودعات GitHub فقط
-    python collector.py --no-github                       # قنوات تلغرام فقط
-    python collector.py --max-per-source 500 -o config.txt
-    python collector.py --unique-endpoint                 # كانفيغ واحد لكل host:port
-    python collector.py --sources-file github_sources.txt  # قائمة مصادر خاصة بك
-    python collector.py --calendar gregorian --tag "@my_channel"
-
-    # فحص حقيقي واختيار الأسرع (يُنزّل Xray/sing-box تلقائيًا أول مرة):
-    python collector.py --test                       # config.txt + best.txt (أفضل 100)
-    python collector.py --test --test-top 1500 --speed-top 400 --concurrency 24
-    python collector.py --test --rank-by latency --best 50 --best-out fastest.txt
+المزايا المعمارية والأمنية:
+  1) حماية SSRF وفحص عناوين IP الخاصة والـ Redirects وحدود حجم الاستجابة (Streaming Bounds).
+  2) دعم التخزين المؤقت الشرطي (ETag / If-Modified-Since) وسجل صحّة المصادر ودورة حياتها.
+  3) إزالة تكرار خماسية الطبقات (5-Layer Deduplication) مع تتبّع المصدر (Provenance) دون كشف الأسرار.
+  4) تنظيف الكيانات النصية (&amp;) والمحارف الخفية (ZWNJ/RLM) وعلامات الترقيم الزائدة.
+  5) حجب بيانات الاعتماد (UUIDs / كلمات المرور) بالكامل من السجلات والتقارير.
 """
 
 from __future__ import annotations
@@ -45,14 +25,33 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-try:                       # jdatetime اختياري: إذا لم يكن مثبّتًا نستخدم الميلادي
+from dedupe import (
+    MultiLayerDeduplicator,
+    canonical_protocol,
+    parse_identity,
+)
+from pipeline_security import (
+    MAX_DECODED_BYTES,
+    MAX_FEED_BYTES,
+    MAX_FEED_LINES,
+    MAX_URI_LENGTH,
+    redact_uri,
+    safe_fetch_text,
+)
+from scoring import SourceHealthRecord, SourceHealthRegistry
+
+try:
     import jdatetime
 except ImportError:
     jdatetime = None
@@ -63,24 +62,38 @@ DEFAULT_SOURCES_FILE = ROOT_DIR / "github_sources.txt"
 
 TZ = ZoneInfo("Asia/Tehran")
 LOG = logging.getLogger("collector")
+APP_REMARK_PREFIX = "bahrain-vpn"
 
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": USER_AGENT,
     "Accept-Language": "en-US,en;q=0.9,fa;q=0.8",
 }
 
-# ترتيب العناصر مهم: البروتوكولات الأطول أولًا، وإلا فإن "ss" ستلتقط جزءًا من "vless"
+# البروتوكولات الأطول أولًا حتى لا تلتقط "ss" جزءًا من "vless" أو "vmess"
 SCHEMES = ("hysteria2", "vless", "vmess", "trojan", "hy2", "tuic", "ssr", "ss")
-CONFIG_RE = re.compile(r"(?:%s)://[^\s<>\"'`]+" % "|".join(SCHEMES))
+PROTOCOLS = SCHEMES
+CONFIG_RE = re.compile(r"(?:%s)://[^\s<>\"'`]+" % "|".join(SCHEMES), re.IGNORECASE)
 FRAGMENT_RE = re.compile(r"#.*$")
 INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]+")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 1) قنوات تلغرام الاحتياطية (يُقرأ channels.txt تلقائيًا إن وُجد)
-# ─────────────────────────────────────────────────────────────────────────────
+VERIFIED_TIER_SOURCES = frozenset({
+    "matin-super",
+    "4n0nymou3-verified",
+    "au1rxx-verified",
+    "mahdibland-eternity",
+    "ermaozi-reachable",
+    "mahdi0024-tested",
+    "delta-kronecker",
+    "igareck-rus-vless",
+    "igareck-rus-all",
+    "itsyebekhe-psg",
+    "openproxylist",
+})
+
 CHANNELS = [
     "IR_Predators", "DailyV2RY", "oneclickvpnkeys", "i10VPN", "Velinamusic", "FNetPro",
     "confegraigan", "zedmodeonvpn", "V2ray_Vpn_Speed", "lightning6", "Parsashonam",
@@ -89,90 +102,63 @@ CHANNELS = [
     "v2rayng12023", "vlessconfig", "piazshekan", "Free_Internet_Iran", "ARv2ray",
     "VPNCUSTOMIZE", "UnlimitedDev", "MARAMBASHI", "PrivateVPNs", "client_proo",
     "nufilter", "icv2ray", "Vpn_Mikey", "v2rayngvpn", "kingspeedchanel", "VPN_Xpace",
-    "SVNTEAM", "WPSNET", "v2rayng_fa2", "Hope_Net", "ServerNett", "alfred_config",
-    "allv2ray", "alo_v2rayng", "angus_vpn", "antifilterservice", "asak_vpn",
-    "asintech", "astrovpn_official", "awlix_ir", "azarbayjab1", "bermudavpn24",
-    "bigsmoke_config", "blueberrynetwork", "bored_vpn", "catvpns", "cconfig_v2ray",
-    "city_v2rayng", "configforvpn", "configpositive", "configt", "configv2rayforfree",
-    "custom_config", "customizev2ray", "cvrnet", "daredevill_404", "deragv2ray",
-    "digiv2ray", "directvpn", "donald_vpn", "drvpn_net", "easy_free_vpn", "entrynet",
-    "ev2rayy", "expressvpn_420", "external_net", "farahvpn", "fasst_vpn", "fast_2ray",
-    "fastkanfig", "fastshadow_vpn", "filterk0sh", "flyv2ray", "freakconfig1",
-    "freakconfig2", "free1_vpn", "free_vpn02", "freeconfig01", "freeconfigvpns",
-    "freeiranweb", "freenapsternetv", "freev2raym", "freevirgoolnet", "fsv2ray",
-    "ghalagyann", "godv2ray_ng", "golestan_vpn", "grizzlyvpn", "hajimamadvpn",
-    "hamster_vpnn", "hatunnel_vpn", "hopev2ray", "hormozvpn", "hose_io", "imrv2ray",
-    "ios_v2", "ipcloudflaretamiz", "ipv2ray", "iranbaxvpn", "iraniv2ray_config",
-    "irv2rey", "isvvpn", "kafing_2", "kingofilter", "ln2ray", "lombo_channel",
-    "mahdiserver", "manzariyeh_rasht", "maznet", "meli_proxyy", "mester_v2ray",
-    "mgvpnsale", "mikasavpn", "miov2ray", "moftinet", "msv2ray", "msv2raynp", "n2vpn",
-    "netmellianti", "new_proxy_channel", "noforcedheaven", "npvv2rayfilter", "ohvpn",
-    "orange_vpns", "outline_ir", "outline_vpn", "pars_vpn3",
-    "pashmam_vpn", "pishiserver", "pqv2ray", "proprojec", "proxiiraniii", "proxy_n1",
-    "proxyfull", "proxystore11", "prroxyng", "puni_shop_v2rayng", "qeshmserver",
-    "realvpnmaster", "rnrifci", "satoshivpn", "savagev2ray", "selinc", "shadowproxy66",
-    "shokhmiplus", "sinavm", "sobi_vpn", "special_net8", "spikevpn", "srcvpn",
-    "summertimeus", "superv2rang", "tehranargo", "tehranargo1", "thexconfig",
-    "thunderv2ray", "tv_v2ray", "ultrasurf_12", "v2_city", "v2aryng_vpn", "v2boxvpnn",
-    "v2graphy", "v2net_iran", "v2ngfast", "v2pedia", "v2ra2", "v2raand", "v2rang00",
-    "v2range", "v2raxx", "v2ray1_ng", "v2ray6388", "v2ray_alpha07", "v2ray_fark",
-    "v2ray_ng", "v2ray_one1", "v2ray_raha", "v2ray_rolly", "v2rayargon", "v2raych",
-    "v2rayfast", "v2rayfast_7", "v2rayfree_irr", "v2rayiman", "v2raylandd", "v2rayn2g",
-    "v2rayng3", "v2rayng_city", "v2rayng_madam", "v2rayng_prime", "v2rayngv",
-    "v2rayngvpnn", "v2rayngzendegimamad", "v2rayprotocol", "v2rayyngvpn", "v2rez",
-    "v2rray_ng", "v2ry_proxy", "v2ryng01", "v2ryng_vpn", "v2ryngfree", "v2safe",
-    "v2safee", "v_2rayngvpn", "vip_vpn_2022", "vipv2rayngnp", "vipv2rey",
-    "vipvpn_v2ray", "vistav2ray", "vmesc", "vmess_ir", "vmess_iran", "vmesskhodam",
-    "vmesskhodam_vip", "vmessprotocol", "vp22ray", "vpfreen", "vpn_accounti",
-    "vpn_free_v2ray5", "vpn_ioss", "vpn_kanfik", "vpn_proxy_custom", "vpn_tehran",
-    "vpn_vip_nor", "vpnazadland", "vpnconfignet", "vpnfail_v2ray", "vpnhubmarket",
-    "vpnkanfik", "vpnmasi", "vpnowl", "vpnstorefast", "vpnv2rayngv", "vpnxyam_ir",
-    "wedbaztel", "wsbvpn", "xvproxy", "zede_filteri", "zohalserver", "vpnaloo",
-    "godot404", "prrofile_purple", "vpnsaint", "azadnet", "appsooner",
-    "V2SayFreeArchive", "shadoowvpnn", "v2fre", "ConfigsHubPlus", "imtproxy_ir",
-    "PASARGAD_V2rayNG", "club_profsor", "Speeds_vpn1", "Airdorap_Free", "VPN_SOLVE",
-    "bglvps", "vpnmeliran", "dr_news2", "v2raying", "singbox1", "iProxyem",
-    "sabavpn_com", "VpnMaan", "proxy_kafee", "hex_proxy",
+    "SVNTEAM", "WPSNET", "v2rayng_fa2", "Hope_Net", "ServerNett",
 ]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 2) مستودعات GitHub الاحتياطية (يُقرأ github_sources.txt تلقائيًا إن وُجد)
-# ─────────────────────────────────────────────────────────────────────────────
 GITHUB_SOURCES = {
-    "matin-super": "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/super-sub.txt",
-    "au1rxx-verified": "https://github.com/Au1rxx/free-vpn-subscriptions/raw/main/output/v2ray-base64.txt",
+    "matin-super": "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/subs/merged/super-sub.txt",
+    "4n0nymou3-verified": "https://raw.githubusercontent.com/4n0nymou3/multi-proxy-config-fetcher/main/configs/proxy_configs_tested.txt",
     "mahdibland-eternity": "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity",
-    "ermaozi": "https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/v2ray.txt",
+    "ermaozi-reachable": "https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/reachable/v2ray.txt",
+    "mahdi0024-tested": "https://raw.githubusercontent.com/Mahdi0024/ProxyCollector/master/sub/proxies.txt",
+    "delta-kronecker": "https://raw.githubusercontent.com/Delta-Kronecker/V2ray-Config/main/config/all_configs.txt",
     "solispirit-all": "https://raw.githubusercontent.com/SoliSpirit/v2ray-configs/main/all_configs.txt",
-    "alilapro": "https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/sub.txt",
+    "0xradikal-all": "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/all/configs.txt",
+    "barabama-freenodes": "https://raw.githubusercontent.com/Barabama/FreeNodes/main/nodes/merged.txt",
     "matin-all": "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/all_sub.txt",
-    "matin-hysteria2": "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/hysteria2.txt",
-    "barryfar-sub1": "https://raw.githubusercontent.com/barry-far/V2ray-config/main/Sub1.txt",
-    "leon406-vless": "https://raw.githubusercontent.com/Leon406/SubCrawler/master/sub/share/vless",
-    "leon406-hysteria2": "https://raw.githubusercontent.com/Leon406/SubCrawler/master/sub/share/hysteria2",
+    "leon406-vless": "https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/vless",
+    "leon406-hysteria2": "https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/hysteria2",
     "leon406-mixed": "https://raw.githubusercontent.com/Leon406/SubCrawler/main/sub/share/a11",
     "openproxylist": "https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_RAW.txt",
 }
 
-# requests.Session ليست thread-safe، لذلك نعطي كل thread جلسته الخاصة
 _local = threading.local()
 
 
+def _build_session(pool_size: int = 32) -> requests.Session:
+    s = requests.Session()
+    s.headers.update(HEADERS)
+    retry = Retry(
+        total=2,
+        connect=2,
+        read=2,
+        backoff_factor=0.5,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET", "HEAD"}),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(
+        max_retries=retry,
+        pool_connections=max(16, pool_size),
+        pool_maxsize=max(32, pool_size * 2),
+    )
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
+
+
 def session() -> requests.Session:
-    """إرجاع Session خاص بالـ thread الحالي (مع الهيدرز الجاهزة)."""
+    """إرجاع Session خاص بالـ thread الحالي مع تجميع اتصالات HTTP."""
     if not hasattr(_local, "s"):
-        s = requests.Session()
-        s.headers.update(HEADERS)
-        _local.s = s
+        _local.s = _build_session(16)
     return _local.s
 
 
-# ───────────────────────────── أدوات مساعدة ─────────────────────────────
+# ───────────────────────────── أدوات مساعدة للمصادر ─────────────────────────────
 def channel_urls(raw: list[str]) -> list[str]:
     """
-    تنقية أسماء القنوات وحذف المكرّر.
+    تنقية أسماء القنوات وحذف المكرّر غير الحساس لحالة الأحرف.
     تقبل: "Name" أو "@Name" أو "https://t.me/s/Name" أو "https://t.me/Name".
-    تلغرام لا يفرّق بين الحروف الكبيرة والصغيرة، لذلك نعمل على lower().
     """
     seen: dict[str, str] = {}
     for item in raw:
@@ -203,83 +189,141 @@ def get_channels(path: str | Path | None = None) -> list[str]:
     return list(CHANNELS)
 
 
+def load_sources_file(path: str | Path) -> dict[str, str]:
+    """قراءة قائمة مصادر مخصّصة مع منع تكرار نفس الرابط."""
+    sources: dict[str, str] = {}
+    seen_urls: set[str] = set()
+    for i, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and parts[-1].startswith(("https://", "http://")):
+            name, url = " ".join(parts[:-1]), parts[-1]
+        elif line.startswith(("https://", "http://")):
+            name, url = f"custom-{i}", line
+        else:
+            LOG.warning("سطر غير مفهوم في %s: %r", path, line)
+            continue
+        norm = url.rstrip("/")
+        if norm in seen_urls:
+            LOG.warning("تخطّي رابط مكرّر في %s: %s", path, name)
+            continue
+        seen_urls.add(norm)
+        sources[name] = url
+    return sources
+
+
 def get_github_sources(path: str | Path | None = None) -> dict[str, str]:
     """قراءة مصادر GitHub من المسار المحدّد، أو من github_sources.txt إن وُجد، وإلا فالقائمة المدمجة."""
     target = Path(path) if path else (DEFAULT_SOURCES_FILE if DEFAULT_SOURCES_FILE.exists() else None)
     if target and target.exists():
-        loaded = load_sources_file(str(target))
+        loaded = load_sources_file(target)
         if loaded:
             return loaded
     return dict(GITHUB_SOURCES)
 
 
-def fetch_text(url: str, retries: int = 3, timeout: tuple[int, int] = (5, 25)) -> str | None:
+# ───────────────────────────── الجلب المحصّن وفكّ الترميز ─────────────────────────────
+def fetch_text(url: str, retries: int = 2, timeout: tuple[int, int] | float = (5, 25)) -> str | None:
     """
-    جلب نص (HTML أو ملف اشتراك) مع timeout وإعادة محاولة.
-    يُرجع النص أو None عند الفشل (بلا رفع استثناء يكسر الحلقة كلها).
+    جلب نص (HTML أو ملف اشتراك) مع حماية SSRF وحدّ أقصى لحجم الاستجابة.
+    يُرجع النص أو None عند الفشل.
     """
-    for attempt in range(1, retries + 1):
-        try:
-            r = session().get(url, timeout=timeout)
-        except requests.RequestException as exc:
-            LOG.debug("%s محاولة %d: %s", url, attempt, exc)
-            time.sleep(1.5 * attempt)
+    eff_timeout = timeout[1] if isinstance(timeout, tuple) else float(timeout)
+    for attempt in range(1, max(1, retries) + 1):
+        res = safe_fetch_text(
+            session(),
+            url,
+            timeout=eff_timeout,
+            max_bytes=MAX_FEED_BYTES,
+        )
+        if res.ok:
+            return res.text
+        if res.status_code in (429, 500, 502, 503, 504) and attempt < retries:
+            time.sleep(min(10, 1.5 * attempt))
             continue
-
-        if r.status_code == 200:
-            return r.text
-
-        if r.status_code in (429, 500, 502, 503, 504):
-            wait = min(30, 2 ** attempt)
-            LOG.debug("%s -> %d، انتظار %ss", url, r.status_code, wait)
-            time.sleep(wait)
-            continue
-
-        LOG.info("%s -> HTTP %d (تخطّي)", url, r.status_code)
+        if res.error.startswith("ssrf_blocked"):
+            LOG.warning("حُجب رابط غير آمن (SSRF): %s", res.error)
+            return None
+        LOG.debug("%s -> فشل (%s)", url, res.error)
         return None
-
-    LOG.warning("فشل الجلب: %s", url)
     return None
 
 
 def b64_decode(text: str) -> str | None:
-    """فكّ base64 القياسي أو URL-safe مع تصحيح الحشو (padding). يُرجع None عند الفشل."""
+    """فكّ base64 القياسي أو URL-safe مع تصحيح الحشو وحدّ الحجم الآمن."""
+    if not text or len(text) > MAX_DECODED_BYTES:
+        return None
     compact = re.sub(r"\s+", "", text)
-    if not compact:
+    if not compact or len(compact) > MAX_DECODED_BYTES:
         return None
     normalized = compact.replace("-", "+").replace("_", "/")
     padded = normalized + "=" * (-len(normalized) % 4)
     try:
-        return base64.b64decode(padded, validate=True).decode("utf-8", "ignore")
+        raw = base64.b64decode(padded, validate=True)
     except (binascii.Error, ValueError):
         try:
-            return base64.b64decode(padded).decode("utf-8", "ignore")
+            raw = base64.b64decode(padded)
         except (binascii.Error, ValueError):
             return None
+    if len(raw) > MAX_DECODED_BYTES:
+        return None
+    return raw.decode("utf-8", "ignore")
+
+
+def _extract_bounded(text: str) -> list[str]:
+    if not text:
+        return []
+    if len(text) > MAX_DECODED_BYTES:
+        text = text[:MAX_DECODED_BYTES]
+    out: list[str] = []
+    for m in CONFIG_RE.finditer(text):
+        u = m.group(0)
+        if len(u) <= MAX_URI_LENGTH:
+            out.append(u)
+            if len(out) >= MAX_FEED_LINES:
+                break
+    return out
 
 
 def parse_subscription(text: str) -> list[str]:
     """
-    استخراج الكانفيغات من ملف اشتراك:
-      • نص عادي: سطر لكل كانفيغ
-      • base64 لكامل الملف (الشائع في مستودعات GitHub)
+    استخراج الكانفيغات من ملف اشتراك (نص خام، أو Base64 كلّي، أو مقاطع Base64 سطرية)
+    مع حدود صارمة لحجم الذاكرة وعدد الأسطر.
     """
+    if not text:
+        return []
+    if len(text) > MAX_DECODED_BYTES:
+        text = text[:MAX_DECODED_BYTES]
+
     unescaped = html_lib.unescape(text)
-    found = CONFIG_RE.findall(unescaped)
+    found = _extract_bounded(unescaped)
     if found:
         return found
 
     decoded = b64_decode(text)
-    if decoded:
-        return CONFIG_RE.findall(html_lib.unescape(decoded))
-    return []
+    if decoded and "://" in decoded:
+        return _extract_bounded(html_lib.unescape(decoded))
+
+    line_results: list[str] = []
+    for idx, line in enumerate(text.splitlines()):
+        if idx >= MAX_FEED_LINES:
+            break
+        dec_ln = b64_decode(line)
+        if dec_ln and "://" in dec_ln:
+            line_results.extend(_extract_bounded(html_lib.unescape(dec_ln)))
+            if len(line_results) >= MAX_FEED_LINES:
+                break
+    return line_results
 
 
 def extract_configs(html: str) -> list[str]:
-    """
-    استخراج كل الكانفيغات من صفحة قناة تلغرام.
-    نقرأ نص الرسالة كاملًا (وليس <code> فقط) + الروابط، ثم regex.
-    """
+    """استخراج كل الكانفيغات من صفحة قناة تلغرام (النص + فواصل الأسطر + الروابط + مقاطع الكود)."""
+    if not html:
+        return []
+    if len(html) > MAX_DECODED_BYTES:
+        html = html[:MAX_DECODED_BYTES]
     soup = BeautifulSoup(html, "html.parser")
     blocks = soup.select("div.tgme_widget_message_text")
     if not blocks:
@@ -287,47 +331,17 @@ def extract_configs(html: str) -> list[str]:
 
     found: list[str] = []
     for block in blocks:
-        found.extend(CONFIG_RE.findall(block.get_text("\n")))
+        found.extend(_extract_bounded(html_lib.unescape(block.get_text("\n"))))
         for a in block.find_all("a", href=True):
-            found.extend(CONFIG_RE.findall(html_lib.unescape(a["href"])))
+            found.extend(_extract_bounded(html_lib.unescape(a["href"])))
     return found
 
 
-def endpoint_key(cfg: str) -> str | None:
-    """
-    مفتاح «host:port» لكانفيغ — يُستخدم مع --unique-endpoint
-    لإبقاء عقدة واحدة فقط لكل عنوان (حتى لو اختلفت بارامتراتها).
-    """
-    scheme, _, rest = cfg.partition("://")
-    rest = rest.split("#", 1)[0]
-
-    if scheme == "vmess":
-        body = rest.split("?", 1)[0]
-        dec = b64_decode(body)
-        if not dec:
-            return None
-        try:
-            j = json.loads(dec)
-            add = str(j.get("add") or "").strip().lower()
-            port = str(j.get("port") or "").strip()
-            return f"{add}:{port}" if add and port else None
-        except Exception:
-            return None
-
-    if "@" not in rest:                # ss/ssr بصيغة base64
-        dec = b64_decode(rest.split("?", 1)[0].rstrip("/"))
-        if not dec or "@" not in dec:
-            return None
-        rest = dec.rsplit("@", 1)[-1]
-        hp = rest.split("/", 1)[0].split("?", 1)[0].strip().lower()
-        return hp or None
-
-    host_port = rest.rsplit("@", 1)[-1].split("/", 1)[0].split("?", 1)[0].strip().lower()
-    return host_port or None
+extract_from_html = extract_configs
 
 
+# ───────────────────────────── التطبيع وإزالة التكرار خماسية الطبقات ─────────────────────────────
 def _strip_trailing_junk(cfg: str) -> str:
-    """إزالة علامات الترقيم الزائدة في نهاية السطر دون إتلاف base64 أو عناوين IPv6."""
     cfg = cfg.rstrip(",.;")
     while cfg.endswith(")") and "(" not in cfg:
         cfg = cfg[:-1]
@@ -336,62 +350,49 @@ def _strip_trailing_junk(cfg: str) -> str:
     return cfg
 
 
-def _valid_vmess_body(body: str) -> bool:
-    dec = b64_decode(body.split("?", 1)[0])
-    if not dec:
+def _sanitize_raw_uri(raw: str) -> str:
+    unescaped = html_lib.unescape(raw)
+    unescaped = INVISIBLE_RE.sub("", unescaped).strip()
+    cfg = FRAGMENT_RE.sub("", unescaped).strip()
+    cfg = _strip_trailing_junk(cfg)
+    if "://" in cfg:
+        scheme, _, rest = cfg.partition("://")
+        cfg = f"{scheme.lower()}://{rest}"
+    return cfg
+
+
+def validate_config(cfg: str) -> bool:
+    """فحص بنيوي وأمني للتأكّد من صلاحية الرابط وخلوّه من عناوين الشبكات الداخلية."""
+    if not cfg or len(cfg) > MAX_URI_LENGTH:
         return False
-    try:
-        j = json.loads(dec)
-        if not isinstance(j, dict):
-            return False
-        add = str(j.get("add") or "").strip()
-        uid = str(j.get("id") or "").strip()
-        port = int(str(j.get("port") or "0").strip())
-        return bool(add and uid and 1 <= port <= 65535)
-    except Exception:
-        return False
+    sanitized = _sanitize_raw_uri(cfg)
+    return parse_identity(sanitized, reject_private_hosts=True) is not None
+
+
+def endpoint_key(cfg: str) -> str | None:
+    """مفتاح «host:port» لكانفيغ (متوافق رجعيًا مع --unique-endpoint والاختبارات)."""
+    ident = parse_identity(_sanitize_raw_uri(cfg), reject_private_hosts=False)
+    if ident is None:
+        return None
+    if ":" in ident.host:
+        return f"[{ident.host}]:{ident.port}"
+    return f"{ident.host}:{ident.port}"
 
 
 def clean(configs: list[str]) -> tuple[list[str], int]:
     """
-    تنظيف + حذف المكرّر مع الحفاظ على الترتيب.
-    يُرجع (قائمة نظيفة، عدد المرفوض).
+    تنظيف وتطبيع + حذف المكرّر عبر الطبقات المعيارية (Layer-1 + Layer-2)
+    واستبعاد الروابط المشوّهة أو الموجّهة إلى شبكات محلية/خاصة.
+    يُرجع (قائمة نظيفة فريدة، عدد المرفوض).
     """
-    out: dict[str, None] = {}
-    rejected = 0
-    for raw in configs:
-        unescaped = html_lib.unescape(raw)
-        unescaped = INVISIBLE_RE.sub("", unescaped).strip()
-        cfg = FRAGMENT_RE.sub("", unescaped).strip()
-        cfg = _strip_trailing_junk(cfg)
-        scheme, sep, body = cfg.partition("://")
-        if not sep:
-            rejected += 1
-            continue
-
-        needs_at = scheme in ("vless", "trojan", "hysteria2", "hy2", "tuic")
-        min_len = 16 if scheme in ("vmess", "ss", "ssr") else 8
-
-        if len(body) < min_len or (needs_at and "@" not in body):
-            rejected += 1
-            continue
-
-        if scheme == "vmess" and not _valid_vmess_body(body):
-            rejected += 1
-            continue
-
-        if needs_at:
-            after_at = body.rsplit("@", 1)[-1].split("/", 1)[0].split("?", 1)[0]
-            if not after_at:
-                rejected += 1
-                continue
-
-        out.setdefault(cfg, None)
-    return list(out), rejected
+    sanitized_list = [_sanitize_raw_uri(raw) for raw in configs]
+    deduper = MultiLayerDeduplicator(reject_private_hosts=True)
+    deduper.ingest_source("clean", sanitized_list)
+    return deduper.unique_uris(), deduper.summary.invalid_or_unsafe_rejected
 
 
 def dedupe_by_endpoint(configs: list[str]) -> tuple[list[str], int]:
-    """إبقاء أول كانفيغ لكل host:port (يقلّل الحجم كثيرًا ويحذف العُقد المكرّرة)."""
+    """إبقاء أول كانفيغ لكل host:port."""
     out: list[str] = []
     used: set[str] = set()
     for cfg in configs:
@@ -403,11 +404,9 @@ def dedupe_by_endpoint(configs: list[str]) -> tuple[list[str], int]:
     return out, len(configs) - len(out)
 
 
+# ───────────────────────────── الأختام الزمنية وتسمية bahrain-vpn ─────────────────────────────
 def stamp(calendar: str) -> tuple[str, str]:
-    """
-    يُرجع (ختم الوقت الكامل، التاريخ فقط).
-    إذا اختير التقويم الشمسي ولم يكن jdatetime مثبّتًا نعود تلقائيًا إلى الميلادي.
-    """
+    """يُرجع (ختم الوقت الكامل، التاريخ فقط) مع بديل ميلادي عند غياب jdatetime."""
     now = datetime.now(TZ)
     if calendar == "jalali":
         if jdatetime is not None:
@@ -420,16 +419,17 @@ def stamp(calendar: str) -> tuple[str, str]:
 def set_uri_remark(cfg: str, label: str) -> str:
     """
     تعيين الاسم الظاهر للمستخدم (مثل 'bahrain-vpn 1 | 45ms') بطريقة متوافقة مع كل البروتوكولات:
-    • vmess://  → تعديل حقل "ps" داخل JSON المرمّز بـ base64 دون إلحاق #fragment يفسد فكّ الترميز.
-    • ssr://    → تعديل معامل remarks داخل حمولة SSR المرمّزة بـ base64url دون إلحاق #fragment.
-    • البقية   → إزالة أي #fragment سابق وإلحاق #{label}.
+      • vmess:// → تعديل حقل "ps" داخل JSON المرمّز بـ base64 دون إلحاق #fragment.
+      • ssr://   → تعديل معامل remarks داخل حمولة SSR المرمّزة بـ base64url دون إلحاق #fragment.
+      • البقية  → إزالة أي #fragment سابق وإلحاق #{label}.
     """
     base = FRAGMENT_RE.sub("", cfg).strip()
     scheme, sep, body = base.partition("://")
     if not sep:
         return cfg
+    scheme_l = scheme.lower()
 
-    if scheme == "vmess":
+    if scheme_l == "vmess":
         raw = b64_decode(body)
         if raw:
             try:
@@ -444,7 +444,7 @@ def set_uri_remark(cfg: str, label: str) -> str:
                 pass
         return base
 
-    if scheme == "ssr":
+    if scheme_l == "ssr":
         raw = b64_decode(body)
         if raw and "/?" in raw:
             main_part, q_part = raw.split("/?", 1)
@@ -459,9 +459,43 @@ def set_uri_remark(cfg: str, label: str) -> str:
     return f"{base}#{label}"
 
 
-def write_outputs(configs: list[str], out_path: Path, calendar: str,
-                  header_note: str, tag: str) -> None:
-    """بناء الأسطر (كانفيغ + remark باسم موحّد bahrain-vpn) وكتابة الملف بشكل ذرّي."""
+def relabel_configs(
+    configs: list[str],
+    prefix: str = APP_REMARK_PREFIX,
+    stats: dict[str, tuple[float, float]] | None = None,
+    countries: dict[str, str] | None = None,
+) -> list[str]:
+    """تسمية قائمة كانفيغات باسم موحّد مع خيار إرفاق الدولة والسرعة والتأخير."""
+    out: list[str] = []
+    for idx, uri in enumerate(configs, 1):
+        parts = [f"{prefix} {idx}"]
+        if countries and uri in countries and countries[uri]:
+            parts.append(countries[uri])
+        if stats and uri in stats:
+            lat_ms, spd_kbps = stats[uri]
+            if lat_ms > 0:
+                parts.append(f"{lat_ms:.0f}ms")
+            if spd_kbps >= 1024:
+                parts.append(f"{spd_kbps / 1024:.1f}MB/s")
+            elif spd_kbps > 0:
+                parts.append(f"{spd_kbps:.0f}KB/s")
+        label = " | ".join(parts)
+        if uri.lower().startswith(("vmess://", "ssr://")):
+            out.append(set_uri_remark(uri, label))
+        else:
+            base = FRAGMENT_RE.sub("", uri).strip()
+            out.append(f"{base}#{quote(label, safe=' |.-_:')}")
+    return out
+
+
+def write_outputs(
+    configs: list[str],
+    out_path: Path,
+    calendar: str = "jalali",
+    header_note: str = "تحديث كل نصف ساعة",
+    tag: str = APP_REMARK_PREFIX,
+) -> None:
+    """بناء الأسطر باسم موحّد وكتابة الملف بشكل ذرّي."""
     full_ts, date_only = stamp(calendar)
     lines = []
     for i, cfg in enumerate(configs, 1):
@@ -478,10 +512,7 @@ def write_outputs(configs: list[str], out_path: Path, calendar: str,
 
 
 def write_best(results, out_path: Path, limit: int, calendar: str, tag: str) -> int:
-    """
-    كتابة أفضل N كانفيغ في ملف منفصل باسم موحّد (bahrain-vpn)، مع السرعة والتأخير.
-    يُرجع عدد الأسطر المكتوبة.
-    """
+    """كتابة أفضل N كانفيغ في ملف منفصل باسم موحّد مع السرعة والتأخير."""
     _, date_only = stamp(calendar)
     lines = []
     for i, r in enumerate(results[:limit], 1):
@@ -496,61 +527,66 @@ def write_best(results, out_path: Path, limit: int, calendar: str, tag: str) -> 
     return len(lines)
 
 
-def load_sources_file(path: str) -> dict[str, str]:
-    """
-    قراءة قائمة مصادر مخصّصة. كل سطر:  «اسم  URL»  أو  URL فقط.
-    الأسطر الفارغة والتي تبدأ بـ # تُتجاهل.
-    """
-    sources: dict[str, str] = {}
-    for i, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        parts = line.split()
-        if len(parts) >= 2 and parts[-1].startswith("http"):
-            name, url = " ".join(parts[:-1]), parts[-1]
-        elif line.startswith("http"):
-            name, url = f"custom-{i}", line
-        else:
-            LOG.warning("سطر غير مفهوم في %s: %r", path, line)
-            continue
-        sources[name] = url
-    return sources
+# ───────────────────────────── الجلب المتوازي وسجل الصحّة ─────────────────────────────
+def fetch_channel(
+    sess: requests.Session,
+    channel: str,
+    timeout: int = 15,
+) -> tuple[str, list[str], str | None]:
+    handle = channel.strip().lstrip("@").split("/")[-1]
+    if not re.fullmatch(r"[A-Za-z0-9_]{4,64}", handle):
+        return handle, [], "invalid_channel_handle"
+    res = safe_fetch_text(sess, f"https://t.me/s/{handle}", timeout=timeout, max_bytes=MAX_FEED_BYTES, require_https=True)
+    if not res.ok:
+        return handle, [], res.error or f"http_{res.status_code}"
+    return handle, extract_configs(res.text), None
 
 
-# ───────────────────────────── الجلب المتوازي ─────────────────────────────
+def fetch_github_source(
+    sess: requests.Session,
+    name: str,
+    url: str,
+    timeout: int = 25,
+) -> tuple[str, list[str], str | None]:
+    res = safe_fetch_text(sess, url, timeout=timeout, max_bytes=MAX_FEED_BYTES)
+    if not res.ok:
+        return name, [], res.error or f"http_{res.status_code}"
+    return name, parse_subscription(res.text), None
+
+
 def collect_telegram(urls: list[str], workers: int) -> tuple[list[str], int, int]:
     """جلب صفحات القنوات بالتوازي. يُرجع (قائمة كانفيغات، نجحت، فشلت)."""
-    pages: list[str] = []
+    ordered_pages: dict[str, str] = {}
     ok = failed = 0
 
-    def job(u: str) -> str | None:
-        return fetch_text(u, timeout=(5, 15))
+    def job(u: str) -> tuple[str, str | None]:
+        return u, fetch_text(u, timeout=(5, 15))
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {pool.submit(job, u): u for u in urls}
+        futures = [pool.submit(job, u) for u in urls]
         for fut in as_completed(futures):
-            html = fut.result()
-            if html:
-                pages.append(html)
+            u, html_doc = fut.result()
+            if html_doc:
+                ordered_pages[u] = html_doc
                 ok += 1
             else:
                 failed += 1
 
-    return [c for page in pages for c in extract_configs(page)], ok, failed
+    cfgs = [c for u in urls if u in ordered_pages for c in extract_configs(ordered_pages[u])]
+    return cfgs, ok, failed
 
 
-def collect_github(sources: dict[str, str], workers: int,
-                   max_per_source: int = 0) -> tuple[list[str], list[tuple[str, int]]]:
-    """
-    جلب ملفات الاشتراك من GitHub بالتوازي.
-    يُرجع (قائمة كانفيغات، إحصاء لكل مصدر [(الاسم، العدد)]).
-    """
+def collect_github(
+    sources: dict[str, str],
+    workers: int,
+    max_per_source: int = 0,
+) -> tuple[list[str], list[tuple[str, int]]]:
+    """جلب ملفات الاشتراك من GitHub بالتوازي مع الحفاظ على ترتيب أولوية المصادر."""
     results: dict[str, list[str]] = {}
 
     def job(item: tuple[str, str]) -> tuple[str, list[str]]:
         name, url = item
-        text = fetch_text(url, timeout=(10, 60))
+        text = fetch_text(url, timeout=(10, 45))
         if not text:
             return name, []
         cfgs = parse_subscription(text)
@@ -564,60 +600,211 @@ def collect_github(sources: dict[str, str], workers: int,
             name, cfgs = fut.result()
             results[name] = cfgs
 
-    # ترتيب النتيجة كما في القاموس (مصادر أفضل أولًا) وليس كما انتهت الطلبات
     ordered = [(name, results.get(name, [])) for name in sources]
     flat = [c for _, cfgs in ordered for c in cfgs]
     return flat, [(name, len(cfgs)) for name, cfgs in ordered]
 
 
+@dataclass
+class CollectionTelemetry:
+    raw_uris: list[str]
+    unique_uris: list[str]
+    channel_stats: dict[str, int]
+    deduper: MultiLayerDeduplicator
+    health_registry: SourceHealthRegistry
+    github_fetched_ok: int = 0
+    github_skipped_cooldown: int = 0
+    channels_ok: int = 0
+    channels_failed: int = 0
+    per_source_uris: dict[str, list[str]] = field(default_factory=dict)
+
+
+def collect_with_telemetry(
+    channels: list[str],
+    github_sources: dict[str, str],
+    workers: int = 12,
+    timeout: int = 15,
+    health_registry: SourceHealthRegistry | None = None,
+) -> CollectionTelemetry:
+    """جمع متزامن محصّن مع تتبّع الصحّة وإزالة التكرار خماسية الطبقات وتتبّع المصدر."""
+    registry = health_registry or SourceHealthRegistry()
+    deduper = MultiLayerDeduplicator(
+        verified_sources=set(VERIFIED_TIER_SOURCES),
+        reject_private_hosts=True,
+    )
+    raw_pool: list[str] = []
+    ch_stats: dict[str, int] = {}
+    per_source_uris: dict[str, list[str]] = {}
+    gh_results: dict[str, list[str]] = {}
+    ch_results: dict[str, list[str]] = {}
+    gh_ok = 0
+    gh_skipped = 0
+    ch_ok = 0
+    ch_failed = 0
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Normalize channel handles preserving order
+    clean_handles: list[str] = []
+    for u in channel_urls(channels):
+        clean_handles.append(u.rsplit("/", 1)[-1])
+
+    with _build_session(pool_size=max(16, workers * 2)) as sess:
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            gh_futs = {}
+            for name, url in github_sources.items():
+                rec = registry.get_or_create(name, "github", url)
+                if rec.should_skip_cooldown():
+                    rec.total_runs += 1
+                    gh_skipped += 1
+                    continue
+                fut = pool.submit(
+                    safe_fetch_text,
+                    sess,
+                    url,
+                    timeout=max(timeout, 25),
+                    max_bytes=MAX_FEED_BYTES,
+                    require_https=True,
+                )
+                gh_futs[fut] = (name, rec)
+
+            ch_futs = {}
+            for ch in clean_handles:
+                rec = registry.get_or_create(f"tg:{ch}", "telegram", ch)
+                if rec.should_skip_cooldown():
+                    rec.total_runs += 1
+                    ch_stats[ch] = -1
+                    ch_failed += 1
+                    continue
+                fut = pool.submit(fetch_channel, sess, ch, timeout)
+                ch_futs[fut] = (ch, rec)
+
+            gh_meta: dict[str, tuple[SourceHealthRecord, object, list[str]]] = {}
+            for fut in as_completed(gh_futs):
+                name, rec = gh_futs[fut]
+                res = fut.result()
+                if not res.ok:
+                    rec.update_from_fetch(
+                        fetch_ok=False,
+                        status_code=res.status_code,
+                        error=res.error,
+                        timestamp=now_iso,
+                    )
+                    LOG.warning("[github:%s] فشل: %s (state=%s)", name, res.error, rec.state)
+                    gh_results[name] = []
+                    continue
+                uris = [_sanitize_raw_uri(u) for u in parse_subscription(res.text)]
+                gh_results[name] = uris
+                gh_meta[name] = (rec, res, uris)
+
+            ch_meta: dict[str, tuple[SourceHealthRecord, list[str]]] = {}
+            for fut in as_completed(ch_futs):
+                ch, rec = ch_futs[fut]
+                _h, raw_u, err = fut.result()
+                if err:
+                    ch_stats[ch] = -1
+                    ch_failed += 1
+                    rec.update_from_fetch(fetch_ok=False, error=err, timestamp=now_iso)
+                    ch_results[ch] = []
+                else:
+                    uris = [_sanitize_raw_uri(u) for u in raw_u]
+                    ch_stats[ch] = len(uris)
+                    ch_ok += 1
+                    ch_results[ch] = uris
+                    ch_meta[ch] = (rec, uris)
+
+    # Ingest in deterministic priority order: Tier-ordered GitHub sources first, then Telegram channels
+    for name in github_sources:
+        uris = gh_results.get(name, [])
+        if uris:
+            raw_pool.extend(uris)
+            per_source_uris[name] = uris
+        valid_cnt, _ = deduper.ingest_source(name, uris)
+        if name in gh_meta:
+            rec, res, _ = gh_meta[name]
+            rec.update_from_fetch(
+                fetch_ok=True,
+                status_code=res.status_code,
+                etag=res.etag,
+                last_modified=res.last_modified,
+                raw_count=len(uris),
+                valid_count=valid_cnt,
+                timestamp=now_iso,
+            )
+            if valid_cnt > 0:
+                gh_ok += 1
+
+    for ch in clean_handles:
+        uris = ch_results.get(ch, [])
+        key = f"tg:{ch}"
+        if uris:
+            raw_pool.extend(uris)
+            per_source_uris[key] = uris
+        valid_cnt, _ = deduper.ingest_source(key, uris)
+        if ch in ch_meta:
+            rec, _ = ch_meta[ch]
+            rec.update_from_fetch(
+                fetch_ok=True,
+                status_code=200,
+                raw_count=len(uris),
+                valid_count=valid_cnt,
+                timestamp=now_iso,
+            )
+
+    overlap_map = deduper.source_overlap_metrics()
+    for src_name, metrics in overlap_map.items():
+        if src_name in registry.records:
+            r = registry.records[src_name]
+            r.unique_identities = int(metrics["unique_identities"])
+            r.exclusive_identities = int(metrics["exclusive_identities"])
+            r.overlap_ratio = float(metrics["overlap_ratio"])
+
+    return CollectionTelemetry(
+        raw_uris=raw_pool,
+        unique_uris=deduper.unique_uris(),
+        channel_stats=ch_stats,
+        deduper=deduper,
+        health_registry=registry,
+        github_fetched_ok=gh_ok,
+        github_skipped_cooldown=gh_skipped,
+        channels_ok=ch_ok,
+        channels_failed=ch_failed,
+        per_source_uris=per_source_uris,
+    )
+
+
 # ───────────────────────────── البرنامج الرئيسي ─────────────────────────────
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
-        description="جمع كانفيغات VPN من قنوات تلغرام ومستودعات GitHub في ملف واحد")
+        description="جمع كانفيغات VPN من قنوات تلغرام ومستودعات GitHub في ملف واحد"
+    )
     ap.add_argument("-o", "--out", default="config.txt", help="ملف الخروج")
-    ap.add_argument("-w", "--workers", type=int, default=8, help="عدد الطلبات المتوازية")
-    ap.add_argument("--telegram", dest="telegram", action="store_true", default=True,
-                    help="تضمين قنوات تلغرام (افتراضي)")
-    ap.add_argument("--no-telegram", dest="telegram", action="store_false",
-                    help="تجاهل قنوات تلغرام")
-    ap.add_argument("--github", dest="github", action="store_true", default=True,
-                    help="تضمين مستودعات GitHub (افتراضي)")
-    ap.add_argument("--no-github", dest="github", action="store_false",
-                    help="تجاهل مستودعات GitHub")
+    ap.add_argument("-w", "--workers", type=int, default=12, help="عدد الطلبات المتوازية")
+    ap.add_argument("--telegram", dest="telegram", action="store_true", default=True)
+    ap.add_argument("--no-telegram", dest="telegram", action="store_false")
+    ap.add_argument("--github", dest="github", action="store_true", default=True)
+    ap.add_argument("--no-github", dest="github", action="store_false")
     ap.add_argument("--channels", help="ملف نصي: اسم قناة أو رابط في كل سطر")
     ap.add_argument("--sources-file", help="ملف مصادر مخصّص: «اسم URL» في كل سطر")
-    ap.add_argument("--max-per-source", type=int, default=0,
-                    help="أقصى عدد كانفيغ يُؤخذ من كل مصدر GitHub (0 = بلا حد)")
-    ap.add_argument("--unique-endpoint", action="store_true",
-                    help="إبقاء كانفيغ واحد فقط لكل host:port (ملف أصغر وأنظف)")
+    ap.add_argument("--max-per-source", type=int, default=0)
+    ap.add_argument("--unique-endpoint", action="store_true")
     ap.add_argument("--calendar", choices=("jalali", "gregorian"), default="jalali")
     ap.add_argument("--header-note", default="تحديث كل نصف ساعة")
-    ap.add_argument("--tag", default="bahrain-vpn", help="الاسم الموحّد الظاهر للمستخدم في الـ remark")
+    ap.add_argument("--tag", default=APP_REMARK_PREFIX)
 
-    # ── الفحص الحقيقي واختيار الأسرع ──
-    ap.add_argument("--test", action="store_true",
-                    help="تشغيل فحص اتصال حقيقي واختيار الأسرع (يُنزّل Xray تلقائيًا)")
-    ap.add_argument("--test-top", type=int, default=800,
-                    help="عدد الكانفيغات التي تُفحص فعليًا (بالترتيب: أفضل المصادر أولًا)")
-    ap.add_argument("--speed-top", type=int, default=300,
-                    help="عدد العُقد التي تُقاس سرعة تنزيلها")
-    ap.add_argument("--best", type=int, default=100, help="عدد الكانفيغات في ملف الأفضل")
-    ap.add_argument("--best-out", default="best.txt", help="ملف أفضل N كانفيغ")
-    ap.add_argument("--rank-by", choices=("speed", "latency"), default="speed",
-                    help="ترتيب الأفضل: السرعة (افتراضي) أو زمن التأخير")
-    ap.add_argument("--max-per-host", type=int, default=3,
-                    help="أقصى عدد عُقد من نفس المضيف في ملف الأفضل (0 = بلا حد)")
-    ap.add_argument("--test-report", default="test-report.csv",
-                    help="ملف CSV بنتائج الفحص كاملة")
-    ap.add_argument("--concurrency", type=int, default=16,
-                    help="عدد عمليات Xray المتوازية أثناء الفحص")
-    ap.add_argument("--test-timeout", type=float, default=6.0,
-                    help="مهلة محاولة الاتصال بالعقدة بالثواني (افتراضي 6)")
-    ap.add_argument("--xray", help="مسار نواة Xray (افتراضي: bin/xray أو تنزيل تلقائي)")
-    ap.add_argument("--singbox", help="مسار نواة sing-box (لـ hysteria2/tuic)")
-    ap.add_argument("--no-singbox", action="store_true",
-                    help="تعطيل فحص hysteria2/tuic عبر sing-box")
-    ap.add_argument("--no-download", action="store_true", help="منع تنزيل النوى تلقائيًا")
+    ap.add_argument("--test", action="store_true")
+    ap.add_argument("--test-top", type=int, default=800)
+    ap.add_argument("--speed-top", type=int, default=300)
+    ap.add_argument("--best", type=int, default=100)
+    ap.add_argument("--best-out", default="best.txt")
+    ap.add_argument("--rank-by", choices=("speed", "latency", "score"), default="score")
+    ap.add_argument("--max-per-host", type=int, default=3)
+    ap.add_argument("--test-report", default="test-report.csv")
+    ap.add_argument("--concurrency", type=int, default=16)
+    ap.add_argument("--test-timeout", type=float, default=6.0)
+    ap.add_argument("--xray")
+    ap.add_argument("--singbox")
+    ap.add_argument("--no-singbox", action="store_true")
+    ap.add_argument("--no-download", action="store_true")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -633,52 +820,40 @@ def main(argv: list[str] | None = None) -> int:
     all_configs: list[str] = []
     t0 = time.perf_counter()
 
-    # 1) تلغرام
     if args.telegram:
         raw = get_channels(args.channels)
         urls = channel_urls(raw)
         LOG.info("[تلغرام] %d قناة فريدة من أصل %d مُدخل", len(urls), len(raw))
-
         cfgs, ok, failed = collect_telegram(urls, args.workers)
-        LOG.info("[تلغرام] الصفحات: %d ناجحة / %d فاشلة | كانفيغ خام: %d",
-                 ok, failed, len(cfgs))
+        LOG.info("[تلغرام] الصفحات: %d ناجحة / %d فاشلة | كانفيغ خام: %d", ok, failed, len(cfgs))
         all_configs.extend(cfgs)
 
-    # 2) GitHub
     if args.github:
         sources = get_github_sources(args.sources_file)
         LOG.info("[GitHub] %d مصدر", len(sources))
-
         cfgs, stats = collect_github(sources, args.workers, args.max_per_source)
         for name, n in stats:
-            LOG.info("[GitHub] %-22s %d كانفيغ", name, n)
-        LOG.info("[GitHub] الإجمالي الخام: %d", len(cfgs))
+            LOG.info("[GitHub] %-24s %d كانفيغ", name, n)
         all_configs.extend(cfgs)
 
-    # 3) تنظيف + حذف التكرار (عبر كل المصادر)
     configs, rejected = clean(all_configs)
-    LOG.info("كانفيغ خام: %d | فريد بعد التنظيف: %d | مرفوض: %d",
-             len(all_configs), len(configs), rejected)
+    LOG.info("كانفيغ خام: %d | فريد بعد التنظيف: %d | مرفوض: %d", len(all_configs), len(configs), rejected)
 
     if args.unique_endpoint:
         configs, dropped = dedupe_by_endpoint(configs)
-        LOG.info("--unique-endpoint: حُذف %d تكرار بنفس host:port → %d كانفيغ",
-                 dropped, len(configs))
+        LOG.info("--unique-endpoint: حُذف %d تكرار بنفس host:port → %d كانفيغ", dropped, len(configs))
 
-    mix = collections.Counter(c.split("://")[0] for c in configs)
+    mix = collections.Counter(canonical_protocol(c.split("://")[0]) for c in configs)
     LOG.info("مزيج البروتوكولات: %s", dict(mix.most_common()))
 
-    # 4) حماية: لا نكتب ملفًا فارغًا فوق نسخة سليمة
     if not configs:
         LOG.error("لم يتم العثور على أي كانفيغ؛ لم يُعد كتابة الملف.")
         return 1
 
     out = Path(args.out)
     write_outputs(configs, out, args.calendar, args.header_note, args.tag)
-    LOG.info("تمت الكتابة: %s (%d سطر) في %.1f ثانية",
-             out, len(configs), time.perf_counter() - t0)
+    LOG.info("تمت الكتابة: %s (%d سطر) في %.1f ثانية", out, len(configs), time.perf_counter() - t0)
 
-    # 5) فحص حقيقي + اختيار الأسرع
     if args.test:
         import tester
 
@@ -688,13 +863,9 @@ def main(argv: list[str] | None = None) -> int:
             sbox = args.singbox or tester.ensure_singbox(allow_download=not args.no_download)
 
         if not xray and not sbox:
-            LOG.error("تعذّر تجهيز أي نواة (Xray/sing-box) → تم تخطّي الفحص. الملف الكامل مكتوب.")
+            LOG.error("تعذّر تجهيز أي نواة (Xray/sing-box) → تم تخطّي الفحص.")
             return 1
-        LOG.info("المحرّكات: Xray=%s | sing-box=%s",
-                 Path(xray).name if xray else "غير متاح",
-                 Path(sbox).name if sbox else "غير متاح")
 
-        LOG.info("بدء الفحص الحقيقي …")
         lat, best, skipped = tester.select_best(
             configs,
             xray_path=xray,
@@ -707,25 +878,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.test_report:
             n_rep = tester.write_report(lat, Path(args.test_report))
-            LOG.info("تقرير الفحص: %s (%d كانفيغ)", args.test_report, n_rep)
+            LOG.info("تقرير الفحص المحجوب الأسرار: %s (%d كانفيغ)", args.test_report, n_rep)
 
         if not best:
             LOG.error("لم تنجح أي عقدة في الفحص؛ لم يُكتب ملف الأفضل.")
             return 1
 
-        diversified = tester.limit_per_host(best, args.max_per_host)
-        if args.max_per_host and len(diversified) < len(best):
-            LOG.info("تنويع المضيفين: %d → %d عقدة (بحد %d لكل مضيف)",
-                     len(best), len(diversified), args.max_per_host)
-        best = diversified
-
+        best = tester.limit_per_host(best, args.max_per_host)
         best_out = Path(args.best_out)
         n = write_best(best, best_out, args.best, args.calendar, args.tag)
-        LOG.info("تمت الكتابة: %s (أفضل %d من %d عقدة حيّة، تخطّي %d كانفيغ غير مدعوم)",
-                 best_out, n, len(best), skipped)
+        LOG.info("تمت الكتابة: %s (أفضل %d من %d عقدة حيّة، تخطّي %d)", best_out, n, len(best), skipped)
+        # حجب الأسرار بالكامل عند الطباعة في سجلات التشغيل
         for i, r in enumerate(best[:5], 1):
-            LOG.info("  #%d %.0fms  %.0fKB/s  %s", i, r.latency_ms,
-                     r.speed_kbps, r.cfg[:60])
+            LOG.info("  #%d %.0fms  %.0fKB/s  %s", i, r.latency_ms, r.speed_kbps, redact_uri(r.cfg))
 
     return 0
 

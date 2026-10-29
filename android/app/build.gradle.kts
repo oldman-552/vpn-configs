@@ -12,11 +12,17 @@ android {
         applicationId = "com.bahrain.vpnconfigs"
         minSdk = 29
         targetSdk = 34
-        versionCode = 3
-        versionName = "2.0"
-        // النواة تُشحن كـ libsingbox.so + libhev-socks5-tunnel.so لكل معمارية
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+        versionCode = 4
+        versionName = "2.1"
+    }
+
+    // إنتاج APK مستقل خفيف لكل معمارية (arm64-v8a بحجم ~50% أقل) + نسخة شاملة للتوافق الكامل
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = true
         }
     }
 

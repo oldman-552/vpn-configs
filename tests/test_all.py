@@ -451,3 +451,367 @@ def test_write_outputs_and_best_use_bahrain_vpn_tag(tmp_path: Path):
     assert "#bahrain-vpn 1 | 42ms | 2500KB/s" in blines[0]
     assert "#bahrain-vpn 2 | 65ms | 1800KB/s" in blines[1]
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  اختبارات الأمان المتقدمة، منع SSRF، تنقيح الأسرار، الـ 5 طبقات لإزالة التكرار،
+#  التقييم المركّب L0-L6، دورة حياة المصادر، وحماية آخر نسخة صالحة
+# ═════════════════════════════════════════════════════════════════════════════
+import io
+import re
+import tarfile
+import zipfile
+import pytest
+import yaml
+
+import dedupe
+import pipeline_security
+import scoring
+
+
+def test_ssrf_and_unsafe_host_blocking():
+    blocked_urls = [
+        "http://127.0.0.1:8080/sub",
+        "https://localhost/sub.txt",
+        "http://169.254.169.254/latest/meta-data/",
+        "https://10.0.0.5/configs.txt",
+        "https://192.168.1.10/sub",
+        "https://172.16.10.2/sub",
+        "https://[::1]:8443/sub",
+        "file:///etc/passwd",
+        "ftp://1.1.1.1/sub.txt",
+        "https://user:secret@raw.githubusercontent.com/org/repo/main/sub.txt",
+    ]
+    for u in blocked_urls:
+        with pytest.raises(pipeline_security.SecurityError):
+            pipeline_security.validate_fetch_url(u, resolve_dns=False)
+
+    # فحص عناوين مضيفي البروكسي الخطرة مقابل العناوين العامة المسموحة
+    assert pipeline_security.is_unsafe_config_host("127.0.0.1") is True
+    assert pipeline_security.is_unsafe_config_host("169.254.169.254") is True
+    assert pipeline_security.is_unsafe_config_host("192.168.0.1") is True
+    assert pipeline_security.is_unsafe_config_host("10.1.2.3") is True
+    assert pipeline_security.is_unsafe_config_host("router.local") is True
+    assert pipeline_security.is_unsafe_config_host("0x7f000001") is True
+    assert pipeline_security.is_unsafe_config_host("1.1.1.1") is False
+    # RFC 5737 مسموح كعنوان وجهة في اختبارات الكونفيق المقيّدة ولكن محجوب في جلب المصادر
+    assert pipeline_security.is_unsafe_config_host("198.51.100.10") is False
+
+
+def test_safe_fetch_text_blocks_ssrf_redirect_and_caps_size():
+    class FakeResp:
+        def __init__(self, status_code, headers=None, chunks=b""):
+            self.status_code = status_code
+            self.headers = headers or {}
+            self._chunks = [chunks] if isinstance(chunks, bytes) else list(chunks)
+            self.encoding = "utf-8"
+            self.closed = False
+
+        def iter_content(self, chunk_size=65536):
+            for c in self._chunks:
+                yield c
+
+        def close(self):
+            self.closed = True
+
+    class RedirectToMetadataSession:
+        def get(self, url, **kwargs):
+            return FakeResp(302, headers={"Location": "http://169.254.169.254/latest/meta-data/"})
+
+    res = pipeline_security.safe_fetch_text(
+        RedirectToMetadataSession(),
+        "https://example.com/sub.txt",
+        resolve_dns=False,
+    )
+    assert res.ok is False
+    assert "ssrf_blocked" in res.error
+
+    # التحقق من حد الحجم الأقصى ومنع استنزاف الذاكرة
+    class OversizedSession:
+        def get(self, url, **kwargs):
+            return FakeResp(200, chunks=[b"A" * 1024, b"B" * 1024, b"C" * 1024])
+
+    oversized = pipeline_security.safe_fetch_text(
+        OversizedSession(),
+        "https://example.com/huge.txt",
+        max_bytes=1500,
+        resolve_dns=False,
+    )
+    assert oversized.ok is False
+    assert "size_cap" in oversized.error or "exceed" in oversized.error.lower()
+
+    # التحقق من الكاش التدريجي عبر ETag / 304 Not Modified
+    class EtagSession:
+        def __init__(self):
+            self.last_headers = {}
+
+        def get(self, url, headers=None, **kwargs):
+            self.last_headers = headers or {}
+            if self.last_headers.get("If-None-Match") == '"v1"':
+                return FakeResp(304, headers={"ETag": '"v1"'})
+            return FakeResp(200, headers={"ETag": '"v1"'}, chunks=b"vless://ok")
+
+    sess = EtagSession()
+    not_mod = pipeline_security.safe_fetch_text(
+        sess, "https://example.com/sub.txt", etag='"v1"', resolve_dns=False
+    )
+    assert not_mod.ok is True
+    assert not_mod.not_modified is True
+    assert sess.last_headers.get("If-None-Match") == '"v1"'
+
+
+def test_credential_redaction_and_archive_path_traversal_guard(tmp_path: Path):
+    secret_uuid = "a1b2c3d4-e5f6-4789-abcd-ef0123456789"
+    secret_pass = "SuperSecretTrojanPass99!"
+    log_msg = (
+        f"Failed node vless://{secret_uuid}@1.2.3.4:443?security=tls "
+        f"and trojan://{secret_pass}@5.6.7.8:443#tag"
+    )
+    redacted = pipeline_security.redact_text(log_msg)
+    assert secret_uuid not in redacted
+    assert secret_pass not in redacted
+    assert "***@" in redacted
+    assert "[fp:" in redacted
+    assert "1.2.3.4:443" in redacted
+
+    # اختبار منع Zip-Slip
+    zip_path = tmp_path / "evil.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("../../xray", "echo pwned")
+    with pytest.raises(pipeline_security.SecurityError, match="Path traversal"):
+        pipeline_security.safe_extract_zip_binary(zip_path, {"xray"}, tmp_path / "out" / "xray")
+
+    # اختبار منع Tar-Slip
+    tar_path = tmp_path / "evil.tar.gz"
+    with tarfile.open(tar_path, mode="w:gz") as tf:
+        info = tarfile.TarInfo(name="../sing-box")
+        payload = b"binary"
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+    with pytest.raises(pipeline_security.SecurityError, match="Path traversal"):
+        pipeline_security.safe_extract_tar_binary(tar_path, {"sing-box"}, tmp_path / "out" / "sing-box")
+
+
+def test_five_layer_deduplication_and_canonicalization():
+    # عقدتان متطابقتان وظيفيًا مع اختلاف الوسم، ترتيب المعاملات، وحالة أحرف UUID
+    u1 = "vless://AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE@Example.COM.:443?type=ws&path=%2Fws&security=tls&sni=Example.COM#Channel_A"
+    u2 = "vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@example.com:443?sni=example.com&security=tls&path=/ws&type=ws#Channel_B"
+    # عقدة ثالثة على نفس المضيف والمنفذ ولكن بمعرّف مستخدم مختلف
+    u3 = "vless://11111111-2222-3333-4444-555555555555@example.com:443?sni=example.com&security=tls&path=/ws&type=ws#AltUser"
+    # التباس hy2 مقابل hysteria2 + قفز المنافذ
+    h1 = "hy2://MyPass@198.51.100.77:443,20000-30000/?sni=cdn.example.net&insecure=0#One"
+    h2 = "hysteria2://MyPass@198.51.100.77:443?insecure=0&sni=cdn.example.net#Two"
+    # عقدة خبيثة تشير إلى شبكة داخلية (يجب رفضها)
+    evil_local = "trojan://pw@192.168.1.1:443?sni=test.com#LocalRouter"
+
+    engine = dedupe.MultiLayerDeduplicator(verified_sources={"gh:source1"})
+    engine.ingest_source("gh:source1", [u1, h1, evil_local])
+    engine.ingest_source("tg:channel2", [u2, u3, h2])
+
+    uris = engine.unique_uris()
+    assert len(uris) == 3  # (u1/u2 مدمجة) + u3 + (h1/h2 مدمجة)، وحُجبت evil_local
+    assert engine.summary.layer2_identity_duplicates >= 2
+    assert engine.summary.invalid_or_unsafe_rejected == 1
+
+    # التأكد من توحيد البروتوكول إلى hysteria2 وعدم تسرب كلمة المرور في البصمة
+    hy_rec = [r for r in engine.provenance_map().values() if r.canonical_proto == "hysteria2"][0]
+    assert hy_rec.port == 443
+    assert "MyPass" not in hy_rec.identity_id
+    assert hy_rec.corroboration_count == 2
+    assert hy_rec.verified_source_hit is True
+
+    # فحص حساب التداخل بين المصادر بدون أسرار
+    overlap = engine.source_overlap_metrics()
+    assert overlap["gh:source1"]["unique_identities"] == 2
+    assert overlap["gh:source1"]["overlap_ratio"] == 1.0  # كلاهما ظهر أيضًا في tg:channel2
+    assert overlap["tg:channel2"]["exclusive_identities"] == 1  # u3 حصرية لـ tg:channel2
+
+
+def test_scoring_longitudinal_history_and_honest_geolocation(tmp_path: Path):
+    hist_path = tmp_path / "node_history.json"
+    store = scoring.NodeHistoryStore.load(hist_path)
+
+    u_fast_stable = "vless://11111111-1111-1111-1111-111111111111@1.1.1.1:443?security=tls"
+    u_jittery_new = "vless://22222222-2222-2222-2222-222222222222@8.8.8.8:443?security=tls"
+    n1 = dedupe.parse_identity(u_fast_stable)
+    n2 = dedupe.parse_identity(u_jittery_new)
+    assert n1 is not None and n2 is not None
+
+    # محاكاة سجل تاريخي سابق عبر 4 جولات ناجحة للعقدة الأولى
+    for _ in range(4):
+        store.record_observation(
+            n1.identity_id, ok=True, latency_ms=75.0, speed_kbps=2400.0,
+            exit_country="DE", country_source="exit_trace"
+        )
+    store.save(hist_path)
+
+    reloaded = scoring.NodeHistoryStore.load(hist_path)
+    obs1 = reloaded.record_observation(
+        n1.identity_id, ok=True, latency_ms=80.0, speed_kbps=2600.0,
+        exit_country="DE", country_source="exit_trace"
+    )
+    obs2 = reloaded.record_observation(
+        n2.identity_id, ok=True, latency_ms=190.0, speed_kbps=0.0
+    )
+
+    score1, brk1 = scoring.compute_composite_score(
+        median_latency_ms=80.0, jitter_ms=4.0, probe_pass_rate=1.0, speed_kbps=2600.0,
+        runs_seen=obs1.runs_seen, runs_alive=obs1.runs_alive,
+        consecutive_alive=obs1.consecutive_alive, ema_reliability=obs1.ema_reliability,
+        corroboration_count=2, verified_source_hit=True,
+    )
+    score2, brk2 = scoring.compute_composite_score(
+        median_latency_ms=190.0, jitter_ms=95.0, probe_pass_rate=0.67, speed_kbps=0.0,
+        runs_seen=obs2.runs_seen, runs_alive=obs2.runs_alive,
+        consecutive_alive=obs2.consecutive_alive, ema_reliability=obs2.ema_reliability,
+        corroboration_count=1, verified_source_hit=False,
+    )
+    assert score1 > score2
+    assert brk1["reliability"] > brk2["reliability"]
+
+    # فحص تحديد الدولة الصادق بدون تلفيق
+    cc_hint, src_hint = scoring.infer_country_hint(f"{u_jittery_new}#🇳🇱 HintOnly", "8.8.8.8")
+    assert cc_hint == "NL"
+    assert src_hint == "remark_hint"
+
+    sn1 = scoring.ScoredNode(
+        uri=u_fast_stable, identity_id=n1.identity_id, protocol="vless",
+        canonical_protocol="vless", host=n1.host, port=n1.port, subnet_key=n1.subnet_key,
+        latency_ms=80.0, median_latency_ms=80.0, jitter_ms=4.0, probe_pass_rate=1.0,
+        speed_kbps=2600.0, exit_country="DE", country_source="exit_trace",
+        runs_seen=obs1.runs_seen, runs_alive=obs1.runs_alive,
+        consecutive_alive=obs1.consecutive_alive, ema_reliability=obs1.ema_reliability,
+        score=score1, score_breakdown=brk1,
+    )
+    sn2 = scoring.ScoredNode(
+        uri=u_jittery_new, identity_id=n2.identity_id, protocol="vless",
+        canonical_protocol="vless", host=n2.host, port=n2.port, subnet_key=n2.subnet_key,
+        latency_ms=190.0, median_latency_ms=190.0, jitter_ms=95.0, probe_pass_rate=0.67,
+        speed_kbps=0.0, exit_country=cc_hint, country_source=src_hint,
+        runs_seen=obs2.runs_seen, runs_alive=obs2.runs_alive,
+        consecutive_alive=obs2.consecutive_alive, ema_reliability=obs2.ema_reliability,
+        score=score2, score_breakdown=brk2,
+    )
+    lists = scoring.build_specialized_lists([sn2, sn1], best_n=10)
+    assert lists["best100"][0].identity_id == sn1.identity_id
+    assert len(lists["reliable"]) >= 1
+    assert len(lists["high_throughput"]) == 1
+
+
+def test_source_lifecycle_transitions(tmp_path: Path):
+    reg = scoring.SourceHealthRegistry()
+    rec = reg.get_or_create("gh:dead_repo", "github", "https://raw.githubusercontent.com/org/repo/main/sub.txt")
+    # مصدر يفشل متكررًا يتحول تلقائيًا من temporarily_failed -> degraded -> disabled
+    for _ in range(scoring.DISABLE_FAILURE_THRESHOLD):
+        rec.update_from_fetch(fetch_ok=False, status_code=404, error="HTTP 404")
+    assert rec.state == "disabled"
+    # يدخل في فترة تهدئة ولا يُفحص في كل دورة، ثم يستعيد حالته النشطة تلقائيًا عند عودته للعمل
+    rec.update_from_fetch(fetch_ok=True, status_code=200, raw_count=120, valid_count=115)
+    assert rec.state == "active"
+    assert rec.consecutive_failures == 0
+
+    state_file = tmp_path / "source_state.json"
+    reg.save_state(state_file)
+    reloaded = scoring.SourceHealthRegistry.load(state_file)
+    assert reloaded.records["gh:dead_repo"].state == "active"
+
+
+def test_build_data_protects_last_known_good_on_zero_alive(tmp_path: Path, monkeypatch):
+    dist_dir = tmp_path / "dist"
+    prev_dir = tmp_path / "prev_dist"
+    prev_dir.mkdir(parents=True)
+    # تجهيز نسخة صالحة سابقة (Last-Known-Good)
+    prev_uri = "vless://11111111-2222-3333-4444-555555555555@1.1.1.1:443?security=tls#bahrain-vpn 1 | 55ms"
+    (prev_dir / "alive.txt").write_text(prev_uri + "\n", encoding="utf-8")
+    (prev_dir / "best100.txt").write_text(prev_uri + "\n", encoding="utf-8")
+    (prev_dir / "sub.txt").write_text(
+        base64.b64encode((prev_uri + "\n").encode("utf-8")).decode("ascii") + "\n",
+        encoding="utf-8",
+    )
+    (prev_dir / "alive.json").write_text(
+        json.dumps({"generated_at": "2026-10-29T10:00:00Z", "count": 1, "servers": [{"cfg": prev_uri, "latency_ms": 55}]}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(build_data, "DIST", dist_dir)
+    monkeypatch.setattr(build_data, "PREV_DIR", prev_dir)
+
+    dead_cfg = "vless://11111111-2222-3333-4444-555555555555@1.1.1.1:443?security=tls"
+    dead_res = [tester.Result(cfg=dead_cfg, ok=False, error="timeout", engine="xray")]
+
+    eng = dedupe.MultiLayerDeduplicator()
+    eng.ingest_source("gh:test", [dead_cfg])
+    reg = scoring.SourceHealthRegistry()
+    telemetry = collector.CollectionTelemetry(
+        raw_uris=[dead_cfg],
+        unique_uris=[dead_cfg],
+        channel_stats={"ch1": 1},
+        deduper=eng,
+        health_registry=reg,
+        github_fetched_ok=1,
+        channels_ok=1,
+        per_source_uris={"gh:test": [dead_cfg]},
+    )
+
+    with (
+        patch.object(collector, "collect_with_telemetry", return_value=telemetry),
+        patch.object(tester, "ensure_xray", return_value="/usr/bin/true"),
+        patch.object(tester, "ensure_singbox", return_value="/usr/bin/true"),
+        patch.object(tester, "select_best", return_value=(dead_res, [], 0)),
+    ):
+        rc = build_data.main()
+
+    # يجب حماية ملفات المستخدمين الحية من التصفير وتسجيل degraded_mode=True
+    assert rc == 0
+    assert (dist_dir / "alive.txt").read_text(encoding="utf-8").strip() == prev_uri
+    meta = json.loads((dist_dir / "meta.json").read_text(encoding="utf-8"))
+    assert meta["degraded_mode"] is True
+
+
+def test_curated_sources_and_pinned_github_workflows():
+    repo_root = Path(__file__).resolve().parents[1]
+    sources = collector.load_sources_file(repo_root / "github_sources.txt")
+    assert len(sources) >= 20
+    urls = list(sources.values())
+    assert len(urls) == len(set(urls)), "Duplicate URLs found in github_sources.txt"
+    for name, url in sources.items():
+        assert url.startswith("https://"), f"Non-HTTPS source {name}: {url}"
+
+    # التحقق من تثبيت جميع إجراءات GitHub Actions ببصمة SHA من 40 محرفًا
+    sha_pin_re = re.compile(r"^[^@]+@[0-9a-f]{40}$")
+    wf_dir = repo_root / ".github" / "workflows"
+    wf_files = sorted(wf_dir.glob("*.yml"))
+    assert len(wf_files) >= 3
+    for wf in wf_files:
+        doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
+        assert "permissions" in doc, f"Top-level permissions missing in {wf.name}"
+        for job_name, job in (doc.get("jobs") or {}).items():
+            for step in job.get("steps") or []:
+                uses = step.get("uses")
+                if uses:
+                    assert sha_pin_re.match(uses), f"Unpinned uses '{uses}' in {wf.name}:{job_name}"
+
+
+def test_source_candidate_governance_and_discovery():
+    import source_stats
+
+    base_uris = [
+        f"vless://11111111-1111-1111-1111-{i:012d}@198.51.100.{(i % 200) + 1}:443?security=tls"
+        for i in range(1, 35)
+    ]
+    existing_ids = {dedupe.parse_identity(u).identity_id for u in base_uris}
+
+    # تغذية مكررة بنسبة 100% يجب رفضها تلقائيًا
+    dup_verdict = source_stats.evaluate_candidate_feed("\n".join(base_uris), existing_ids)
+    assert dup_verdict["decision"] in ("rejected_low_yield", "rejected_high_overlap")
+
+    # تغذية تضيف 25 عقدة حصرية جديدة تمامًا تُصنّف كـ pending_validation (وليس تفعيلًا أعمى)
+    fresh_uris = [
+        f"trojan://pass{i}@203.0.113.{(i % 200) + 1}:443?sni=example.org"
+        for i in range(1, 26)
+    ]
+    fresh_verdict = source_stats.evaluate_candidate_feed("\n".join(fresh_uris), existing_ids)
+    assert fresh_verdict["exclusive_identities"] == 25
+    assert fresh_verdict["decision"] == "pending_validation"
+
+
+

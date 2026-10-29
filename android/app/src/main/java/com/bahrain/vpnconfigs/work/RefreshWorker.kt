@@ -20,7 +20,7 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         val repoName = prefs.repo.ifBlank { Repo.DEFAULT_REPO }
         val repo = Repo(applicationContext, owner, repoName)
 
-        val res = repo.loadRemote()
+        val res = repo.loadRemote(prefs.feedProfile)
         if (res.configs.isEmpty()) return Result.retry()
         runCatching { repo.writeAll(res.configs) }
         return Result.success()
