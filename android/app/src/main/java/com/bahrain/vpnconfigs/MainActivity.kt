@@ -131,7 +131,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
 
     fun requestConnect(server: ServerItem?) {
         if (server == null) {
-            Toast.makeText(ctx, "انتظر تحميل قائمة السيرفرات أو اضغط تحديث", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, "لا توجد سيرفرات متاحة حاليًا — جارٍ تحديث القائمة", Toast.LENGTH_SHORT).show()
             vm.refresh()
             return
         }
@@ -257,9 +257,9 @@ private fun copyToClipboard(ctx: Context, text: String, toastMsg: String = "تم
 private fun copyFileContent(ctx: Context, file: File) {
     runCatching {
         val content = file.readText(Charsets.UTF_8)
-        copyToClipboard(ctx, content, "نُسخ محتوى ${file.name} للحافظة")
+        copyToClipboard(ctx, content, "تم نسخ القائمة إلى الحافظة")
     }.onFailure {
-        Toast.makeText(ctx, "تعذّرت قراءة الملف", Toast.LENGTH_SHORT).show()
+        Toast.makeText(ctx, "تعذّرت قراءة البيانات المطلوبة", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -271,8 +271,8 @@ private fun shareFile(ctx: Context, file: File) {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        ctx.startActivity(Intent.createChooser(i, "مشاركة ${file.name}"))
+        ctx.startActivity(Intent.createChooser(i, "مشاركة قائمة السيرفرات"))
     }.onFailure {
-        Toast.makeText(ctx, "تعذّرت مشاركة الملف", Toast.LENGTH_SHORT).show()
+        Toast.makeText(ctx, "تعذّرت مشاركة القائمة", Toast.LENGTH_SHORT).show()
     }
 }

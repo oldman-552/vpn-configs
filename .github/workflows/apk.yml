@@ -59,18 +59,29 @@ jobs:
         working-directory: android
         run: bash scripts/fetch-engines.sh --all
 
-      - name: Build debug & signed release APKs
+      - name: Run Android unit tests & build debug + signed release APKs
         working-directory: android
         run: |
           set -o pipefail
-          gradle --no-daemon assembleDebug assembleRelease 2>&1 | tee gradle.log || {
-            grep -E '(^e: |FAILURE:|What went wrong:|^\* |> |Manifest merger)' gradle.log | head -n 40 | while IFS= read -r line; do
+          gradle --no-daemon testReleaseUnitTest assembleDebug assembleRelease 2>&1 | tee gradle.log || {
+            grep -vE '^> Task ' gradle.log | grep -E '(^e: |FAILURE:|What went wrong:|FAILED|AssertionError|Exception)' | head -n 8 | while IFS= read -r line; do
               echo "::error::$line"
             done
             exit 1
           }
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          total = fails = errs = 0
+          for p in glob.glob("app/build/test-results/testReleaseUnitTest/*.xml"):
+              r = ET.parse(p).getroot()
+              total += int(r.attrib.get("tests", 0))
+              fails += int(r.attrib.get("failures", 0))
+              errs += int(r.attrib.get("errors", 0))
+          print(f"::notice::Android JUnit Suite: {total} tests executed, {fails} failures, {errs} errors")
+          assert total >= 6 and fails == 0 and errs == 0
+          PY
 
-      - name: Collect APKs & compute SHA-256 digests
+      - name: Collect APKs, compute SHA-256 & audit release APK resources
         run: |
           mkdir -p out
           find android/app/build/outputs/apk -name "*.apk" -exec cp {} out/ \;
@@ -78,6 +89,76 @@ jobs:
             cp out/app-universal-release.apk out/app-release.apk
           fi
           (cd out && sha256sum *.apk > SHA256SUMS.txt)
+          AAPT2=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort -V | tail -n 1)
+          BADGING=$("$AAPT2" dump badging out/app-arm64-v8a-release.apk | head -n 1)
+          if "$AAPT2" dump strings out/app-arm64-v8a-release.apk | grep -iE "oldman-552|vpn-configs|githubusercontent|jsdelivr"; then
+            echo "::error::Repository details leaked into compiled Android resources.arsc!"
+            exit 1
+          fi
+          if "$AAPT2" dump xmltree out/app-arm64-v8a-release.apk --file AndroidManifest.xml | grep -iE "oldman-552|vpn-configs|githubusercontent|jsdelivr"; then
+            echo "::error::Repository details leaked into compiled AndroidManifest.xml!"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import glob, os, re, subprocess, sys, zipfile
+          try:
+              apk = "out/app-arm64-v8a-release.apk"
+              leak_re = re.compile(rb"(oldman-552|vpn-configs|githubusercontent\.com|jsdelivr\.net)", re.I)
+              non_dex_leaks = []
+              dex_hits = 0
+              with zipfile.ZipFile(apk) as zf:
+                  entries = zf.namelist()
+                  for name in entries:
+                      if name.startswith("lib/"):
+                          continue
+                      data = zf.read(name)
+                      if name.endswith(".dex"):
+                          if leak_re.search(data):
+                              dex_hits += 1
+                      else:
+                          m = leak_re.search(data)
+                          if m:
+                              non_dex_leaks.append(f"{name}:{m.group(0).decode('latin1')}")
+              if non_dex_leaks:
+                  raise RuntimeError("Non-DEX APK resource/asset leak: " + ", ".join(non_dex_leaks))
+              class_files = glob.glob("android/app/build/tmp/kotlin-classes/release/com/bahrain/vpnconfigs/**/*.class", recursive=True)
+              ui_class_leaks = []
+              repo_saw_owner = False
+              repo_saw_cdn = False
+              str_leak_re = re.compile(r"(oldman-552|vpn-configs|githubusercontent\.com|jsdelivr\.net|best100\.txt|alive\.json)", re.I)
+              for cf in class_files:
+                  rel = os.path.relpath(cf, "android/app/build/tmp/kotlin-classes/release")
+                  raw_out = subprocess.check_output(["javap", "-v", cf], text=True, errors="ignore")
+                  out = "\n".join(l for l in raw_out.splitlines() if not l.strip().startswith("Classfile "))
+                  if rel.startswith("com/bahrain/vpnconfigs/data/Repo"):
+                      if "oldman-552" in out:
+                          repo_saw_owner = True
+                      if "jsdelivr.net" in out:
+                          repo_saw_cdn = True
+                      continue
+                  if rel.startswith("com/bahrain/vpnconfigs/util/UiMessages"):
+                      continue
+                  if any(rel.startswith(p) for p in (
+                      "com/bahrain/vpnconfigs/ui/",
+                      "com/bahrain/vpnconfigs/MainActivity",
+                      "com/bahrain/vpnconfigs/vpn/",
+                      "com/bahrain/vpnconfigs/data/Prefs",
+                  )):
+                      m = str_leak_re.search(out)
+                      if m:
+                          ui_class_leaks.append(f"{rel}->{m.group(0)}")
+              if ui_class_leaks:
+                  raise RuntimeError("UI bytecode leak: " + ", ".join(ui_class_leaks[:5]))
+              if not (repo_saw_owner and repo_saw_cdn and dex_hits >= 1):
+                  raise RuntimeError(f"Operational Repo endpoints check: owner={repo_saw_owner} cdn={repo_saw_cdn} dex_hits={dex_hits}")
+              print(f"::notice::Release APK Audit PASS | apk_entries={len(entries)} app_classes={len(class_files)} non_dex_leaks=0 ui_bytecode_leaks=0 repo_endpoints_intact=True dex_with_network_consts={dex_hits}")
+          except Exception as exc:
+              print(f"::error::APK Audit failed: {exc}")
+              sys.exit(1)
+          PY
+          echo "::notice::APK Badging: $BADGING"
+          SHA_SUMMARY=$(tr '\n' ';' < out/SHA256SUMS.txt)
+          echo "::notice::SHA256: $SHA_SUMMARY"
           ls -lh out/
           cat out/SHA256SUMS.txt
 
@@ -104,5 +185,5 @@ jobs:
           else
             gh release create "$TAG" out/*.apk out/SHA256SUMS.txt \
               --title "bahrain-vpn APK ($TAG)" \
-              --notes "تطبيق **bahrain-vpn v2.1** المتكامل للأندرويد — يتّصل مباشرة بضغطة زر مع قائمة سيرفرات حيّة محدّثة تلقائيًا، فلترة حسب الدولة، مؤشرات الاعتمادية، وسجل الاتصالات. لمعظم الهواتف الحديثة ثبّت النسخة الخفيفة \`app-arm64-v8a-release.apk\` أو النسخة الشاملة \`app-release.apk\`."
+              --notes "تطبيق **bahrain-vpn v2.3** المتكامل للأندرويد — يتّصل مباشرة بضغطة زر مع قائمة سيرفرات محدّثة تلقائيًا، ونظام ترتيب خماسي موزون (الأسرع في التنزيل، الأقل تأخيرًا، الأكثر استقرارًا، الأفضل إجمالًا، الأحدث اختبارًا). لمعظم الهواتف الحديثة ثبّت النسخة الخفيفة \`app-arm64-v8a-release.apk\` أو النسخة الشاملة \`app-release.apk\`."
           fi

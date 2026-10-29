@@ -5,6 +5,7 @@ package com.bahrain.vpnconfigs.data
 
 import android.content.Context
 import androidx.core.content.edit
+import com.bahrain.vpnconfigs.engine.ServerSortMode
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -20,15 +21,14 @@ data class ConnectionHistoryEntry(
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
-    var owner: String
-        get() = (sp.getString("owner", Repo.DEFAULT_OWNER) ?: Repo.DEFAULT_OWNER)
-            .ifBlank { Repo.DEFAULT_OWNER }
-        set(v) = sp.edit { putString("owner", v.trim().ifBlank { Repo.DEFAULT_OWNER }) }
-
-    var repo: String
-        get() = (sp.getString("repo", Repo.DEFAULT_REPO) ?: Repo.DEFAULT_REPO)
-            .ifBlank { Repo.DEFAULT_REPO }
-        set(v) = sp.edit { putString("repo", v.trim().ifBlank { Repo.DEFAULT_REPO }) }
+    init {
+        if (sp.contains("owner") || sp.contains("repo")) {
+            sp.edit {
+                remove("owner")
+                remove("repo")
+            }
+        }
+    }
 
     var feedProfile: String
         get() = (sp.getString("feed_profile", "smart") ?: "smart").ifBlank { "smart" }
@@ -55,12 +55,16 @@ class Prefs(ctx: Context) {
         set(v) = sp.edit { putInt("timeout", v.coerceIn(2, 30)) }
 
     var rankBySpeed: Boolean
-        get() = sp.getBoolean("rank_speed", false)
-        set(v) = sp.edit { putBoolean("rank_speed", v) }
+        get() = sp.getBoolean("rank_speed_v2", true)
+        set(v) = sp.edit { putBoolean("rank_speed_v2", v) }
 
     var sortMode: String
-        get() = (sp.getString("sort_mode", "REAL_DELAY") ?: "REAL_DELAY").ifBlank { "REAL_DELAY" }
-        set(v) = sp.edit { putString("sort_mode", v.trim().ifBlank { "REAL_DELAY" }) }
+        get() = ServerSortMode.fromKey(sp.getString("sort_mode_v2", ServerSortMode.DEFAULT.key)).key
+        set(v) = sp.edit { putString("sort_mode_v2", ServerSortMode.fromKey(v).key) }
+
+    var lastRefreshWallMs: Long
+        get() = sp.getLong("last_refresh_ms", 0L)
+        set(v) = sp.edit { putLong("last_refresh_ms", v.coerceAtLeast(0L)) }
 
     var autoRefresh: Boolean
         get() = sp.getBoolean("auto_refresh", true)

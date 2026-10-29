@@ -1,6 +1,6 @@
 // =====================================================================
-// RefreshWorker.kt — تحديث دوري للقائمة الحيّة فقط (بلا فحص، توفيرًا للبطارية).
-// الفحص الحقيقي يبقى بزر يدوي لأن نتائجه تعتمد على شبكتك لحظة التشغيل.
+// RefreshWorker.kt — تحديث دوري تلقائي لقائمة السيرفرات في الخلفية
+// مع إعادة المحاولة التلقائية عند تعذّر الاتصال بالإنترنت.
 // =====================================================================
 package com.bahrain.vpnconfigs.work
 
@@ -16,12 +16,12 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         val prefs = Prefs(applicationContext)
         if (!prefs.autoRefresh) return Result.success()
 
-        val owner = prefs.owner.ifBlank { Repo.DEFAULT_OWNER }
-        val repoName = prefs.repo.ifBlank { Repo.DEFAULT_REPO }
-        val repo = Repo(applicationContext, owner, repoName)
-
+        val repo = Repo(applicationContext)
         val res = repo.loadRemote(prefs.feedProfile)
-        if (res.configs.isEmpty()) return Result.retry()
+        if (res.configs.isEmpty() || res.fromCacheFallback || res.error != null) {
+            return Result.retry()
+        }
+        prefs.lastRefreshWallMs = System.currentTimeMillis()
         runCatching { repo.writeAll(res.configs) }
         return Result.success()
     }

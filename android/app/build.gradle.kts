@@ -12,8 +12,8 @@ android {
         applicationId = "com.bahrain.vpnconfigs"
         minSdk = 29
         targetSdk = 34
-        versionCode = 5
-        versionName = "2.2"
+        versionCode = 6
+        versionName = "2.3"
     }
 
     // إنتاج APK مستقل خفيف لكل معمارية (arm64-v8a بحجم ~50% أقل) + نسخة شاملة للتوافق الكامل
@@ -54,9 +54,26 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions {
+        jvmTarget = "17"
+        freeCompilerArgs += listOf(
+            "-module-name", "bahrain_vpn_app",
+            "-Xno-source-debug-extension",
+        )
+    }
 
     buildFeatures { compose = true }
+
+    composeCompiler {
+        includeSourceInformation = false
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
 
     lint {
         disable += "ExpiredTargetSdkVersion"
@@ -69,7 +86,11 @@ android {
             useLegacyPackaging = true
             keepDebugSymbols += "**/*.so"
         }
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/*.kotlin_module"
+            excludes += "DebugProbesKt.bin"
+        }
     }
 }
 
@@ -87,4 +108,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("org.robolectric:robolectric:4.13")
 }

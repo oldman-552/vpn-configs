@@ -83,6 +83,7 @@ class Tester(private val ctx: Context) {
     suspend fun testSingle(
         cfg: String,
         timeoutSec: Int = 5,
+        measureSpeed: Boolean = true,
         dnsServer: String = "1.1.1.1",
         useDoh: Boolean = false,
     ): TestResult = withContext(Dispatchers.IO) {
@@ -91,7 +92,7 @@ class Tester(private val ctx: Context) {
         val port = pool.receive()
         pool.close()
         runInterruptible(Dispatchers.IO) {
-            engine.test(cfg, port, timeoutSec, measureSpeed = false, dnsServer = dnsServer, useDoh = useDoh)
+            engine.test(cfg, port, timeoutSec, measureSpeed = measureSpeed, dnsServer = dnsServer, useDoh = useDoh)
         }
     }
 
@@ -200,8 +201,13 @@ class Tester(private val ctx: Context) {
             }
         }
 
+        val nowCompletedMs = System.currentTimeMillis()
         val merged = okList.map { r ->
-            r.copy(speedKbps = speedMap[r.cfg] ?: 0.0)
+            val spd = speedMap[r.cfg] ?: 0.0
+            r.copy(
+                speedKbps = spd,
+                testedAtMs = if (spd > 0.0) nowCompletedMs else r.testedAtMs,
+            )
         }
         if (rankBySpeed) {
             merged.sortedWith(
