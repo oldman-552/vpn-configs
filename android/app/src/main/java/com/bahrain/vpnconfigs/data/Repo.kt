@@ -89,7 +89,7 @@ class Repo(private val ctx: Context, private val owner: String, private val repo
                 connectTimeout = timeoutMs
                 readTimeout = timeoutMs
                 requestMethod = "GET"
-                setRequestProperty("User-Agent", "bahrain-vpn/2.1")
+                setRequestProperty("User-Agent", "bahrain-vpn/2.2")
                 if (!etag.isNullOrBlank()) {
                     setRequestProperty("If-None-Match", etag)
                 }

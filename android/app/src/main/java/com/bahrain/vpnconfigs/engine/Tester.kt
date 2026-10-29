@@ -29,12 +29,12 @@ class Tester(private val ctx: Context) {
 
     val engineAvailable: Boolean get() = engine.isAvailable
 
-    /** توزيع عيّنة متوازنة بين البروتوكولات (round-robin) بدل أخذ أول N فقط. */
+    /** توزيع عيّنة متوازنة بين البروتوكولات الموحّدة (round-robin) بدل أخذ أول N فقط. */
     fun pickBalanced(configs: List<String>, limit: Int): List<String> {
         if (limit <= 0 || configs.isEmpty()) return emptyList()
         val groups = LinkedHashMap<String, MutableList<String>>()
         configs.forEach { c ->
-            groups.getOrPut(Converters.schemeOf(c)) { mutableListOf() }.add(c)
+            groups.getOrPut(Converters.protocolBadge(c)) { mutableListOf() }.add(c)
         }
         val idx = groups.keys.associateWith { 0 }.toMutableMap()
         val out = ArrayList<String>(minOf(limit, configs.size))
@@ -142,7 +142,7 @@ class Tester(private val ctx: Context) {
                         done++
                         if (r.ok) alive++
                         if (done % 4 == 0 || done == candidates.size) {
-                            snap = TestProgress("فحص الاتصال", done, candidates.size, alive)
+                            snap = TestProgress("قياس Real Delay", done, candidates.size, alive)
                         }
                     }
                     snap?.let { onProgress(it) }
@@ -151,42 +151,54 @@ class Tester(private val ctx: Context) {
             }.awaitAll()
         }
 
-        val okList = firstStage.filter { it.ok }.sortedBy { it.latencyMs }
+        ports.close()
+
+        val okList = firstStage.filter { it.ok && it.latencyMs > 0L }.sortedBy { it.latencyMs }
         if (okList.isEmpty()) return@withContext emptyList()
 
-        // ── المرحلة 2: قياس السرعة ──
+        // ── المرحلة 2: قياس السرعة الفعلي (توازي مضبوط ≤ 3 لمنع تشبّع الشبكة وتضخم التأخير) ──
         val speedPool = okList.take(maxOf(speedTop, 0))
         val speedMap = HashMap<String, Double>()
 
         if (speedPool.isNotEmpty()) {
+            val speedConc = minOf(conc, 3)
+            val speedPorts = allocatePortPool(speedConc, basePort = 21600)
             var sdone = 0
             onProgress(TestProgress("قياس السرعة", 0, speedPool.size, 0))
-            coroutineScope {
-                speedPool.map { res ->
-                    async {
-                        ensureActive()
-                        val port = ports.receive()
-                        val r = try {
+            try {
+                coroutineScope {
+                    speedPool.map { res ->
+                        async {
                             ensureActive()
-                        runInterruptible(Dispatchers.IO) {
-                            engine.test(res.cfg, port, timeoutSec, measureSpeed = true, dnsServer = dnsServer, useDoh = useDoh)
+                            val port = speedPorts.receive()
+                            val kbps = try {
+                                ensureActive()
+                                runInterruptible(Dispatchers.IO) {
+                                    engine.measureSpeedOnly(
+                                        res.cfg,
+                                        port,
+                                        timeoutSec + 2,
+                                        dnsServer = dnsServer,
+                                        useDoh = useDoh,
+                                    )
+                                }
+                            } finally {
+                                speedPorts.trySend(port)
+                            }
+                            var snap: TestProgress? = null
+                            synchronized(this@Tester) {
+                                if (kbps > 0.0) speedMap[res.cfg] = kbps
+                                sdone++
+                                snap = TestProgress("قياس السرعة", sdone, speedPool.size, speedMap.size)
+                            }
+                            snap?.let { onProgress(it) }
                         }
-                        } finally {
-                            ports.trySend(port)
-                        }
-                        var snap: TestProgress? = null
-                        synchronized(this@Tester) {
-                            if (r.ok && r.speedKbps > 0) speedMap[res.cfg] = r.speedKbps
-                            sdone++
-                            snap = TestProgress("قياس السرعة", sdone, speedPool.size, speedMap.size)
-                        }
-                        snap?.let { onProgress(it) }
-                    }
-                }.awaitAll()
+                    }.awaitAll()
+                }
+            } finally {
+                speedPorts.close()
             }
         }
-
-        ports.close()
 
         val merged = okList.map { r ->
             r.copy(speedKbps = speedMap[r.cfg] ?: 0.0)
@@ -198,7 +210,10 @@ class Tester(private val ctx: Context) {
                     .thenBy { it.latencyMs }
             )
         } else {
-            merged.sortedBy { it.latencyMs }
+            merged.sortedWith(
+                compareBy<TestResult> { it.latencyMs }
+                    .thenByDescending { it.speedKbps }
+            )
         }
     }
 }

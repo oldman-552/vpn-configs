@@ -821,5 +821,27 @@ def test_tester_context_manager_cleans_tempdir():
     assert not tmp_dir.exists()
 
 
+def test_http_via_socks_measures_real_delay_excluding_cold_handshake(monkeypatch):
+    resp = b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
+    socks_port, http_port, stop_evt = _start_mock_socks_and_http(resp, hold_open_sec=0.1)
+    real_open = tester._open_socks_stream
+
+    def slow_cold_open(port, host, dst_port, use_tls, timeout):
+        time.sleep(0.35)  # يحاكي زمن تأسيس النفق البارد + DNS + TLS
+        return real_open(port, host, dst_port, use_tls, timeout)
+
+    monkeypatch.setattr(tester, "_open_socks_stream", slow_cold_open)
+    try:
+        status, real_delay_ms, _ = tester.http_via_socks(
+            socks_port, f"http://example.com:{http_port}/generate_204", timeout=3.0
+        )
+        assert status == 204
+        # يجب أن يعكس Real Delay زمن رحلة HTTP الصافي بعد تأسيس الجلسة وليس 350ms+
+        assert real_delay_ms < 120.0, f"Real Delay شمل مصافحة التأسيس الباردة: {real_delay_ms:.1f}ms"
+    finally:
+        stop_evt.set()
+
+
+
 
 
