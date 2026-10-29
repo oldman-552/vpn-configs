@@ -17,6 +17,7 @@ data class HttpProbe(
     val status: Int,
     val elapsedMs: Long,
     val bytes: Long,
+    val bodyText: String = "",
 )
 
 object Socks {
@@ -30,6 +31,7 @@ object Socks {
         url: String,
         timeoutMs: Int,
         maxBytes: Long = 0,
+        captureText: Boolean = false,
     ): HttpProbe {
         val uri = java.net.URI(url)
         val host = uri.host ?: throw IllegalArgumentException("Invalid URL host: $url")
@@ -132,15 +134,20 @@ object Socks {
             }
 
             val buf = ByteArray(16 * 1024)
+            val captured = if (captureText) ByteArrayOutputStream() else null
             var read = 0L
             while (read < limit) {
                 val n = input.read(buf, 0, minOf(buf.size.toLong(), limit - read).toInt())
                 if (n <= 0) break
+                if (captured != null && captured.size() < 8192) {
+                    captured.write(buf, 0, minOf(n, 8192 - captured.size()))
+                }
                 read += n
             }
 
             val elapsed = (System.nanoTime() - started) / 1_000_000
-            return HttpProbe(status, elapsed, read)
+            val text = captured?.toString(Charsets.UTF_8.name()) ?: ""
+            return HttpProbe(status, elapsed, read, text)
         } finally {
             try { sslSock?.close() } catch (_: Exception) { }
             try { raw.close() } catch (_: Exception) { }

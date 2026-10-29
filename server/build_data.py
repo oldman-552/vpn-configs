@@ -112,24 +112,32 @@ def main() -> int:
     # ترتيب: الأقل تأخيرًا أولًا
     alive.sort(key=lambda r: r.latency_ms)
 
-    # ── 4) بناء المخرجات ──
+    # ── 4) بناء المخرجات باسم موحّد bahrain-vpn ──
     DIST.mkdir(parents=True, exist_ok=True)
 
-    alive_cfgs = [r.cfg for r in alive]
-    write_atomic(DIST / "alive.txt", "\n".join(alive_cfgs) + "\n")
+    alive_named = [
+        collector.set_uri_remark(r.cfg, f"bahrain-vpn {i} | {r.latency_ms:.0f}ms")
+        for i, r in enumerate(alive, 1)
+    ]
+    write_atomic(DIST / "alive.txt", "\n".join(alive_named) + "\n")
 
     write_atomic(
         DIST / "sub.txt",
-        base64.b64encode("\n".join(alive_cfgs).encode("utf-8")).decode("ascii") + "\n",
+        base64.b64encode("\n".join(alive_named).encode("utf-8")).decode("ascii") + "\n",
     )
 
     write_atomic(DIST / "alive.json", json.dumps({
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "count": len(alive),
         "servers": [
-            {"cfg": r.cfg, "latency_ms": round(r.latency_ms),
-             "engine": r.engine, "proto": r.cfg.split("://", 1)[0]}
-            for r in alive
+            {
+                "name": f"bahrain-vpn {i}",
+                "cfg": collector.set_uri_remark(r.cfg, f"bahrain-vpn {i} | {r.latency_ms:.0f}ms"),
+                "latency_ms": round(r.latency_ms),
+                "engine": r.engine,
+                "proto": r.cfg.split("://", 1)[0],
+            }
+            for i, r in enumerate(alive, 1)
         ],
     }, ensure_ascii=False) + "\n")
 
@@ -146,7 +154,7 @@ def main() -> int:
 
     stamp = time.strftime("%b-%d | %H:%M", time.gmtime())
     lines = [
-        f"{r.cfg}#{i} | {r.latency_ms:.0f}ms | {r.engine} | {stamp}"
+        collector.set_uri_remark(r.cfg, f"bahrain-vpn {i} | {r.latency_ms:.0f}ms | {stamp}")
         for i, r in enumerate(best, 1)
     ]
     write_atomic(DIST / "best100.txt", "\n".join(lines) + "\n")

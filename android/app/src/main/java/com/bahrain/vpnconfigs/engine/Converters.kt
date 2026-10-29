@@ -9,14 +9,18 @@ import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLDecoder
+import java.util.concurrent.ConcurrentHashMap
 
 object Converters {
 
-    /** البروتوكولات التي يستطيع التطبيق فحصها عبر sing-box. */
+    /** البروتوكولات التي يستطيع التطبيق فحصها وتشغيلها عبر sing-box. */
     val SUPPORTED = setOf("vless", "vmess", "trojan", "ss", "hysteria2", "hy2", "tuic")
 
     private val INVISIBLE_RE = Regex("[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF]+")
     private val WS_ED_RE = Regex("^(.*?)\\?ed=(\\d+)$")
+
+    private data class MetaCache(val supported: Boolean, val host: String, val endpoint: String)
+    private val metaCache = ConcurrentHashMap<String, MetaCache>()
 
     fun cleanUri(raw: String): String =
         raw.replace("&amp;", "&")
@@ -27,7 +31,36 @@ object Converters {
 
     fun schemeOf(cfg: String): String = cleanUri(cfg).substringBefore("://", "").lowercase()
 
-    fun isSupported(cfg: String): Boolean = schemeOf(cfg) in SUPPORTED
+    private fun metaOf(cfg: String): MetaCache {
+        val cleaned = cleanUri(cfg)
+        metaCache[cleaned]?.let { return it }
+        val ob = toOutbound(cleaned)
+        val supported = ob != null
+        val host = ob?.optString("server", "")?.lowercase() ?: ""
+        val endpoint = if (ob != null) {
+            val srv = ob.optString("server")
+            val port = if (ob.has("server_port")) {
+                ob.optInt("server_port").toString()
+            } else {
+                ob.optJSONArray("server_ports")?.optString(0)?.replace(':', '-') ?: "443"
+            }
+            "$srv:$port"
+        } else {
+            runCatching {
+                val u = Uri.parse(cleaned)
+                val h = stripBrackets(u.host)
+                val p = u.port.takeIf { it > 0 } ?: 443
+                if (h.isNotBlank()) "$h:$p" else "—"
+            }.getOrDefault("—")
+        }
+        val entry = MetaCache(supported, host, endpoint)
+        if (metaCache.size > 4096) metaCache.clear()
+        metaCache[cleaned] = entry
+        return entry
+    }
+
+    /** يتحقّق فعليًا من قابلية تحويل الكانفيغ بالكامل إلى outbound صالح لـ sing-box (وليس المخطط فقط). */
+    fun isSupported(cfg: String): Boolean = schemeOf(cfg) in SUPPORTED && metaOf(cfg).supported
 
     /** outbound جاهز لـ sing-box، أو null إذا كان غير مدعوم/غير صالح. */
     fun toOutbound(cfg: String): JSONObject? = try {
@@ -47,13 +80,14 @@ object Converters {
 
     // ───────────────────────── أدوات ─────────────────────────
     private fun q(u: Uri): Map<String, String> = try {
-        u.queryParameterNames.associateWith { u.getQueryParameter(it) ?: "" }
+        parseQueryString(u.encodedQuery ?: "")
     } catch (_: Exception) {
         emptyMap()
     }
 
+    /** فكّ ترميز النسبة المئوية (%XX) وفق RFC 3986 دون إفساد الرمز '+' إلى مسافة. */
     private fun dec(s: String?): String =
-        try { URLDecoder.decode(s ?: "", "UTF-8") } catch (_: Exception) { s ?: "" }
+        try { URLDecoder.decode((s ?: "").replace("+", "%2B"), "UTF-8") } catch (_: Exception) { s ?: "" }
 
     private fun stripBrackets(host: String?): String =
         (host ?: "").trim().removeSurrounding("[", "]")
@@ -161,7 +195,7 @@ object Converters {
         if (host.isBlank()) return null
         val port = u.port.takeIf { it > 0 } ?: 443
         if (!validPort(port)) return null
-        val uuid = dec(u.userInfo?.substringBefore(":")).trim()
+        val uuid = dec(u.encodedUserInfo?.substringBefore(":")).trim()
         if (uuid.isBlank()) return null
 
         val ob = JSONObject()
@@ -250,7 +284,7 @@ object Converters {
         if (unsupportedTransport(net)) return null
         val host = stripBrackets(u.host)
         val port = u.port.takeIf { it > 0 } ?: 443
-        val pass = dec(u.userInfo?.substringBefore(":"))
+        val pass = dec(u.encodedUserInfo?.substringBefore(":"))
         if (host.isBlank() || pass.isEmpty() || !validPort(port)) return null
 
         val ob = JSONObject()
@@ -439,7 +473,8 @@ object Converters {
         val q = q(u)
         val host = stripBrackets(u.host)
         val port = u.port.takeIf { it > 0 } ?: 443
-        val uuid = dec(u.userInfo?.substringBefore(":")).trim()
+        val rawUser = u.encodedUserInfo ?: ""
+        val uuid = dec(rawUser.substringBefore(":")).trim()
         if (host.isBlank() || uuid.isBlank() || !validPort(port)) return null
 
         return JSONObject()
@@ -447,34 +482,65 @@ object Converters {
             .put("server", host)
             .put("server_port", port)
             .put("uuid", uuid)
-            .put("password", dec(u.userInfo?.substringAfter(":", "") ?: ""))
+            .put("password", dec(rawUser.substringAfter(":", "")))
             .put("congestion_control", q["congestion_control"]?.ifBlank { "bbr" } ?: "bbr")
             .put("udp_relay_mode", q["udp_relay_mode"]?.ifBlank { "native" } ?: "native")
             .put("tls", tlsBlock(host, q, listOf("h3")))
     }
 
-    /** استخراج اسم المضيف لتنويع النتائج. */
-    fun hostOf(cfg: String): String =
-        toOutbound(cfg)?.optString("server", "")?.lowercase() ?: ""
+    /** استخراج اسم المضيف لتنويع النتائج (مع كاش سريع). */
+    fun hostOf(cfg: String): String = metaOf(cfg).host
 
-    /** اسم مختصر للعرض (المضيف:المنفذ). */
-    fun endpointLabel(cfg: String): String = try {
-        val ob = toOutbound(cfg)
-        if (ob != null) {
-            val srv = ob.optString("server")
-            val port = if (ob.has("server_port")) {
-                ob.optInt("server_port").toString()
-            } else {
-                ob.optJSONArray("server_ports")?.optString(0)?.replace(':', '-') ?: "443"
+    /** اسم مختصر للعرض (المضيف:المنفذ) مع كاش سريع. */
+    fun endpointLabel(cfg: String): String = metaOf(cfg).endpoint
+
+    /** شارة البروتوكول المختصرة للعرض في الواجهة. */
+    fun protocolBadge(cfg: String): String = when (schemeOf(cfg)) {
+        "hysteria2", "hy2" -> "HY2"
+        "vless" -> "VLESS"
+        "vmess" -> "VMESS"
+        "trojan" -> "TROJAN"
+        "ss" -> "SS"
+        "tuic" -> "TUIC"
+        else -> schemeOf(cfg).uppercase().ifBlank { "VPN" }
+    }
+
+    /**
+     * تسمية الكانفيغ باسم موحّد (مثل "bahrain-vpn 1 | 45ms") مع مراعاة بنية كل بروتوكول:
+     * - vmess:// يتم تحديث حقل "ps" داخل JSON المرمّز بـ Base64 بدون إضافة #fragment خارجي.
+     * - بقية البروتوكولات يتم إلحاق #{label} بعد إزالة أي وسم سابق.
+     */
+    fun namedUri(cfg: String, label: String): String {
+        val cleaned = cleanUri(cfg)
+        if (schemeOf(cleaned) == "vmess") {
+            return try {
+                val payload = cleaned.removePrefix("vmess://").substringBefore("?")
+                val j = JSONObject(String(b64(payload), Charsets.UTF_8))
+                j.put("ps", label)
+                val enc = Base64.encodeToString(
+                    j.toString().toByteArray(Charsets.UTF_8),
+                    Base64.NO_WRAP,
+                )
+                "vmess://$enc"
+            } catch (_: Exception) {
+                cleaned
             }
-            "$srv:$port"
-        } else {
-            val u = Uri.parse(cleanUri(cfg))
-            val h = stripBrackets(u.host)
-            val p = u.port.takeIf { it > 0 } ?: 443
-            if (h.isNotBlank()) "$h:$p" else "—"
         }
-    } catch (_: Exception) {
-        "—"
+        return "$cleaned#$label"
+    }
+
+    /** قراءة الوسم النصي (remark / ps) من رابط الكانفيغ إن وُجد. */
+    fun extractRemark(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.lowercase().startsWith("vmess://") && !trimmed.contains("#")) {
+            return try {
+                val payload = cleanUri(trimmed).removePrefix("vmess://").substringBefore("?")
+                val j = JSONObject(String(b64(payload), Charsets.UTF_8))
+                j.optString("ps", "")
+            } catch (_: Exception) {
+                ""
+            }
+        }
+        return dec(trimmed.substringAfter("#", "")).trim()
     }
 }

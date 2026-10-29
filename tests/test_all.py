@@ -392,7 +392,62 @@ def test_build_data_pipeline(tmp_path: Path, monkeypatch):
     assert meta["alive"] == 2
     assert meta["unique_clean"] == 3
     alive_lines = (dist / "alive.txt").read_text(encoding="utf-8").strip().splitlines()
-    # الأقل تأخيرًا (85ms) يجب أن يكون الأول
-    assert alive_lines[0] == sample_cfgs[1]
+    # الأقل تأخيرًا (85ms) يجب أن يكون الأول ويحمل الاسم الموحّد bahrain-vpn
+    assert alive_lines[0] == f"{sample_cfgs[1]}#bahrain-vpn 1 | 85ms"
+    assert alive_lines[1] == f"{sample_cfgs[0]}#bahrain-vpn 2 | 120ms"
+    sub_decoded = base64.b64decode((dist / "sub.txt").read_text(encoding="utf-8").strip()).decode("utf-8")
+    assert "bahrain-vpn 1" in sub_decoded and "bahrain-vpn 2" in sub_decoded
     decomp = gzip.decompress((dist / "all.txt.gz").read_bytes()).decode("utf-8").strip().splitlines()
     assert len(decomp) == 3
+
+
+def test_set_uri_remark_bahrain_vpn_across_protocols():
+    # VLESS / HY2 / Trojan: يضيف #bahrain-vpn ... بعد حذف أي وسم قديم
+    v = collector.set_uri_remark("vless://11111111-2222-3333-4444-555555555555@1.1.1.1:443?security=tls#OLD_CHANNEL", "bahrain-vpn 1")
+    assert v.endswith("#bahrain-vpn 1")
+    assert "OLD_CHANNEL" not in v
+
+    # VMess: يحدّث حقل ps داخل JSON المرمّز بـ base64 دون إلحاق #fragment خارجي
+    raw_vmess = base64.b64encode(json.dumps({
+        "v": "2", "ps": "SpamAdChannel", "add": "4.4.4.4", "port": "443",
+        "id": "11111111-2222-3333-4444-555555555555", "aid": "0", "net": "ws", "tls": "tls",
+    }).encode("utf-8")).decode("ascii")
+    m = collector.set_uri_remark(f"vmess://{raw_vmess}#old", "bahrain-vpn 2 | 40ms")
+    assert "#" not in m
+    decoded_vmess = json.loads(base64.b64decode(m[len("vmess://"):]).decode("utf-8"))
+    assert decoded_vmess["ps"] == "bahrain-vpn 2 | 40ms"
+    assert tester.to_outbound(m)["settings"]["vnext"][0]["address"] == "4.4.4.4"
+
+    # SSR: يحدّث معامل remarks داخل الحمولة المرمّزة بـ base64url دون إلحاق #fragment
+    raw_ssr = base64.urlsafe_b64encode(
+        b"5.5.5.5:8388:origin:aes-256-cfb:plain:cGFzcw/?obfsparam=&remarks=T0xE"
+    ).decode("ascii").rstrip("=")
+    s = collector.set_uri_remark(f"ssr://{raw_ssr}", "bahrain-vpn 3")
+    assert "#" not in s
+    dec_ssr = collector.b64_decode(s[len("ssr://"):])
+    assert dec_ssr is not None and "remarks=" in dec_ssr
+
+
+def test_write_outputs_and_best_use_bahrain_vpn_tag(tmp_path: Path):
+    cfgs = [
+        "vless://11111111-2222-3333-4444-555555555555@1.1.1.1:443?security=tls",
+        "trojan://pass+word@2.2.2.2:443?sni=example.com",
+    ]
+    out_cfg = tmp_path / "config.txt"
+    collector.write_outputs(cfgs, out_cfg, "gregorian", "تحديث", "bahrain-vpn")
+    lines = out_cfg.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 2
+    assert "#bahrain-vpn 1 |" in lines[0]
+    assert "#bahrain-vpn 2 |" in lines[1]
+
+    best_cfg = tmp_path / "best.txt"
+    results = [
+        tester.Result(cfg=cfgs[0], ok=True, latency_ms=42.0, speed_kbps=2500.0),
+        tester.Result(cfg=cfgs[1], ok=True, latency_ms=65.0, speed_kbps=1800.0),
+    ]
+    n = collector.write_best(results, best_cfg, 10, "gregorian", "bahrain-vpn")
+    assert n == 2
+    blines = best_cfg.read_text(encoding="utf-8").strip().splitlines()
+    assert "#bahrain-vpn 1 | 42ms | 2500KB/s" in blines[0]
+    assert "#bahrain-vpn 2 | 65ms | 1800KB/s" in blines[1]
+

@@ -1,6 +1,7 @@
-# نوى الفحص (تُنزَّل آليًا بالحجم ~80MB)
+# نوى الفحص والاتصال (تُنزَّل آليًا عبر fetch-engines.sh)
 bin/
 android/app/src/main/jniLibs/
+android/app/libs/
 android/.gradle/
 android/build/
 android/app/build/

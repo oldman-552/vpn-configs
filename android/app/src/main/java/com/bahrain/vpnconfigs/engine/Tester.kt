@@ -80,6 +80,21 @@ class Tester(private val ctx: Context) {
         return pool
     }
 
+    suspend fun testSingle(
+        cfg: String,
+        timeoutSec: Int = 5,
+        dnsServer: String = "1.1.1.1",
+        useDoh: Boolean = false,
+    ): TestResult = withContext(Dispatchers.IO) {
+        if (!engine.isAvailable) return@withContext TestResult(cfg, error = "engine-missing")
+        val pool = allocatePortPool(1, basePort = 22500)
+        val port = pool.receive()
+        pool.close()
+        runInterruptible(Dispatchers.IO) {
+            engine.test(cfg, port, timeoutSec, measureSpeed = false, dnsServer = dnsServer, useDoh = useDoh)
+        }
+    }
+
     /**
      * الفحص الكامل مع مجمّع منافذ آمن ضد التصادم ودعم الإيقاف الفوري.
      * @return قائمة مرتّبة (الأفضل أولًا) بالنتائج الناجحة فقط.
@@ -91,6 +106,8 @@ class Tester(private val ctx: Context) {
         concurrency: Int,
         timeoutSec: Int,
         rankBySpeed: Boolean,
+        dnsServer: String = "1.1.1.1",
+        useDoh: Boolean = false,
         onProgress: suspend (TestProgress) -> Unit = {},
     ): List<TestResult> = withContext(Dispatchers.IO) {
         if (!engine.isAvailable) return@withContext emptyList()
@@ -115,7 +132,7 @@ class Tester(private val ctx: Context) {
                     val r = try {
                         ensureActive()
                         runInterruptible(Dispatchers.IO) {
-                            engine.test(cfg, port, timeoutSec, measureSpeed = false)
+                            engine.test(cfg, port, timeoutSec, measureSpeed = false, dnsServer = dnsServer, useDoh = useDoh)
                         }
                     } finally {
                         ports.trySend(port)
@@ -151,9 +168,9 @@ class Tester(private val ctx: Context) {
                         val port = ports.receive()
                         val r = try {
                             ensureActive()
-                            runInterruptible(Dispatchers.IO) {
-                                engine.test(res.cfg, port, timeoutSec, measureSpeed = true)
-                            }
+                        runInterruptible(Dispatchers.IO) {
+                            engine.test(res.cfg, port, timeoutSec, measureSpeed = true, dnsServer = dnsServer, useDoh = useDoh)
+                        }
                         } finally {
                             ports.trySend(port)
                         }
