@@ -137,10 +137,23 @@ jobs:
             exit 1
           fi
           cp "$ADMIN_SRC" out/app-admin-release.apk
-          (cd out && sha256sum *.apk > SHA256SUMS.txt)
 
           AAPT2=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort -V | tail -n 1)
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+
+          for apk_file in out/*.apk; do
+            "$APKSIGNER" sign \
+              --ks "$KEYSTORE_PATH" \
+              --ks-pass "env:KEYSTORE_PASSWORD" \
+              --ks-key-alias "$KEY_ALIAS" \
+              --key-pass "env:KEY_PASSWORD" \
+              --v1-signing-enabled true \
+              --v2-signing-enabled true \
+              --v3-signing-enabled true \
+              "$apk_file"
+          done
+          (cd out && sha256sum *.apk > SHA256SUMS.txt)
+
           USER_BADGING=$("$AAPT2" dump badging out/app-arm64-v8a-release.apk | head -n 1)
           ADMIN_BADGING=$("$AAPT2" dump badging out/app-admin-release.apk | head -n 1)
 
@@ -153,8 +166,8 @@ jobs:
             exit 1
           fi
 
-          USER_SIG_INFO=$("$APKSIGNER" verify --verbose --print-certs out/app-arm64-v8a-release.apk)
-          ADMIN_SIG_INFO=$("$APKSIGNER" verify --verbose --print-certs out/app-admin-release.apk)
+          USER_SIG_INFO=$("$APKSIGNER" verify --min-sdk-version 24 --verbose --print-certs out/app-arm64-v8a-release.apk)
+          ADMIN_SIG_INFO=$("$APKSIGNER" verify --min-sdk-version 24 --verbose --print-certs out/app-admin-release.apk)
           if echo "$USER_SIG_INFO" | grep -qi "Android Debug"; then
             echo "::error::User Release APK must NOT be signed with Android Debug certificate!"
             exit 1
