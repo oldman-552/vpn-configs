@@ -433,29 +433,31 @@ class ClientDatabase private constructor(ctx: Context) :
         totalUpBytes: Long = 0L,
         country: String = "",
         failureReason: String = "",
-    ) = synchronized(lock) {
+    ) {
         if (rowId <= 0L) return
-        val db = writableDatabase
-        val startMs = db.rawQuery(
-            "SELECT connected_at_ms FROM connection_history WHERE id = ?",
-            arrayOf(rowId.toString()),
-        ).use { c -> if (c.moveToFirst()) c.getLong(0) else disconnectedAtMs }
+        synchronized(lock) {
+            val db = writableDatabase
+            val startMs = db.rawQuery(
+                "SELECT connected_at_ms FROM connection_history WHERE id = ?",
+                arrayOf(rowId.toString()),
+            ).use { c -> if (c.moveToFirst()) c.getLong(0) else disconnectedAtMs }
 
-        val durSec = ((disconnectedAtMs - startMs) / 1000L).coerceAtLeast(0L)
-        val cv = ContentValues().apply {
-            put("disconnected_at_ms", disconnectedAtMs)
-            put("duration_sec", durSec)
-            if (avgLatencyMs > 0L) put("avg_latency_ms", avgLatencyMs)
-            if (!jitterMs.isNaN() && jitterMs >= 0.0) put("jitter_ms", jitterMs)
-            if (!packetLossPct.isNaN() && packetLossPct >= 0.0) put("packet_loss_pct", packetLossPct)
-            put("peak_download_bps", peakDownloadBps.coerceAtLeast(0L))
-            put("peak_upload_bps", peakUploadBps.coerceAtLeast(0L))
-            put("total_down_bytes", totalDownBytes.coerceAtLeast(0L))
-            put("total_up_bytes", totalUpBytes.coerceAtLeast(0L))
-            if (country.isNotBlank()) put("country", country.uppercase().take(4))
-            if (failureReason.isNotBlank()) put("failure_reason", failureReason.take(80))
+            val durSec = ((disconnectedAtMs - startMs) / 1000L).coerceAtLeast(0L)
+            val cv = ContentValues().apply {
+                put("disconnected_at_ms", disconnectedAtMs)
+                put("duration_sec", durSec)
+                if (avgLatencyMs > 0L) put("avg_latency_ms", avgLatencyMs)
+                if (!jitterMs.isNaN() && jitterMs >= 0.0) put("jitter_ms", jitterMs)
+                if (!packetLossPct.isNaN() && packetLossPct >= 0.0) put("packet_loss_pct", packetLossPct)
+                put("peak_download_bps", peakDownloadBps.coerceAtLeast(0L))
+                put("peak_upload_bps", peakUploadBps.coerceAtLeast(0L))
+                put("total_down_bytes", totalDownBytes.coerceAtLeast(0L))
+                put("total_up_bytes", totalUpBytes.coerceAtLeast(0L))
+                if (country.isNotBlank()) put("country", country.uppercase().take(4))
+                if (failureReason.isNotBlank()) put("failure_reason", failureReason.take(80))
+            }
+            db.update("connection_history", cv, "id = ?", arrayOf(rowId.toString()))
         }
-        db.update("connection_history", cv, "id = ?", arrayOf(rowId.toString()))
     }
 
     fun recordFailedConnectionAttempt(
@@ -568,8 +570,10 @@ class ClientDatabase private constructor(ctx: Context) :
         writableDatabase.delete("connection_history", "id = ?", arrayOf(id.toString())) > 0
     }
 
-    fun clearAllHistory() = synchronized(lock) {
-        writableDatabase.delete("connection_history", null, null)
+    fun clearAllHistory() {
+        synchronized(lock) {
+            writableDatabase.delete("connection_history", null, null)
+        }
     }
 
     fun pruneExpiredHistory(retentionDays: Int, nowMs: Long = System.currentTimeMillis()): Int = synchronized(lock) {
@@ -591,73 +595,75 @@ class ClientDatabase private constructor(ctx: Context) :
         failureCategory: String = "",
         networkType: String = "",
         nowMs: Long = System.currentTimeMillis(),
-    ) = synchronized(lock) {
+    ) {
         val sid = if (cfgOrServerId.contains("://")) Converters.stableServerId(cfgOrServerId) else cfgOrServerId.trim()
         if (sid.isBlank()) return
-        val prev = getServerTelemetry(sid) ?: LocalServerTelemetry(serverId = sid)
-        val alpha = 0.35
+        synchronized(lock) {
+            val prev = getServerTelemetry(sid) ?: LocalServerTelemetry(serverId = sid)
+            val alpha = 0.35
 
-        val newAttempts = prev.attempts + 1
-        val newSuccesses = prev.successes + (if (ok) 1 else 0)
-        val newConsecFail = if (ok) 0 else (prev.consecutiveFailures + 1)
+            val newAttempts = prev.attempts + 1
+            val newSuccesses = prev.successes + (if (ok) 1 else 0)
+            val newConsecFail = if (ok) 0 else (prev.consecutiveFailures + 1)
 
-        val newEwmaLat = when {
-            !ok || latencyMs <= 0L -> prev.ewmaLatencyMs
-            prev.ewmaLatencyMs <= 0.0 -> latencyMs.toDouble()
-            else -> alpha * latencyMs.toDouble() + (1.0 - alpha) * prev.ewmaLatencyMs
-        }
-        val newVariance = when {
-            !ok || latencyMs <= 0L -> prev.latencyVarianceMs2
-            prev.ewmaLatencyMs <= 0.0 -> 0.0
-            else -> {
-                val diff = latencyMs.toDouble() - prev.ewmaLatencyMs
-                (1.0 - alpha) * (prev.latencyVarianceMs2 + alpha * diff * diff)
+            val newEwmaLat = when {
+                !ok || latencyMs <= 0L -> prev.ewmaLatencyMs
+                prev.ewmaLatencyMs <= 0.0 -> latencyMs.toDouble()
+                else -> alpha * latencyMs.toDouble() + (1.0 - alpha) * prev.ewmaLatencyMs
             }
-        }
-        val newJitter = when {
-            !ok -> prev.ewmaJitterMs
-            jitterMs > 0.0 -> if (prev.ewmaJitterMs <= 0.0) jitterMs else (alpha * jitterMs + (1.0 - alpha) * prev.ewmaJitterMs)
-            prev.ewmaLatencyMs > 0.0 && latencyMs > 0L -> abs(latencyMs.toDouble() - prev.ewmaLatencyMs)
-            else -> prev.ewmaJitterMs
-        }
-        val sampleLoss = if (ok) packetLossPct.coerceIn(0.0, 100.0) else 100.0
-        val newLoss = if (prev.attempts == 0) sampleLoss else (alpha * sampleLoss + (1.0 - alpha) * prev.ewmaPacketLossPct)
-        val newEstab = when {
-            !ok || establishMs <= 0L -> prev.avgEstablishMs
-            prev.avgEstablishMs <= 0L -> establishMs
-            else -> (0.4 * establishMs + 0.6 * prev.avgEstablishMs).toLong()
-        }
-        val trendDelta = if (ok && prev.ewmaLatencyMs > 0.0 && latencyMs > 0L) {
-            (prev.ewmaLatencyMs - latencyMs.toDouble()).coerceIn(-250.0, 250.0)
-        } else if (!ok) {
-            -40.0
-        } else {
-            prev.recentTrendDelta
-        }
+            val newVariance = when {
+                !ok || latencyMs <= 0L -> prev.latencyVarianceMs2
+                prev.ewmaLatencyMs <= 0.0 -> 0.0
+                else -> {
+                    val diff = latencyMs.toDouble() - prev.ewmaLatencyMs
+                    (1.0 - alpha) * (prev.latencyVarianceMs2 + alpha * diff * diff)
+                }
+            }
+            val newJitter = when {
+                !ok -> prev.ewmaJitterMs
+                jitterMs > 0.0 -> if (prev.ewmaJitterMs <= 0.0) jitterMs else (alpha * jitterMs + (1.0 - alpha) * prev.ewmaJitterMs)
+                prev.ewmaLatencyMs > 0.0 && latencyMs > 0L -> abs(latencyMs.toDouble() - prev.ewmaLatencyMs)
+                else -> prev.ewmaJitterMs
+            }
+            val sampleLoss = if (ok) packetLossPct.coerceIn(0.0, 100.0) else 100.0
+            val newLoss = if (prev.attempts == 0) sampleLoss else (alpha * sampleLoss + (1.0 - alpha) * prev.ewmaPacketLossPct)
+            val newEstab = when {
+                !ok || establishMs <= 0L -> prev.avgEstablishMs
+                prev.avgEstablishMs <= 0L -> establishMs
+                else -> (0.4 * establishMs + 0.6 * prev.avgEstablishMs).toLong()
+            }
+            val trendDelta = if (ok && prev.ewmaLatencyMs > 0.0 && latencyMs > 0L) {
+                (prev.ewmaLatencyMs - latencyMs.toDouble()).coerceIn(-250.0, 250.0)
+            } else if (!ok) {
+                -40.0
+            } else {
+                prev.recentTrendDelta
+            }
 
-        val isWifi = networkType.equals("WIFI", ignoreCase = true)
-        val isCell = networkType.equals("CELLULAR", ignoreCase = true)
+            val isWifi = networkType.equals("WIFI", ignoreCase = true)
+            val isCell = networkType.equals("CELLULAR", ignoreCase = true)
 
-        val cv = ContentValues().apply {
-            put("server_id", sid)
-            put("attempts", newAttempts)
-            put("successes", newSuccesses)
-            put("consecutive_failures", newConsecFail)
-            put("last_failure_at_ms", if (!ok) nowMs else prev.lastFailureAtMs)
-            put("last_failure_category", if (!ok) failureCategory.take(48) else prev.lastFailureCategory)
-            put("last_success_at_ms", if (ok) nowMs else prev.lastSuccessAtMs)
-            put("avg_establish_ms", newEstab)
-            put("ewma_latency_ms", newEwmaLat)
-            put("latency_variance_ms2", newVariance)
-            put("ewma_jitter_ms", newJitter)
-            put("ewma_packet_loss_pct", newLoss)
-            put("best_download_kbps", max(prev.bestDownloadKbps, downloadKbps.coerceAtLeast(0.0)))
-            put("best_upload_kbps", max(prev.bestUploadKbps, uploadKbps.coerceAtLeast(0.0)))
-            put("wifi_successes", prev.wifiSuccesses + (if (ok && isWifi) 1 else 0))
-            put("cellular_successes", prev.cellularSuccesses + (if (ok && isCell) 1 else 0))
-            put("recent_trend_delta", trendDelta)
+            val cv = ContentValues().apply {
+                put("server_id", sid)
+                put("attempts", newAttempts)
+                put("successes", newSuccesses)
+                put("consecutive_failures", newConsecFail)
+                put("last_failure_at_ms", if (!ok) nowMs else prev.lastFailureAtMs)
+                put("last_failure_category", if (!ok) failureCategory.take(48) else prev.lastFailureCategory)
+                put("last_success_at_ms", if (ok) nowMs else prev.lastSuccessAtMs)
+                put("avg_establish_ms", newEstab)
+                put("ewma_latency_ms", newEwmaLat)
+                put("latency_variance_ms2", newVariance)
+                put("ewma_jitter_ms", newJitter)
+                put("ewma_packet_loss_pct", newLoss)
+                put("best_download_kbps", max(prev.bestDownloadKbps, downloadKbps.coerceAtLeast(0.0)))
+                put("best_upload_kbps", max(prev.bestUploadKbps, uploadKbps.coerceAtLeast(0.0)))
+                put("wifi_successes", prev.wifiSuccesses + (if (ok && isWifi) 1 else 0))
+                put("cellular_successes", prev.cellularSuccesses + (if (ok && isCell) 1 else 0))
+                put("recent_trend_delta", trendDelta)
+            }
+            writableDatabase.insertWithOnConflict("local_server_telemetry", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
         }
-        writableDatabase.insertWithOnConflict("local_server_telemetry", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
     fun getServerTelemetry(cfgOrServerId: String): LocalServerTelemetry? = synchronized(lock) {
@@ -711,19 +717,21 @@ class ClientDatabase private constructor(ctx: Context) :
         titleAr: String,
         detailAr: String = "",
         nowMs: Long = System.currentTimeMillis(),
-    ) = synchronized(lock) {
-        val db = writableDatabase
-        val cv = ContentValues().apply {
-            put("event_at_ms", nowMs)
-            put("category", category.take(32))
-            put("title_ar", titleAr.take(120))
-            put("detail_ar", detailAr.take(240))
+    ) {
+        synchronized(lock) {
+            val db = writableDatabase
+            val cv = ContentValues().apply {
+                put("event_at_ms", nowMs)
+                put("category", category.take(32))
+                put("title_ar", titleAr.take(120))
+                put("detail_ar", detailAr.take(240))
+            }
+            db.insert("protection_events", null, cv)
+            // Keep last 200 events bounded for database compactness
+            db.execSQL(
+                "DELETE FROM protection_events WHERE id NOT IN (SELECT id FROM protection_events ORDER BY event_at_ms DESC LIMIT 200)"
+            )
         }
-        db.insert("protection_events", null, cv)
-        // Keep last 200 events bounded for database compactness
-        db.execSQL(
-            "DELETE FROM protection_events WHERE id NOT IN (SELECT id FROM protection_events ORDER BY event_at_ms DESC LIMIT 200)"
-        )
     }
 
     fun recentProtectionEvents(limit: Int = 25): List<ProtectionEventRecord> = synchronized(lock) {

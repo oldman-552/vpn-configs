@@ -30,7 +30,7 @@ enum class UnderlyingTransport(val code: String, val labelAr: String) {
 
 data class NetworkSnapshot(
     val connected: Boolean = true,
-    val transport: UnderlyingTransport = UnderlyingTransport.UNKNOWN_DEFAULT,
+    val transport: UnderlyingTransport = UnderlyingTransport.WIFI,
     val isMetered: Boolean = false,
     val isValidated: Boolean = false,
     val networkHandle: Long = 0L,
@@ -38,12 +38,7 @@ data class NetworkSnapshot(
     val hasGlobalIpv6: Boolean = false,
     val systemDnsServers: List<String> = emptyList(),
     val updatedAtMs: Long = System.currentTimeMillis(),
-) {
-    companion object {
-        val UnderlyingTransport.Companion.UNKNOWN_DEFAULT: UnderlyingTransport
-            get() = UnderlyingTransport.WIFI
-    }
-}
+)
 
 class NetworkAwarenessMonitor(ctx: Context) {
 
