@@ -77,7 +77,8 @@ class SmartVpnUpgradeTest {
         assertEquals(1, workFavs.size)
         assertEquals("سيرفر العمل الألماني", workFavs.first().displayName)
         assertFalse(workFavs.first().toString().contains(rawPass))
-        assertEquals("***100.44:443", workFavs.first().maskedEndpoint)
+        assertEquals("198.51.100.x:443", workFavs.first().maskedEndpoint)
+        assertFalse(workFavs.first().maskedEndpoint.contains(".44:"))
 
         // 2. Session History: insert, complete, filter, sort, paginate, prune, delete
         val now = 1_793_400_000_000L
