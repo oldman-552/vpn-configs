@@ -73,13 +73,19 @@ fun SignedAppUpdateBanner(
             if (upd.releaseNotes.isNotBlank()) {
                 Text(upd.releaseNotes, style = MaterialTheme.typography.bodySmall)
             }
+            if (upd.apkSha256.length == 64) {
+                Text(
+                    "بصمة SHA-256 الرسمية: ${upd.apkSha256.take(16)}…",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
             Button(
                 onClick = { vm.downloadAndInstallSignedUpdate() },
                 enabled = !state.updatingApk,
             ) {
                 Text(
-                    if (state.updatingApk) "جارٍ التحقق من بصمة SHA-256 والتنزيل…"
-                    else "تنزيل حزمة ${upd.selectedAbi} وتثبيتها رسميًا"
+                    if (state.updatingApk) "جارٍ فتح المتصفح الآمن…"
+                    else "فتح التحميل الرسمي الآمن (${upd.selectedAbi})"
                 )
             }
         }

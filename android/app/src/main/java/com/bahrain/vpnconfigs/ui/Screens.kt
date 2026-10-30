@@ -1652,7 +1652,7 @@ fun SettingsAndExportScreen(
                 Text("حول التطبيق والتراخيص القانونية", style = MaterialTheme.typography.titleMedium)
                 val aboutUpdated = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
                 Text(
-                    "bahrain-vpn v3.2$aboutUpdated",
+                    "bahrain-vpn v3.5$aboutUpdated",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )

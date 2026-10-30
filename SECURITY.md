@@ -1,10 +1,10 @@
-# SECURITY.md — Security Architecture, Threat Model & Honest Limitations
+# SECURITY.md — Security Architecture, Threat Model & Honest Limitations (`v3.5`)
 
 ## 1. Security Design Principles
 1. **Speed ≠ Security**: High throughput or low ping never elevates a server's `security_assessment` or `privacy_assessment`.
 2. **Epistemic Honesty**: Unverified public community servers are never labeled `Privacy: Verified`. Only operator-attested encrypted `VIP 💎` nodes with verified transport security achieve `Privacy: Verified`.
 3. **Fail-Closed Defaults**: Unsafe configurations are quarantined before publication (`quarantined.json`), and Android Kill Switch defaults to fail-closed `tun0` capture.
-4. **Zero Embedded Secrets**: Neither User APK (`:app`), Admin APK (`:admin`), nor `web-admin/` contains embedded GitHub tokens, private keys, or plaintext passwords.
+4. **Zero Embedded Secrets & Play Protect Compliance (`v3.5`)**: Neither User APK (`:app`), Admin APK (`:admin`), nor `web-admin/` contains embedded GitHub tokens, private keys, plaintext passwords, `REQUEST_INSTALL_PACKAGES`, internal `.apk` dropper code, or `Android Debug` certificates.
 
 ---
 

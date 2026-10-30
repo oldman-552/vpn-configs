@@ -103,10 +103,10 @@ class EnterpriseAndroidTest {
                 JSONArray().put(
                     JSONObject()
                         .put("target_app", "USER")
-                        .put("version_code", 13)
-                        .put("version_name", "3.5")
+                        .put("version_code", 14)
+                        .put("version_name", "3.6")
                         .put("mandatory", true)
-                        .put("min_supported_code", 13)
+                        .put("min_supported_code", 14)
                         .put("apk_url", "https://example.com/update.apk")
                         .put("apk_sha256", "a".repeat(64))
                         .put("is_active", true)
@@ -138,7 +138,7 @@ class EnterpriseAndroidTest {
         val upd = AppUpdateManager.evaluateAvailableUpdate(ctx, guard.getVerifiedAppUpdates())
         assertNotNull(upd)
         assertTrue(upd!!.mandatory)
-        assertEquals("3.5", upd.versionName)
+        assertEquals("3.6", upd.versionName)
 
         // Wrong password rejected
         assertTrue(guard.loginWithBundle("ahmed_bh", "WrongPass!", true).isFailure)
@@ -248,8 +248,8 @@ class EnterpriseAndroidTest {
         // 1. ABI-aware APK selection (arm64-v8a vs x86_64 vs universal fallback)
         val updateObj = JSONObject()
             .put("target_app", "USER")
-            .put("version_code", 14)
-            .put("version_name", "3.5")
+            .put("version_code", 15)
+            .put("version_name", "3.6")
             .put("is_active", true)
             .put("apk_url", "https://example.com/fallback-universal.apk")
             .put("apk_sha256", "f".repeat(64))
@@ -359,5 +359,44 @@ class EnterpriseAndroidTest {
         assertEquals("VIP", ranked[0].label)
         assertEquals("Fast", ranked[1].label)
         assertEquals("Slow", ranked[2].label)
+    }
+
+    @Test
+    fun v35PlayProtectAntiDropperAndHttpsBrowserUpdateVerification() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val pkgInfo = ctx.packageManager.getPackageInfo(
+            ctx.packageName,
+            android.content.pm.PackageManager.GET_PERMISSIONS,
+        )
+        val requested = pkgInfo.requestedPermissions?.toSet().orEmpty()
+        assertFalse(
+            "REQUEST_INSTALL_PACKAGES must be absent to prevent Play Protect Dropper heuristics",
+            requested.contains("android.permission.REQUEST_INSTALL_PACKAGES")
+        )
+
+        // Safe HTTPS URLs accepted; HTTP, file://, loopback, LAN, and embedded credentials rejected
+        assertNotNull(AppUpdateManager.validateSafeUpdateHttpsUrl("https://releases.example.org/v3.5/app-arm64-v8a-release.apk"))
+        assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("http://releases.example.org/app.apk") == null)
+        assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("file:///sdcard/Download/app.apk") == null)
+        assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("content://com.example.provider/app.apk") == null)
+        assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("https://127.0.0.1/app.apk") == null)
+        assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("https://192.168.1.50/app.apk") == null)
+        assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("https://admin:secret@releases.example.org/app.apk") == null)
+
+        val safeInfo = com.bahrain.vpnconfigs.enterprise.AppUpdateInfo(
+            versionCode = 15,
+            versionName = "3.6",
+            releaseNotes = "Security update",
+            mandatory = false,
+            minSupportedCode = 13,
+            apkUrl = "https://releases.example.org/v3.6/app-arm64-v8a-release.apk",
+            apkSha256 = "b".repeat(64),
+            signingCertSha256 = "",
+            selectedAbi = "arm64-v8a",
+        )
+        val intent = AppUpdateManager.buildSafeBrowserUpdateIntent(safeInfo).getOrThrow()
+        assertEquals(android.content.Intent.ACTION_VIEW, intent.action)
+        assertTrue(intent.categories.contains(android.content.Intent.CATEGORY_BROWSABLE))
+        assertTrue("Browser delegation must never set package-archive MIME type", intent.type == null)
     }
 }

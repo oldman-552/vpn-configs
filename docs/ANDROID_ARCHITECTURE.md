@@ -1,4 +1,4 @@
-# Android Client Architecture (`v3.4` — Central GitHub Top 500 + Local Personalized Top 50)
+# Android Client Architecture (`v3.5` — Central GitHub Top 500 + Local Personalized Top 50 + Play Protect Hardened)
 
 ## 0. Mandatory Responsibility Separation
 - **GitHub (`central_top500.py` -> `@data/top500.{manifest,delta,}.json`):** Collect -> Validate -> Normalize -> Deduplicate -> Assign `server_id` & `config_fingerprint` -> Preliminary Check -> Rank Centrally -> Publish **up to 500** untrusted candidate configurations with SHA-256 checksums and optional incremental deltas. GitHub **never** selects a user's personalized Top 50.
