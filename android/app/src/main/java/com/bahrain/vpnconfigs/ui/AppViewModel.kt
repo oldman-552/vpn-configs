@@ -203,7 +203,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     private val tester = Tester(app)
-    private val netAwareness = NetworkAwarenessMonitor(app).also { runCatching { it.start() } }
+    private val netAwareness = NetworkAwarenessMonitor(app).also {
+        runCatching { it.start { _, _ -> } }
+    }
     private val sequentialScanner = SequentialTunnelScanner(app, clientDb)
     private val licenseGuard = EnterpriseLicenseGuard(app)
     private val diagnosticsEngine = ClientDiagnosticsEngine(app)
@@ -564,7 +566,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else if (itemA.localPoolTier != itemB.localPoolTier) {
                     // TOP_50 (0) -> BACKUP_POOL (1) -> CANDIDATE_ONLY (2)
                     itemA.localPoolTier.ordinal.compareTo(itemB.localPoolTier.ordinal)
-                } else if (itemA.localPoolTier != LocalPoolTier.CANDIDATE_ONLY && sortMode == ServerSortMode.SMART_RECOMMENDED) {
+                } else if (itemA.localPoolTier != LocalPoolTier.CANDIDATE_ONLY && sortMode == ServerSortMode.BEST_OVERALL) {
                     itemA.personalizedRank.compareTo(itemB.personalizedRank)
                 } else {
                     comp.compare(a.first, b.first)
@@ -962,8 +964,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 )
 
             val targetSortMode = if (shouldAutoQuickScan) {
-                prefs.sortMode = ServerSortMode.SMART_RECOMMENDED.key
-                ServerSortMode.SMART_RECOMMENDED.key
+                prefs.sortMode = ServerSortMode.FASTEST_DOWNLOAD.key
+                prefs.rankBySpeed = true
+                ServerSortMode.FASTEST_DOWNLOAD.key
             } else {
                 state.sortMode
             }
