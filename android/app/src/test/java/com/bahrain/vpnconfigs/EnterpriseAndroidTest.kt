@@ -103,10 +103,10 @@ class EnterpriseAndroidTest {
                 JSONArray().put(
                     JSONObject()
                         .put("target_app", "USER")
-                        .put("version_code", 11)
-                        .put("version_name", "3.3")
+                        .put("version_code", 12)
+                        .put("version_name", "3.4")
                         .put("mandatory", true)
-                        .put("min_supported_code", 11)
+                        .put("min_supported_code", 12)
                         .put("apk_url", "https://example.com/update.apk")
                         .put("apk_sha256", "a".repeat(64))
                         .put("is_active", true)
@@ -138,7 +138,7 @@ class EnterpriseAndroidTest {
         val upd = AppUpdateManager.evaluateAvailableUpdate(ctx, guard.getVerifiedAppUpdates())
         assertNotNull(upd)
         assertTrue(upd!!.mandatory)
-        assertEquals("3.3", upd.versionName)
+        assertEquals("3.4", upd.versionName)
 
         // Wrong password rejected
         assertTrue(guard.loginWithBundle("ahmed_bh", "WrongPass!", true).isFailure)
@@ -248,8 +248,8 @@ class EnterpriseAndroidTest {
         // 1. ABI-aware APK selection (arm64-v8a vs x86_64 vs universal fallback)
         val updateObj = JSONObject()
             .put("target_app", "USER")
-            .put("version_code", 12)
-            .put("version_name", "3.3")
+            .put("version_code", 13)
+            .put("version_name", "3.4")
             .put("is_active", true)
             .put("apk_url", "https://example.com/fallback-universal.apk")
             .put("apk_sha256", "f".repeat(64))

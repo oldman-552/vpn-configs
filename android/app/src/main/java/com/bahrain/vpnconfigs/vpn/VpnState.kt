@@ -66,6 +66,13 @@ data class VpnStatus(
     val failoverCount: Int = 0,
     val killSwitchActive: Boolean = true,
     val osLockdownActive: Boolean = false,
+    val reconnectAttempt: Int = 0,
+    val underlyingNetwork: String = "WIFI",
+    val underlyingNetworkAr: String = "واي فاي (Wi-Fi)",
+    val isMeteredNetwork: Boolean = false,
+    val lastProtectionEvent: String = "",
+    val trafficHistoryBps: List<Pair<Long, Long>> = emptyList(),
+    val recentEvents: List<String> = emptyList(),
     val droppedConfigs: Set<String> = emptySet(),
     val statusMessage: String? = null,
     val error: String? = null,
@@ -105,6 +112,14 @@ object VpnStateManager {
         }
     }
 
+    fun appendEvent(eventAr: String) {
+        val stamp = java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(java.util.Date())
+        val line = "[$stamp] $eventAr"
+        _status.update { prev ->
+            prev.copy(recentEvents = (listOf(line) + prev.recentEvents).take(20))
+        }
+    }
+
     fun resetDisconnected(errorMsg: String? = null, infoMsg: String? = null) {
         _status.update { prev ->
             VpnStatus(
@@ -118,6 +133,11 @@ object VpnStateManager {
                 lastSuccessfulSwitchAtMs = prev.lastSuccessfulSwitchAtMs,
                 killSwitchActive = prev.killSwitchActive,
                 osLockdownActive = prev.osLockdownActive,
+                underlyingNetwork = prev.underlyingNetwork,
+                underlyingNetworkAr = prev.underlyingNetworkAr,
+                isMeteredNetwork = prev.isMeteredNetwork,
+                lastProtectionEvent = prev.lastProtectionEvent,
+                recentEvents = prev.recentEvents,
                 droppedConfigs = prev.droppedConfigs,
                 statusMessage = infoMsg,
                 error = errorMsg,

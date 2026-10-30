@@ -21,11 +21,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -63,12 +64,17 @@ import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.AppsSplitScreen
 import com.bahrain.vpnconfigs.ui.ConnectHomeScreen
 import com.bahrain.vpnconfigs.ui.EnterpriseHubScreen
+import com.bahrain.vpnconfigs.ui.FavoritesScreen
 import com.bahrain.vpnconfigs.ui.MandatoryLoginGateDialog
 import com.bahrain.vpnconfigs.ui.PromoPopupDialog
+import com.bahrain.vpnconfigs.ui.SecurityStatusScreen
+import com.bahrain.vpnconfigs.ui.ServerHistoryScreen
 import com.bahrain.vpnconfigs.ui.ServerItem
 import com.bahrain.vpnconfigs.ui.ServersListScreen
 import com.bahrain.vpnconfigs.ui.SettingsAndExportScreen
+import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.vpn.BahrainVpnService
+import com.bahrain.vpnconfigs.vpn.ResourceAndBatteryMonitor
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import com.bahrain.vpnconfigs.work.RefreshWorker
 import java.io.File
@@ -117,12 +123,14 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
+                    ResourceAndBatteryMonitor.isUiInForeground = false
                     val changingCfg = (ctx as? Activity)?.isChangingConfigurations == true
                     if (!changingCfg) {
                         backgroundedAtMs = System.currentTimeMillis()
                     }
                 }
                 Lifecycle.Event.ON_START -> {
+                    ResourceAndBatteryMonitor.isUiInForeground = true
                     val bgAt = backgroundedAtMs
                     backgroundedAtMs = 0L
                     if (skipNextReopenPromo) {
@@ -171,7 +179,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
         val acct = vm.state.accountState
         if (!acct.canConnectVpn) {
             Toast.makeText(ctx, acct.statusDetailAr.ifBlank { "يلزم حساب فعّال لبدء الاتصال" }, Toast.LENGTH_LONG).show()
-            tab = 2
+            tab = 7
             return
         }
         if (server == null) {
@@ -189,6 +197,10 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
         }
     }
 
+    val serversById = remember(state.servers) {
+        state.servers.associateBy { it.serverId }
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -196,7 +208,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                     selected = tab == 0,
                     onClick = { tab = 0 },
                     icon = { Icon(Icons.Filled.Shield, contentDescription = null) },
-                    label = { Text("الاتصال") },
+                    label = { Text("الاتصال", maxLines = 1) },
                 )
                 NavigationBarItem(
                     selected = tab == 1,
@@ -212,41 +224,50 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                             Icon(Icons.Filled.Dns, contentDescription = null)
                         }
                     },
-                    label = { Text("السيرفرات") },
+                    label = { Text("السيرفرات", maxLines = 1) },
                 )
                 NavigationBarItem(
                     selected = tab == 2,
                     onClick = {
                         tab = 2
-                        vm.refreshEnterpriseState()
+                        vm.refreshPersistenceSnapshotAsync()
                     },
-                    icon = { Icon(Icons.Filled.Speed, contentDescription = null) },
-                    label = { Text("السرعة والحساب") },
+                    icon = {
+                        BadgedBox(
+                            badge = {
+                                if (state.favoritesList.isNotEmpty()) {
+                                    Badge { Text("${state.favoritesList.size}") }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Filled.Star, contentDescription = null)
+                        }
+                    },
+                    label = { Text("المفضّلة", maxLines = 1) },
                 )
                 NavigationBarItem(
                     selected = tab == 3,
                     onClick = {
                         tab = 3
-                        vm.ensureAppsLoaded()
+                        vm.refreshPersistenceSnapshotAsync()
                     },
-                    icon = {
-                        BadgedBox(
-                            badge = {
-                                if (state.splitApps.isNotEmpty()) {
-                                    Badge { Text("${state.splitApps.size}") }
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Filled.Apps, contentDescription = null)
-                        }
-                    },
-                    label = { Text("التطبيقات") },
+                    icon = { Icon(Icons.Filled.History, contentDescription = null) },
+                    label = { Text("السجل", maxLines = 1) },
                 )
                 NavigationBarItem(
                     selected = tab == 4,
-                    onClick = { tab = 4 },
+                    onClick = {
+                        tab = 4
+                        vm.refreshPersistenceSnapshotAsync()
+                    },
+                    icon = { Icon(Icons.Filled.Security, contentDescription = null) },
+                    label = { Text("الأمان", maxLines = 1) },
+                )
+                NavigationBarItem(
+                    selected = tab in setOf(5, 6, 7),
+                    onClick = { tab = 5 },
                     icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                    label = { Text("الإعدادات") },
+                    label = { Text("الإعدادات", maxLines = 1) },
                 )
             }
         },
@@ -262,8 +283,19 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                     if (vpnStatus.isActive) {
                         BahrainVpnService.stopVpn(ctx)
                     } else {
-                        requestConnect(state.selectedServer)
+                        val smartPick = if (state.smartAutoSelect) {
+                            state.smartDecision.primary?.let { p ->
+                                state.servers.firstOrNull { it.cfg == p.cfg }
+                            }
+                        } else null
+                        requestConnect(smartPick ?: state.selectedServer)
                     }
+                },
+                onConnectBestSmart = {
+                    val smartPick = state.smartDecision.primary?.let { p ->
+                        state.servers.firstOrNull { it.cfg == p.cfg }
+                    } ?: state.selectedServer
+                    requestConnect(smartPick)
                 },
                 onNextServer = { BahrainVpnService.switchNextServer(ctx) },
                 onOpenServersTab = { tab = 1 },
@@ -278,17 +310,69 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                 onReadClipboard = { readClipboardText(ctx) },
                 onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
             )
-            2 -> EnterpriseHubScreen(
+            2 -> FavoritesScreen(
+                favorites = state.favoritesList,
+                groups = state.favoriteGroups,
+                selectedGroup = state.favoriteGroupFilter,
+                sortOrder = state.favoriteSortOrder,
+                serversById = serversById,
+                telemetryById = state.telemetryById,
+                activeServerId = vpnStatus.activeCfg?.let { Converters.stableServerId(it) }.orEmpty(),
+                onSelectGroup = { vm.setFavoriteGroupFilter(it) },
+                onSelectSort = { vm.setFavoriteSortOrder(it) },
+                onConnectFavorite = { srv -> requestConnect(srv) },
+                onEditFavorite = { sid, name, grp -> vm.updateFavoriteDetails(sid, name, grp) },
+                onRemoveFavorite = { sid -> vm.removeFavoriteById(sid) },
+                modifier = m,
+            )
+            3 -> ServerHistoryScreen(
+                records = state.sqliteHistory,
+                totalMatchingCount = state.sqliteHistoryTotal,
+                searchQuery = state.historySearchQuery,
+                dateRangeDays = state.historyDateDays,
+                sortOrder = state.historySortOrder,
+                retentionDays = state.historyRetentionDays,
+                serversById = serversById,
+                onSearchChange = { vm.setHistorySearchQuery(it) },
+                onDateRangeChange = { vm.setHistoryDateDays(it) },
+                onSortChange = { vm.setHistorySortOrder(it) },
+                onRetentionChange = { vm.setHistoryRetentionDays(it) },
+                onLoadMore = { vm.loadMoreHistory() },
+                onDeleteEntry = { vm.deleteHistoryRecord(it) },
+                onClearAll = { vm.clearConnectionHistory() },
+                onReconnectServer = { srv -> requestConnect(srv) },
+                modifier = m,
+            )
+            4 -> {
+                val secReport = remember(vpnStatus, state.netDiagReport, state.killSwitch) {
+                    vm.evaluateSecurityReport(vpnStatus)
+                }
+                val resSnap = remember(vpnStatus) {
+                    ResourceAndBatteryMonitor.captureSnapshot()
+                }
+                SecurityStatusScreen(
+                    report = secReport,
+                    appKillSwitchEnabled = state.killSwitch,
+                    lastProtectionEvent = vpnStatus.lastProtectionEvent,
+                    protectionEvents = state.protectionEvents,
+                    resourceSnapshot = resSnap,
+                    runningDiagnostics = state.netDiagRunning,
+                    onToggleAppKillSwitch = { vm.setKillSwitch(it) },
+                    onRunLiveSecurityCheck = { vm.runNetworkDiagnosticsSuite() },
+                    modifier = m,
+                )
+            }
+            6 -> AppsSplitScreen(
+                state = state,
+                vm = vm,
+                modifier = m,
+            )
+            7 -> EnterpriseHubScreen(
                 state = state,
                 vpnStatus = vpnStatus,
                 vm = vm,
                 modifier = m,
                 onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
-            )
-            3 -> AppsSplitScreen(
-                state = state,
-                vm = vm,
-                modifier = m,
             )
             else -> SettingsAndExportScreen(
                 vm = vm,
@@ -297,6 +381,14 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                 onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
                 onCopyFile = { file -> copyFileContent(ctx, file) },
                 onShareFile = { file -> shareFile(ctx, file) },
+                onOpenSplitApps = {
+                    vm.ensureAppsLoaded()
+                    tab = 6
+                },
+                onOpenEnterpriseHub = {
+                    vm.refreshEnterpriseState()
+                    tab = 7
+                },
             )
         }
     }

@@ -49,7 +49,10 @@ const InfrastructureViews = {
           <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
               <h3>${t("الخوادم العامة الحيّة والتصنيف الذكي (@data)", "Live Public Server Pool & Smart Classification")} (${AppState.liveServers.length})</h3>
-              <button class="btn no-print" onclick="triggerPipelineSweep()">${t("تشغيل جامع وفاحص السيرفرات الآن (GitHub Actions)", "Trigger Collector & Tester Sweep")}</button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap" class="no-print">
+                <a class="btn btn-outline" href="monitor.html" target="_blank" style="text-decoration:none">📊 ${t("فتح منصة الذكاء التاريخي (24h/7d/30d/90d)", "Open Historical Intelligence Dashboard")}</a>
+                <button class="btn" onclick="triggerPipelineSweep()">${t("تشغيل جامع وفاحص السيرفرات الآن (GitHub Actions)", "Trigger Collector & Tester Sweep")}</button>
+              </div>
             </div>
             <table>
               <thead><tr><th>#</th><th>${t("الدولة", "Country")}</th><th>Ping</th><th>Speed</th><th>${t("التصنيف", "Tier")}</th><th>${t("النقاط", "Score")}</th></tr></thead>

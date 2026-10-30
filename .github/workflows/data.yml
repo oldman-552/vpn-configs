@@ -14,6 +14,8 @@ on:
       - "scoring.py"
       - "pipeline_security.py"
       - "security_intelligence.py"
+      - "historical_db.py"
+      - "migrations/**"
       - "public_api.py"
       - "channels.txt"
       - "github_sources.txt"
@@ -114,6 +116,9 @@ jobs:
           for req in (
               "alive.txt", "best100.txt", "sub.txt", "alive.json",
               "meta.json", "source_health.json", "quarantined.json",
+              "servers-current.json", "servers-history.json",
+              "servers-performance.json", "servers-statistics.json",
+              "countries-statistics.json", "sources-statistics.json",
               "api/v1/health.json", "api/v1/statistics.json",
               "api/v1/servers.json", "api/v1/openapi.json",
           ):

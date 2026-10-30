@@ -12,8 +12,10 @@
 // =====================================================================
 package com.bahrain.vpnconfigs.vpn
 
+import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import android.provider.Settings
 
 data class KillSwitchState(
     val appKillSwitchEnabled: Boolean,
@@ -27,6 +29,16 @@ object KillSwitchController {
     const val OS_LIMITATION_NOTE_AR: String =
         "يحجب مفتاح الإيقاف المدمج مرور بيانات التطبيقات خارج النفق أثناء الربط والتبديل والانقطاع؛ " +
             "ولحجب حزم النظام قبل إقلاع التطبيق عند إعادة تشغيل الهاتف، فعّل أيضًا خيار «VPN دائم + حظر الاتصالات بدون VPN» من إعدادات أندرويد."
+
+    val ALWAYS_ON_STEPS_AR: List<String> = listOf(
+        "١. افتح إعدادات الشبكة والـ VPN في نظام أندرويد عبر الزر أدناه.",
+        "٢. اضغط على أيقونة الترس ⚙️ بجانب تطبيق Bahrain VPN.",
+        "٣. فعّل خيار «شبكة VPN نشطة دائمًا» (Always-on VPN).",
+        "٤. فعّل خيار «حظر الاتصالات بدون VPN» (Block connections without VPN) لتفعيل القفل الصارم من النواة.",
+    )
+
+    fun createSystemVpnSettingsIntent(): Intent =
+        Intent(Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
     fun isOsLockdownActive(service: VpnService?): Boolean {
         if (service == null) return false

@@ -9,6 +9,7 @@ import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLDecoder
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
 object Converters {
@@ -509,6 +510,82 @@ object Converters {
 
     /** اسم مختصر للعرض (المضيف:المنفذ) مع كاش سريع. */
     fun endpointLabel(cfg: String): String = metaOf(cfg).endpoint
+
+    private val stableIdCache = ConcurrentHashMap<String, String>()
+
+    private fun sha256Hex(input: String): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        val bytes = md.digest(input.toByteArray(Charsets.UTF_8))
+        val sb = StringBuilder(bytes.size * 2)
+        for (b in bytes) {
+            sb.append(((b.toInt() ushr 4) and 0xF).toString(16))
+            sb.append((b.toInt() and 0xF).toString(16))
+        }
+        return sb.toString()
+    }
+
+    /**
+     * معرّف سيرفر مستقر وآمن (24 خانة ست عشرية) مبني على البصمة المعيارية للإعداد:
+     * - لا يتغيّر بتغيّر الوسم (#remark / ps) أو ترتيب معاملات الاستعلام أو صيغة hy2/hysteria2.
+     * - لا يخزّن أي كلمات مرور أو UUID نصية (تُعمّى المعرّفات السرية بـ SHA-256 منفصل).
+     * - لا يدمج سيرفرين مختلفين يشتركان في عنوان IP نفسه.
+     */
+    fun stableServerId(cfg: String): String {
+        val cleaned = cleanUri(cfg)
+        if (cleaned.isEmpty()) return ""
+        stableIdCache[cleaned]?.let { return it }
+
+        val ob = toOutbound(cleaned)
+        val canonicalMaterial = if (ob != null) {
+            val type = ob.optString("type", schemeOf(cleaned)).lowercase().let {
+                if (it == "hy2") "hysteria2" else it
+            }
+            val server = ob.optString("server", "").trim().trimEnd('.').lowercase()
+            val port = if (ob.has("server_port")) {
+                ob.optInt("server_port", 443)
+            } else {
+                ob.optJSONArray("server_ports")?.optString(0)?.substringBefore(":")?.toIntOrNull() ?: 443
+            }
+            val rawCred = buildString {
+                append(ob.optString("uuid", "").lowercase())
+                append('|')
+                append(ob.optString("password", ""))
+                append('|')
+                append(ob.optString("method", "").lowercase())
+            }
+            val credDigest = sha256Hex("bahrain-vpn:cred:v2|$rawCred")
+            val tlsObj = ob.optJSONObject("tls")
+            val tlsEnabled = tlsObj?.optBoolean("enabled", false) == true
+            val sni = tlsObj?.optString("server_name", "")?.trim()?.trimEnd('.')?.lowercase().orEmpty()
+            val realityKey = tlsObj?.optJSONObject("reality")?.optString("public_key", "").orEmpty()
+            val trObj = ob.optJSONObject("transport")
+            val trType = trObj?.optString("type", "tcp")?.lowercase().orEmpty().ifBlank { "tcp" }
+            val trPath = trObj?.optString("path", "").orEmpty().let { p ->
+                if (trType == "tcp" && p == "/") "" else p
+            }
+            val flow = ob.optString("flow", "").lowercase()
+            "v2|$type|$server|$port|$credDigest|$trType|$trPath|$tlsEnabled|$sni|$realityKey|$flow"
+        } else {
+            "v2|raw|" + sha256Hex(cleaned)
+        }
+
+        val id = sha256Hex(canonicalMaterial).take(24)
+        if (stableIdCache.size > 4096) stableIdCache.clear()
+        stableIdCache[cleaned] = id
+        return id
+    }
+
+    /** اسم مضيف مقنّع آمن للسجلات التاريخية دون كشف عناوين IP الكاملة للعقد الخاصة. */
+    fun maskedEndpointLabel(cfg: String): String {
+        val ep = endpointLabel(cfg)
+        val host = ep.substringBeforeLast(":", ep)
+        val port = ep.substringAfterLast(":", "443")
+        val v4Parts = host.split('.')
+        if (v4Parts.size == 4 && v4Parts.all { it.toIntOrNull() != null }) {
+            return "${v4Parts[0]}.${v4Parts[1]}.${v4Parts[2]}.x:$port"
+        }
+        return ep
+    }
 
     /** شارة البروتوكول المختصرة للعرض في الواجهة. */
     fun protocolBadge(cfg: String): String = when (schemeOf(cfg)) {

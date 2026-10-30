@@ -26,6 +26,15 @@ COSMETIC_QUERY_KEYS = frozenset({
     "title",
     " tag",
     "tag",
+    "ps",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "source",
+    "channel",
+    "group",
+    "sub",
+    "fragment_name",
 })
 LOWERCASE_QUERY_KEYS = frozenset({
     "type",
@@ -44,6 +53,62 @@ LOWERCASE_QUERY_KEYS = frozenset({
     "congestion_control",
     "udp_relay_mode",
 })
+
+
+def _hash_credential_secret_safe(cred: str) -> str:
+    """Hash raw credential material with domain separation so fingerprints never hold plaintext secrets."""
+    return hashlib.sha256(
+        b"bahrain-vpn:cred:v2|" + cred.encode("utf-8", "ignore")
+    ).hexdigest()
+
+
+def extract_source_operator_id(source_name: str, kind: str = "", url_or_handle: str = "") -> str:
+    """
+    Determine the canonical independent operator identity for a source so multiple URLs
+    controlled by the same GitHub owner, domain, or Telegram handle count as ONE operator.
+    """
+    raw = (url_or_handle or "").strip()
+    low = raw.lower()
+    if "raw.githubusercontent.com/" in low:
+        after = low.split("raw.githubusercontent.com/", 1)[1].strip("/")
+        owner = after.split("/", 1)[0].strip()
+        if owner:
+            return f"gh:{owner}"
+    if "github.com/" in low:
+        after = low.split("github.com/", 1)[1].strip("/")
+        owner = after.split("/", 1)[0].strip()
+        if owner:
+            return f"gh:{owner}"
+    if "cdn.jsdelivr.net/gh/" in low:
+        after = low.split("cdn.jsdelivr.net/gh/", 1)[1].strip("/")
+        owner = after.split("/", 1)[0].split("@", 1)[0].strip()
+        if owner:
+            return f"gh:{owner}"
+    if "t.me/" in low:
+        after = low.split("t.me/", 1)[1].strip("/")
+        if after.startswith("s/"):
+            after = after[2:].strip("/")
+        handle = after.split("/", 1)[0].split("?", 1)[0].lstrip("@").strip()
+        if handle:
+            return f"tg:{handle}"
+    if (kind or "").lower() == "telegram" and raw:
+        handle = raw.lstrip("@").split("/", 1)[0].split("?", 1)[0].strip().lower()
+        if handle:
+            return f"tg:{handle}"
+    if "://" in low:
+        host_part = low.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0]
+        if host_part:
+            return f"web:{subnet_group_key(host_part)}"
+
+    # Fallback: normalize well-known multi-feed source name prefixes (e.g. subcrawler-vless -> op:subcrawler)
+    sname = (source_name or "").strip().lower()
+    if sname.startswith("tg:@"):
+        return "tg:" + sname[4:]
+    if "-" in sname:
+        prefix = sname.split("-", 1)[0]
+        if prefix in {"subcrawler", "mheidari", "v2rayroot", "igareck", "barry", "matin", "yebekhe"}:
+            return f"op:{prefix}"
+    return f"src:{sname or 'unknown'}"
 
 
 def canonical_protocol(scheme: str) -> str:
@@ -135,7 +200,9 @@ class ParsedIdentity:
     sni: str
     subnet_key: str
     layer1_exact_id: str      # 24-hex SHA256 of normalized URI without fragment
-    identity_id: str          # 24-hex SHA256 of canonical (proto, host, port, cred, transport)
+    identity_id: str          # 24-hex stable server_id (secret-safe canonical fingerprint)
+    canonical_sha256: str = ""  # Full 64-hex SHA256 for collision detection & resolution
+    legacy_identity_id: str = ""  # Legacy v1 24-hex ID for seamless historical migration
 
 
 def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIdentity | None:
@@ -163,7 +230,8 @@ def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIden
     host = ""
     port = 0
     sni = ""
-    canonical_material = ""
+    legacy_material = ""
+    v2_material = ""
 
     if cproto == "vmess":
         b64 = no_frag.split("?", 1)[0].strip()
@@ -178,7 +246,7 @@ def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIden
             return None
         host = str(d.get("add", "")).strip().strip("[]").rstrip(".").lower()
         try:
-            port = int(d.get("port", 0))
+            port = int(str(d.get("port", 0)).strip())
         except (TypeError, ValueError):
             return None
         uid = str(d.get("id", "")).strip().lower()
@@ -186,11 +254,16 @@ def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIden
             return None
         net = str(d.get("net") or "tcp").strip().lower()
         tls = str(d.get("tls") or "").strip().lower()
-        sni = str(d.get("sni") or d.get("host") or "").strip().lower()
-        path = str(d.get("path") or "").strip()
+        if tls == "none":
+            tls = ""
+        sni = str(d.get("sni") or d.get("host") or "").strip().rstrip(".").lower()
+        raw_path = str(d.get("path") or "").strip()
+        norm_path = "" if (net == "tcp" and raw_path == "/") else raw_path
         scy = str(d.get("scy") or "auto").strip().lower()
         vtype = str(d.get("type") or "none").strip().lower()
-        canonical_material = f"vmess|{host}|{port}|{uid}|{net}|{vtype}|{tls}|{sni}|{path}|{scy}"
+        legacy_material = f"vmess|{host}|{port}|{uid}|{net}|{vtype}|{tls}|{sni}|{raw_path}|{scy}"
+        cred_h = _hash_credential_secret_safe(uid)
+        v2_material = f"v2|vmess|{host}|{port}|{cred_h}|{net}|{vtype}|{tls}|{sni}|{norm_path}|{scy}"
 
     elif cproto == "ssr":
         dec = _b64_decode(no_frag.split("?", 1)[0].rstrip("/"))
@@ -207,7 +280,9 @@ def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIden
             return None
         if not host or not (1 <= port <= 65535):
             return None
-        canonical_material = f"ssr|{host}|{port}|{':'.join(parts[2:])}"
+        legacy_material = f"ssr|{host}|{port}|{':'.join(parts[2:])}"
+        cred_h = _hash_credential_secret_safe(":".join(parts[2:]))
+        v2_material = f"v2|ssr|{host}|{port}|{cred_h}"
 
     elif cproto == "ss":
         main_part, _, q_str = no_frag.partition("?")
@@ -233,7 +308,9 @@ def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIden
             return None
         q_pairs = _canonical_query(q_str)
         sni = dict(q_pairs).get("sni", "") or dict(q_pairs).get("host", "")
-        canonical_material = f"ss|{host}|{port}|{method}|{password}|{q_pairs}"
+        legacy_material = f"ss|{host}|{port}|{method}|{password}|{q_pairs}"
+        cred_h = _hash_credential_secret_safe(f"{method}:{password}")
+        v2_material = f"v2|ss|{host}|{port}|{method}|{cred_h}|{q_pairs}"
 
     else:
         # vless, trojan, hysteria2/hy2, tuic
@@ -242,7 +319,7 @@ def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIden
             return None
         userinfo, _, hp_str = main_part.rpartition("@")
         hp_str = hp_str.split("/", 1)[0]
-        default_port = 443 if cproto == "hysteria2" else None
+        default_port = 443 if cproto in ("hysteria2", "tuic") else None
         hp = _split_host_port(hp_str, default_port=default_port)
         if not hp or not userinfo:
             return None
@@ -256,14 +333,20 @@ def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIden
         q_pairs = _canonical_query(q_str)
         q_map = dict(q_pairs)
         sni = q_map.get("sni") or q_map.get("peer") or q_map.get("host") or ""
-        canonical_material = f"{cproto}|{host}|{port}|{cred}|{q_pairs}"
+        legacy_material = f"{cproto}|{host}|{port}|{cred}|{q_pairs}"
+        cred_h = _hash_credential_secret_safe(cred)
+        v2_material = f"v2|{cproto}|{host}|{port}|{cred_h}|{q_pairs}"
 
     if reject_private_hosts and is_unsafe_config_host(host):
         return None
 
-    identity_id = hashlib.sha256(
-        canonical_material.encode("utf-8", "ignore")
+    legacy_id = hashlib.sha256(
+        legacy_material.encode("utf-8", "ignore")
     ).hexdigest()[:24]
+    full_v2_sha = hashlib.sha256(
+        v2_material.encode("utf-8", "ignore")
+    ).hexdigest()
+    identity_id = full_v2_sha[:24]
 
     return ParsedIdentity(
         uri=u,
@@ -275,28 +358,40 @@ def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIden
         subnet_key=subnet_group_key(host),
         layer1_exact_id=layer1_exact_id,
         identity_id=identity_id,
+        canonical_sha256=full_v2_sha,
+        legacy_identity_id=legacy_id,
     )
 
 
 def _canonical_query(q_str: str) -> list[tuple[str, str]]:
     if not q_str:
         return []
-    out: list[tuple[str, str]] = []
+    raw_items: dict[str, str] = {}
     for k, v in parse_qsl(q_str, keep_blank_values=False):
-        kl = k.strip()
-        if kl.lower() in COSMETIC_QUERY_KEYS:
+        kl = k.strip().lower()
+        if kl in COSMETIC_QUERY_KEYS:
             continue
         val = v.strip()
-        if kl.lower() in LOWERCASE_QUERY_KEYS:
+        if kl in LOWERCASE_QUERY_KEYS:
             val = val.lower()
+        if kl in ("sni", "peer", "host", "authority"):
+            val = val.rstrip(".")
+        if kl == "alpn" and "," in val:
+            val = ",".join(sorted(tok.strip() for tok in val.split(",") if tok.strip()))
         # Normalize default TCP/none noise
-        if kl.lower() == "encryption" and val == "none":
+        if kl == "encryption" and val == "none":
             continue
-        if kl.lower() == "type" and val == "tcp":
+        if kl == "type" and val == "tcp":
             continue
-        out.append((kl.lower(), val))
-    out.sort()
-    return out
+        if kl == "security" and val == "none":
+            continue
+        raw_items[kl] = val
+    # Canonicalize peer -> sni when sni is omitted (common Trojan/Hysteria2 alias)
+    if "peer" in raw_items and "sni" not in raw_items:
+        raw_items["sni"] = raw_items.pop("peer")
+    elif "peer" in raw_items and raw_items.get("sni") == raw_items.get("peer"):
+        raw_items.pop("peer", None)
+    return sorted(raw_items.items())
 
 
 @dataclass
@@ -309,11 +404,20 @@ class ConfigProvenance:
     sni: str
     representative_uri: str
     sources: list[str] = field(default_factory=list)
+    operators: list[str] = field(default_factory=list)
     verified_source_hit: bool = False
+    canonical_sha256: str = ""
+    legacy_identity_id: str = ""
 
     @property
     def corroboration_count(self) -> int:
         return len(self.sources)
+
+    @property
+    def independent_source_count(self) -> int:
+        if self.operators:
+            return len(set(self.operators))
+        return len({extract_source_operator_id(s) for s in self.sources})
 
 
 @dataclass
@@ -351,20 +455,37 @@ class MultiLayerDeduplicator:
         *,
         verified_sources: set[str] | None = None,
         reject_private_hosts: bool = True,
+        source_urls: dict[str, str] | None = None,
     ) -> None:
         self.verified_sources = verified_sources or set()
         self.reject_private_hosts = reject_private_hosts
+        self.source_urls: dict[str, str] = dict(source_urls or {})
         self._seen_layer1: set[str] = set()
         self._records: dict[str, ConfigProvenance] = {}
+        self._sha_to_id: dict[str, str] = {}
         self._order: list[str] = []
         self._source_ids: dict[str, set[str]] = {}
         self.summary = DedupeSummary()
 
-    def ingest_source(self, source_name: str, uris: Iterable[str]) -> tuple[int, int]:
+    def register_source_url(self, source_name: str, url_or_handle: str) -> None:
+        if source_name and url_or_handle:
+            self.source_urls[source_name] = url_or_handle
+
+    def ingest_source(
+        self,
+        source_name: str,
+        uris: Iterable[str],
+        *,
+        source_url: str = "",
+    ) -> tuple[int, int]:
         """
         Ingest raw candidate URIs from `source_name`.
         Returns (valid_count_in_source, newly_added_unique_count).
         """
+        if source_url:
+            self.source_urls[source_name] = source_url
+        src_url = self.source_urls.get(source_name, "")
+        op_id = extract_source_operator_id(source_name, url_or_handle=src_url)
         src_set = self._source_ids.setdefault(source_name, set())
         valid_in_src = 0
         new_unique = 0
@@ -377,25 +498,41 @@ class MultiLayerDeduplicator:
                 self.summary.invalid_or_unsafe_rejected += 1
                 continue
 
+            # Resolve collision-safe server_id using full 256-bit canonical_sha256
+            eff_id = self._sha_to_id.get(ident.canonical_sha256)
+            if eff_id is None:
+                existing_rec = self._records.get(ident.identity_id)
+                if existing_rec and existing_rec.canonical_sha256 and existing_rec.canonical_sha256 != ident.canonical_sha256:
+                    eff_id = ident.canonical_sha256[:32]
+                else:
+                    eff_id = ident.identity_id
+                if ident.canonical_sha256:
+                    self._sha_to_id[ident.canonical_sha256] = eff_id
+
             valid_in_src += 1
-            src_set.add(ident.identity_id)
+            src_set.add(eff_id)
 
             if ident.layer1_exact_id in self._seen_layer1:
                 self.summary.layer1_exact_duplicates += 1
-                rec = self._records.get(ident.identity_id)
-                if rec and source_name not in rec.sources:
-                    rec.sources.append(source_name)
+                rec = self._records.get(eff_id)
+                if rec:
+                    if source_name not in rec.sources:
+                        rec.sources.append(source_name)
+                    if op_id not in rec.operators:
+                        rec.operators.append(op_id)
                     if is_verified:
                         rec.verified_source_hit = True
                 continue
 
             self._seen_layer1.add(ident.layer1_exact_id)
 
-            if ident.identity_id in self._records:
+            if eff_id in self._records:
                 self.summary.layer2_identity_duplicates += 1
-                rec = self._records[ident.identity_id]
+                rec = self._records[eff_id]
                 if source_name not in rec.sources:
                     rec.sources.append(source_name)
+                if op_id not in rec.operators:
+                    rec.operators.append(op_id)
                 if is_verified:
                     rec.verified_source_hit = True
                 # Prefer canonical hysteria2:// over hy2:// or SIP002 ss:// if cleaner
@@ -404,7 +541,7 @@ class MultiLayerDeduplicator:
                 continue
 
             rec = ConfigProvenance(
-                identity_id=ident.identity_id,
+                identity_id=eff_id,
                 canonical_proto=ident.canonical_proto,
                 host=ident.host,
                 port=ident.port,
@@ -412,10 +549,13 @@ class MultiLayerDeduplicator:
                 sni=ident.sni,
                 representative_uri=ident.uri,
                 sources=[source_name],
+                operators=[op_id],
                 verified_source_hit=is_verified,
+                canonical_sha256=ident.canonical_sha256,
+                legacy_identity_id=ident.legacy_identity_id,
             )
-            self._records[ident.identity_id] = rec
-            self._order.append(ident.identity_id)
+            self._records[eff_id] = rec
+            self._order.append(eff_id)
             new_unique += 1
 
         self._refresh_summary()
@@ -426,7 +566,7 @@ class MultiLayerDeduplicator:
         self.summary.unique_endpoints = len({(r.host, r.port) for r in self._records.values()})
         self.summary.unique_subnets = len({r.subnet_key for r in self._records.values()})
         self.summary.multi_source_corroborated = sum(
-            1 for r in self._records.values() if len(r.sources) >= 2
+            1 for r in self._records.values() if r.independent_source_count >= 2
         )
 
     def unique_uris(self) -> list[str]:

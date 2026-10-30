@@ -3,26 +3,36 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bahrain-vpn — لوحة الرصد الحي للبنية التحتية | Live Infrastructure Monitor</title>
+  <title>bahrain-vpn — منصة الذكاء التاريخي ورصد السيرفرات | Historical Server Intelligence</title>
   <link rel="stylesheet" href="styles.css" />
   <style>
-    .mon-wrap { max-width: 1360px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+    .mon-wrap { max-width: 1400px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
     .mon-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; background: var(--card, #151b28); border: 1px solid var(--border, #263044); border-radius: 14px; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; }
     .kpi-card { background: var(--card, #151b28); border: 1px solid var(--border, #263044); border-radius: 12px; padding: 14px 16px; }
     .kpi-label { font-size: 0.78rem; color: var(--muted, #94a3b8); margin-bottom: 6px; }
-    .kpi-val { font-size: 1.45rem; font-weight: 800; }
+    .kpi-val { font-size: 1.42rem; font-weight: 800; }
     .sec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
     .panel { background: var(--card, #151b28); border: 1px solid var(--border, #263044); border-radius: 14px; padding: 16px 18px; overflow-x: auto; }
     .panel h3 { margin: 0 0 12px 0; font-size: 1rem; }
     .bar-track { height: 8px; background: rgba(148,163,184,0.16); border-radius: 99px; overflow: hidden; }
     .bar-fill { height: 100%; background: linear-gradient(90deg, #10b981, #3b82f6); border-radius: 99px; }
-    table.mon-tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    table.mon-tbl { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
     table.mon-tbl th, table.mon-tbl td { padding: 8px 6px; border-bottom: 1px solid rgba(148,163,184,0.12); text-align: inherit; }
+    table.mon-tbl tbody tr.srv-row { cursor: pointer; transition: background 0.15s; }
+    table.mon-tbl tbody tr.srv-row:hover { background: rgba(59,130,246,0.10); }
     .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
     .pill-ok { background: rgba(16,185,129,0.18); color: #10b981; }
     .pill-warn { background: rgba(245,158,11,0.18); color: #f59e0b; }
     .pill-err { background: rgba(239,68,68,0.18); color: #ef4444; }
+    .filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .filter-grid select, .filter-grid input { width: 100%; padding: 8px 10px; border-radius: 8px; background: rgba(15,23,42,0.55); color: inherit; border: 1px solid var(--border, #263044); font-size: 0.82rem; }
+    .win-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .win-btn { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border, #263044); background: transparent; color: inherit; cursor: pointer; font-size: 0.78rem; font-weight: 700; }
+    .win-btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(2,6,23,0.76); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 999; }
+    .modal-backdrop.open { display: flex; }
+    .modal-box { background: var(--card, #151b28); border: 1px solid var(--border, #263044); border-radius: 16px; max-width: 780px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 20px; }
     @media (max-width: 640px) { .sec-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -32,7 +42,7 @@
       <div style="display:flex;align-items:center;gap:12px">
         <div class="brand-badge">BV</div>
         <div>
-          <h1 id="hdrTitle" style="font-size:1.15rem;margin:0">لوحة الرصد الحي للبنية التحتية — bahrain-vpn</h1>
+          <h1 id="hdrTitle" style="font-size:1.15rem;margin:0">منصة الذكاء التاريخي ورصد السيرفرات — bahrain-vpn</h1>
           <div id="hdrMeta" style="font-size:0.78rem;color:var(--muted)">جارٍ الجلب الآمن للبيانات المعمّاة…</div>
         </div>
       </div>
@@ -46,32 +56,100 @@
 
     <section id="overviewKpis" class="kpi-grid"></section>
 
+    <!-- Part 6.2 Windowed Performance & Failure Intelligence Dashboard -->
     <section class="sec-grid">
       <div class="panel">
-        <h3 id="ttlPerf">تحليلات الأداء والموثوقية والأمان</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <h3 id="ttlPerf" style="margin:0">لوحة الأداء والجاهزية النافذية</h3>
+          <div class="win-tabs" id="winSelector">
+            <button class="win-btn active" onclick="setPerfWindow('24h')">24h</button>
+            <button class="win-btn" onclick="setPerfWindow('7d')">7d</button>
+            <button class="win-btn" onclick="setPerfWindow('30d')">30d</button>
+            <button class="win-btn" onclick="setPerfWindow('90d')">90d</button>
+          </div>
+        </div>
         <div id="perfAnalyticsBox"></div>
       </div>
       <div class="panel">
-        <h3 id="ttlHist">السلاسل التاريخية للأداء والجاهزية (SVG)</h3>
+        <h3 id="ttlHist">السلاسل التاريخية وتوزيع الموثوقية والأعطال</h3>
         <div id="historyChartsBox"></div>
       </div>
     </section>
 
+    <!-- Part 6.3 & 6.4 Multi-Criteria Historical Server Explorer -->
+    <section class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <h3 id="ttlExplorer" style="margin:0">مستكشف السيرفرات التاريخي والفلاتر المتعددة</h3>
+        <span id="explorerCount" style="font-size:0.8rem;color:var(--muted)"></span>
+      </div>
+      <div class="filter-grid">
+        <select id="fltCountry" onchange="renderServerExplorer()"><option value="ALL">كل الدول / All Countries</option></select>
+        <select id="fltProtocol" onchange="renderServerExplorer()"><option value="ALL">كل البروتوكولات / All Protocols</option></select>
+        <select id="fltReliability" onchange="renderServerExplorer()">
+          <option value="0">أي موثوقية / Min Reliability: Any</option>
+          <option value="80">موثوقية ≥ 80</option>
+          <option value="60">موثوقية ≥ 60</option>
+          <option value="40">موثوقية ≥ 40</option>
+        </select>
+        <select id="fltMaxLatency" onchange="renderServerExplorer()">
+          <option value="0">أي تأخير / Max Latency: Any</option>
+          <option value="120">≤ 120 ms</option>
+          <option value="250">≤ 250 ms</option>
+          <option value="450">≤ 450 ms</option>
+        </select>
+        <select id="fltMinSpeed" onchange="renderServerExplorer()">
+          <option value="0">أي سرعة / Min Speed: Any</option>
+          <option value="500">≥ 500 KB/s</option>
+          <option value="2000">≥ 2000 KB/s</option>
+          <option value="5000">≥ 5000 KB/s</option>
+        </select>
+        <select id="fltMinUptime" onchange="renderServerExplorer()">
+          <option value="0">أي جاهزية / Min Uptime: Any</option>
+          <option value="80">Uptime ≥ 80%</option>
+          <option value="95">Uptime ≥ 95%</option>
+        </select>
+        <select id="fltLastSeen" onchange="renderServerExplorer()">
+          <option value="0">آخر ظهور: الكل / Last Seen: Any</option>
+          <option value="6">آخر 6 ساعات / ≤ 6h</option>
+          <option value="24">آخر 24 ساعة / ≤ 24h</option>
+          <option value="168">آخر 7 أيام / ≤ 7d</option>
+        </select>
+        <select id="fltMinSources" onchange="renderServerExplorer()">
+          <option value="1">ثقة المصدر: ≥ 1 مشغّل</option>
+          <option value="2">مستقل: ≥ 2 مشغّلين</option>
+          <option value="3">عالي الثقة: ≥ 3 مشغّلين</option>
+        </select>
+      </div>
+      <div id="serverExplorerTableBox"></div>
+    </section>
+
+    <!-- Top Reliable vs Unstable vs Suppressed/Dead Summary -->
     <section class="sec-grid">
+      <div class="panel">
+        <h3 id="ttlTopUnstable">أفضل السيرفرات موثوقيةً مقابل غير المستقرة والموقوفة مؤقتًا</h3>
+        <div id="reliabilityBucketsBox"></div>
+      </div>
       <div class="panel">
         <h3 id="ttlGeo">التحليلات الجغرافية وأفضل الدول أداءً</h3>
         <div id="geoAnalyticsBox"></div>
       </div>
+    </section>
+
+    <section class="sec-grid">
       <div class="panel">
         <h3 id="ttlProto">تحليلات البروتوكولات ونسب النجاح</h3>
         <div id="protoAnalyticsBox"></div>
       </div>
+      <div class="panel">
+        <h3 id="ttlSrc">صحة المصادر المستقلة (Telegram + GitHub)</h3>
+        <div id="sourceAnalyticsBox"></div>
+      </div>
     </section>
+  </div>
 
-    <section class="panel">
-      <h3 id="ttlSrc">صحة المصادر (Telegram + GitHub) والعزل الأمني</h3>
-      <div id="sourceAnalyticsBox"></div>
-    </section>
+  <!-- Historical Server Details Modal (Part 6.3) -->
+  <div id="srvDetailModal" class="modal-backdrop" onclick="if(event.target===this)closeServerModal()">
+    <div class="modal-box" id="srvDetailContent"></div>
   </div>
 
   <script src="monitor.js"></script>
