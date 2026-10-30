@@ -16,6 +16,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
 data class RemoteMeta(
     val generatedAt: String = "—",
@@ -52,6 +53,38 @@ data class ResultLine(
     val testedAtMs: Long = System.currentTimeMillis(),
 )
 
+data class Top500ServerEntry(
+    val centralRank: Int,
+    val serverId: String,
+    val configFingerprint: String,
+    val cfg: String,
+    val protocol: String = "",
+    val country: String = "",
+    val preliminaryLatencyMs: Long = 0L,
+    val centralQualityScore: Double = 0.0,
+    val stabilityRuns: Int = 0,
+    val securityAssessment: String = "",
+    val privacyAssessment: String = "",
+    val riskLevel: String = "",
+    val trustPosture: String = "UNTRUSTED_PUBLIC_SERVER",
+)
+
+data class Top500SyncOutcome(
+    val datasetVersion: Long,
+    val generatedAt: String,
+    val generatedAtEpoch: Long,
+    val configsSha256: String,
+    val qualifiedCount: Int,
+    val servers: List<Top500ServerEntry>,
+    val liveSuccess: Boolean,
+    val incrementalApplied: Boolean = false,
+    val notModified304: Boolean = false,
+    val rollbackRejected: Boolean = false,
+    val checksumVerified: Boolean = true,
+    val recoveredFromLastValid: Boolean = false,
+    val error: String? = null,
+)
+
 data class LoadResult(
     val configs: List<String>,
     val serverLatencies: Map<String, Long>,
@@ -60,6 +93,12 @@ data class LoadResult(
     val error: String? = null,
     val serverHints: Map<String, ServerHint> = emptyMap(),
     val fromCacheFallback: Boolean = false,
+    val datasetVersion: Long = 0L,
+    val datasetConfigsSha256: String = "",
+    val serverFingerprints: Map<String, String> = emptyMap(),
+    val incrementalApplied: Boolean = false,
+    val rollbackRejected: Boolean = false,
+    val recoveredFromLastValid: Boolean = false,
 )
 
 class Repo(
@@ -302,10 +341,17 @@ class Repo(
         return cfgs.toList() to hints
     }
 
-    /** قراءة الكاش المحلي فورًا عند فتح التطبيق بدون طلب شبكي. */
+    /** قراءة الكاش المحلي فورًا عند فتح التطبيق بدون طلب شبكي (مع تفضيل نسخة Top-500 الصالحة والمحقّقة). */
     fun loadCached(feedProfile: String = "smart"): LoadResult? {
         val metaFile = File(dir, "meta.json")
         val meta = if (metaFile.exists()) parseMeta(runCatching { metaFile.readText(Charsets.UTF_8) }.getOrNull()) else RemoteMeta()
+
+        if (feedProfile == "smart") {
+            val localTop500 = loadLastValidTop500Dataset()
+            if (localTop500 != null && localTop500.servers.isNotEmpty()) {
+                return top500OutcomeToLoadResult(localTop500, meta, forceCacheSource = true)
+            }
+        }
 
         val jsonFile = File(dir, "alive.json")
         val jsonPair = if (jsonFile.exists()) {
@@ -364,10 +410,18 @@ class Repo(
         else -> "alive.json"
     }
 
-    /** تنزيل القائمة الحيّة + مؤشرات الجودة والدول دون تسريب روابط المصدر أو عرض نجاح مضلل عند فشل الشبكة. */
+    /** تنزيل القائمة الحيّة + حزمة المرشّحين المركزية Top-500 مع التحقق من البصمات وحماية التراجع واستعادة آخر نسخة صالحة. */
     fun loadRemote(feedProfile: String = "smart"): LoadResult {
         val metaRaw = fetch("meta.json")
         val meta = parseMeta(metaRaw?.body)
+
+        if (feedProfile == "smart") {
+            val top500 = syncTop500Dataset()
+            if (top500 != null && top500.servers.isNotEmpty()) {
+                return top500OutcomeToLoadResult(top500, meta, forceCacheSource = false)
+            }
+        }
+
         val jsonRaw = fetch("alive.json")
         val jsonParsed = if (jsonRaw != null) parseAliveJson(jsonRaw.body) else (emptyList<String>() to emptyMap())
 
@@ -877,6 +931,393 @@ class Repo(
         }
     }
 
+    // ─────────────────── Central Top-500 Dataset Delivery (ETag + Checksums + Delta + Rollback Guard) ───────────────────
+
+    private val lastValidTop500File: File
+        get() = File(dir, "top500.last_valid.json")
+
+    private val top500ManifestEtagFile: File
+        get() = File(dir, "top500.manifest.json.etag")
+
+    private fun sha256HexBytes(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    private fun stripFragmentForHash(rawUri: String): String =
+        rawUri.trim().substringBefore("#").trim()
+
+    fun computeTop500ConfigsSetSha256(entries: List<Top500ServerEntry>): String {
+        val canonicalLines = entries.joinToString("\n") { e ->
+            "${e.serverId}|${e.configFingerprint}|${stripFragmentForHash(e.cfg)}"
+        }
+        return sha256HexBytes(canonicalLines.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun parseTop500ServerItem(obj: JSONObject, fallbackRank: Int): Top500ServerEntry? {
+        val rawCfg = obj.optString("cfg").ifBlank { obj.optString("uri") }.trim()
+        if (!rawCfg.contains("://")) return null
+        val cleaned = Converters.cleanUri(rawCfg)
+        if (!cleaned.contains("://") || !Converters.isSupported(cleaned)) return null
+        val sid = obj.optString("server_id").trim().ifBlank { Converters.stableServerId(cleaned) }
+        val fp = obj.optString("config_fingerprint").trim().ifBlank { Converters.configFingerprint(cleaned) }
+        if (sid.isBlank() || fp.isBlank()) return null
+        val cc = obj.optString("country", "").uppercase().let { if (it == "XX" || it.length != 2) "" else it }
+        return Top500ServerEntry(
+            centralRank = obj.optInt("central_rank", fallbackRank),
+            serverId = sid,
+            configFingerprint = fp,
+            cfg = rawCfg,
+            protocol = obj.optString("protocol", Converters.schemeOf(cleaned)),
+            country = cc,
+            preliminaryLatencyMs = obj.optLong("preliminary_latency_ms", 0L).coerceAtLeast(0L),
+            centralQualityScore = obj.optDouble("central_quality_score", 0.0).let { if (it.isNaN()) 0.0 else it },
+            stabilityRuns = obj.optInt("stability_runs", 0).coerceAtLeast(0),
+            securityAssessment = obj.optString("security_assessment", ""),
+            privacyAssessment = obj.optString("privacy_assessment", ""),
+            riskLevel = obj.optString("risk_level", ""),
+            trustPosture = obj.optString("trust_posture", "UNTRUSTED_PUBLIC_SERVER"),
+        )
+    }
+
+    private fun parseAndValidateTop500Document(
+        rawJson: String,
+        expectedConfigsSha256: String? = null,
+    ): Top500SyncOutcome? {
+        return runCatching {
+            val root = JSONObject(rawJson)
+            val version = root.optLong("dataset_version", 0L)
+            val generatedAt = root.optString("generated_at", "—")
+            val generatedAtEpoch = root.optLong("generated_at_epoch", 0L)
+            val claimedSha = root.optString("configs_sha256", "").lowercase()
+            val arr = root.optJSONArray("servers") ?: return null
+            if (arr.length() > MAX_TOP500_CAPACITY) return null
+
+            val parsed = ArrayList<Top500ServerEntry>(minOf(arr.length(), MAX_TOP500_CAPACITY))
+            val seenIds = HashSet<String>()
+            for (i in 0 until arr.length()) {
+                val itemObj = arr.optJSONObject(i) ?: return null
+                val entry = parseTop500ServerItem(itemObj, i + 1) ?: return null
+                if (!seenIds.add(entry.serverId)) return null
+                parsed.add(entry)
+            }
+
+            val actualConfigsSha = computeTop500ConfigsSetSha256(parsed)
+            if (claimedSha.isNotEmpty() && !claimedSha.equals(actualConfigsSha, ignoreCase = true)) {
+                AppDiag.w("Repo", "Top500 internal configs_sha256 mismatch")
+                return null
+            }
+            if (!expectedConfigsSha256.isNullOrBlank() && !expectedConfigsSha256.equals(actualConfigsSha, ignoreCase = true)) {
+                AppDiag.w("Repo", "Top500 manifest configs_sha256 mismatch")
+                return null
+            }
+
+            Top500SyncOutcome(
+                datasetVersion = version,
+                generatedAt = generatedAt,
+                generatedAtEpoch = generatedAtEpoch,
+                configsSha256 = actualConfigsSha,
+                qualifiedCount = parsed.size,
+                servers = parsed,
+                liveSuccess = true,
+                checksumVerified = true,
+            )
+        }.getOrNull()
+    }
+
+    private fun serializeTop500Document(outcome: Top500SyncOutcome): String {
+        val arr = JSONArray()
+        outcome.servers.forEachIndexed { idx, s ->
+            arr.put(
+                JSONObject()
+                    .put("central_rank", idx + 1)
+                    .put("server_id", s.serverId)
+                    .put("config_fingerprint", s.configFingerprint)
+                    .put("cfg", s.cfg)
+                    .put("protocol", s.protocol)
+                    .put("country", s.country)
+                    .put("preliminary_latency_ms", s.preliminaryLatencyMs)
+                    .put("central_quality_score", s.centralQualityScore)
+                    .put("stability_runs", s.stabilityRuns)
+                    .put("security_assessment", s.securityAssessment)
+                    .put("privacy_assessment", s.privacyAssessment)
+                    .put("risk_level", s.riskLevel)
+                    .put("trust_posture", s.trustPosture)
+            )
+        }
+        return JSONObject()
+            .put("schema_version", "1.0.0")
+            .put("dataset_version", outcome.datasetVersion)
+            .put("generated_at", outcome.generatedAt)
+            .put("generated_at_epoch", outcome.generatedAtEpoch)
+            .put("role", "CENTRAL_CANDIDATE_POOL")
+            .put("personalized_top50_authority", "ANDROID_LOCAL_ONLY")
+            .put("qualified_count", outcome.servers.size)
+            .put("configs_sha256", outcome.configsSha256)
+            .put("servers", arr)
+            .toString()
+    }
+
+    /** يستعيد آخر حزمة Top-500 محقّقة البصمة من التخزين المحلي الآمن. */
+    fun loadLastValidTop500Dataset(): Top500SyncOutcome? {
+        if (!lastValidTop500File.exists()) return null
+        val raw = runCatching { lastValidTop500File.readText(Charsets.UTF_8) }.getOrNull() ?: return null
+        return parseAndValidateTop500Document(raw)?.copy(liveSuccess = false)
+    }
+
+    private fun fetchFreshMirrorBody(file: String, etag: String? = null): HttpResp? {
+        for (url in candidates(file)) {
+            val resp = httpGetBounded(url, etag)
+            if (resp != null && (resp.status == 304 || !resp.body.isNullOrBlank())) {
+                return resp
+            }
+        }
+        return null
+    }
+
+    /**
+     * يزامن قاعدة المرشّحين المركزية Top-500 مع:
+     *   1) ETag / 304 لتجنب التنزيل المكرر.
+     *   2) التحقق الصارم من بصمات SHA-256 للملف وللمحتوى المعياري.
+     *   3) التحديث التفاضلي الاختياري (top500.delta.json) عند تطابق النسخة الأساسية.
+     *   4) الحماية من التراجع لإصدار أقدم (Rollback Protection).
+     *   5) الاستعادة التلقائية لآخر حزمة صالحة معروفة (Last-Known-Valid Recovery).
+     */
+    fun syncTop500Dataset(): Top500SyncOutcome? {
+        val localValid = loadLastValidTop500Dataset()
+        val savedEtag = if (localValid != null && top500ManifestEtagFile.exists()) {
+            runCatching { top500ManifestEtagFile.readText(Charsets.UTF_8).trim() }.getOrNull()
+        } else null
+
+        val manifestResp = fetchFreshMirrorBody("top500.manifest.json", savedEtag)
+        if (manifestResp != null && manifestResp.status == 304 && localValid != null) {
+            return localValid.copy(liveSuccess = true, notModified304 = true, checksumVerified = true)
+        }
+
+        if (manifestResp != null && !manifestResp.body.isNullOrBlank()) {
+            val manifestParsed = runCatching { JSONObject(manifestResp.body) }.getOrNull()
+            if (manifestParsed != null) {
+                val targetVersion = manifestParsed.optLong("dataset_version", 0L)
+                val targetGeneratedAt = manifestParsed.optString("generated_at", "—")
+                val targetEpoch = manifestParsed.optLong("generated_at_epoch", 0L)
+                val checksums = manifestParsed.optJSONObject("checksums") ?: JSONObject()
+                val expectedJsonSha = checksums.optString("top500_json_sha256", "").lowercase()
+                val expectedConfigsSha = checksums.optString("configs_sha256", "").lowercase()
+                val expectedDeltaSha = checksums.optString("delta_json_sha256", "").lowercase()
+
+                // Rollback protection: reject stale/replayed older versions or timestamps
+                if (localValid != null && (
+                        (targetVersion > 0L && localValid.datasetVersion > 0L && targetVersion < localValid.datasetVersion) ||
+                            (targetEpoch > 0L && localValid.generatedAtEpoch > 0L && targetEpoch < localValid.generatedAtEpoch)
+                        )
+                ) {
+                    AppDiag.w("Repo", "Rejected Top500 dataset rollback attempt")
+                    return localValid.copy(
+                        liveSuccess = false,
+                        rollbackRejected = true,
+                        recoveredFromLastValid = true,
+                        error = UiMessages.MSG_UPDATE_FAILED,
+                    )
+                }
+
+                // Identical canonical content already stored locally -> update metadata without re-downloading
+                if (localValid != null && expectedConfigsSha.isNotBlank() &&
+                    expectedConfigsSha.equals(localValid.configsSha256, ignoreCase = true)
+                ) {
+                    val refreshed = localValid.copy(
+                        datasetVersion = maxOf(targetVersion, localValid.datasetVersion),
+                        generatedAt = if (targetGeneratedAt != "—") targetGeneratedAt else localValid.generatedAt,
+                        generatedAtEpoch = maxOf(targetEpoch, localValid.generatedAtEpoch),
+                        liveSuccess = true,
+                        checksumVerified = true,
+                    )
+                    writeAtomic(lastValidTop500File, serializeTop500Document(refreshed))
+                    manifestResp.etag?.takeIf { it.isNotBlank() }?.let { writeAtomic(top500ManifestEtagFile, it) }
+                    return refreshed
+                }
+
+                // Optional incremental update via top500.delta.json when base matches local valid snapshot
+                val deltaAvail = manifestParsed.optBoolean("delta_available", false)
+                val deltaBaseSha = manifestParsed.optString("delta_base_configs_sha256", "")
+                if (localValid != null && deltaAvail && deltaBaseSha.equals(localValid.configsSha256, ignoreCase = true)) {
+                    val deltaResp = fetchFreshMirrorBody("top500.delta.json", null)
+                    if (deltaResp != null && !deltaResp.body.isNullOrBlank()) {
+                        val actualDeltaSha = sha256HexBytes(deltaResp.body.toByteArray(Charsets.UTF_8))
+                        val deltaShaOk = expectedDeltaSha.isBlank() || expectedDeltaSha.equals(actualDeltaSha, ignoreCase = true)
+                        if (deltaShaOk) {
+                            val reconstructed = applyIncrementalDelta(
+                                base = localValid,
+                                deltaJson = deltaResp.body,
+                                expectedTargetConfigsSha = expectedConfigsSha,
+                                targetVersion = targetVersion,
+                                targetGeneratedAt = targetGeneratedAt,
+                                targetEpoch = targetEpoch,
+                            )
+                            if (reconstructed != null) {
+                                writeAtomic(lastValidTop500File, serializeTop500Document(reconstructed))
+                                manifestResp.etag?.takeIf { it.isNotBlank() }?.let { writeAtomic(top500ManifestEtagFile, it) }
+                                return reconstructed
+                            }
+                        }
+                    }
+                }
+
+                // Full top500.json download + raw SHA-256 & canonical configs_sha256 verification
+                val fullResp = fetchFreshMirrorBody("top500.json", null)
+                if (fullResp != null && !fullResp.body.isNullOrBlank()) {
+                    val rawSha = sha256HexBytes(fullResp.body.toByteArray(Charsets.UTF_8))
+                    val rawShaOk = expectedJsonSha.isBlank() || expectedJsonSha.equals(rawSha, ignoreCase = true)
+                    if (rawShaOk) {
+                        val verifiedDoc = parseAndValidateTop500Document(fullResp.body, expectedConfigsSha)
+                        if (verifiedDoc != null) {
+                            writeAtomic(lastValidTop500File, fullResp.body)
+                            manifestResp.etag?.takeIf { it.isNotBlank() }?.let { writeAtomic(top500ManifestEtagFile, it) }
+                            return verifiedDoc
+                        }
+                    } else {
+                        AppDiag.w("Repo", "Top500 raw file SHA-256 verification failed")
+                    }
+                }
+
+                // Manifest existed, but payload failed integrity or download -> recover from last-known-valid!
+                if (localValid != null) {
+                    return localValid.copy(
+                        liveSuccess = false,
+                        recoveredFromLastValid = true,
+                        error = UiMessages.MSG_UPDATE_FAILED,
+                    )
+                }
+            }
+        }
+
+        // Direct fallback check for top500.json without manifest or offline recovery from last-known-valid
+        val directResp = fetchFreshMirrorBody("top500.json", null)
+        if (directResp != null && !directResp.body.isNullOrBlank()) {
+            val verifiedDirect = parseAndValidateTop500Document(directResp.body, null)
+            if (verifiedDirect != null) {
+                if (localValid != null && (
+                        (verifiedDirect.datasetVersion > 0L && verifiedDirect.datasetVersion < localValid.datasetVersion) ||
+                            (verifiedDirect.generatedAtEpoch > 0L && verifiedDirect.generatedAtEpoch < localValid.generatedAtEpoch)
+                        )
+                ) {
+                    return localValid.copy(
+                        liveSuccess = false,
+                        rollbackRejected = true,
+                        recoveredFromLastValid = true,
+                        error = UiMessages.MSG_UPDATE_FAILED,
+                    )
+                }
+                writeAtomic(lastValidTop500File, directResp.body)
+                return verifiedDirect
+            }
+        }
+
+        return localValid?.copy(
+            liveSuccess = false,
+            recoveredFromLastValid = true,
+            error = UiMessages.MSG_UPDATE_FAILED,
+        )
+    }
+
+    private fun applyIncrementalDelta(
+        base: Top500SyncOutcome,
+        deltaJson: String,
+        expectedTargetConfigsSha: String,
+        targetVersion: Long,
+        targetGeneratedAt: String,
+        targetEpoch: Long,
+    ): Top500SyncOutcome? {
+        return runCatching {
+            val dObj = JSONObject(deltaJson)
+            val map = LinkedHashMap<String, Top500ServerEntry>()
+            base.servers.forEach { map[it.serverId] = it }
+
+            val remArr = dObj.optJSONArray("removed_server_ids") ?: JSONArray()
+            for (i in 0 until remArr.length()) {
+                map.remove(remArr.optString(i))
+            }
+            val upArr = dObj.optJSONArray("added_or_updated") ?: JSONArray()
+            for (i in 0 until upArr.length()) {
+                val uObj = upArr.optJSONObject(i) ?: continue
+                val parsed = parseTop500ServerItem(uObj, i + 1) ?: return null
+                map[parsed.serverId] = parsed
+            }
+            val orderArr = dObj.optJSONArray("ordered_server_ids") ?: return null
+            if (orderArr.length() > MAX_TOP500_CAPACITY) return null
+            val ordered = ArrayList<Top500ServerEntry>(orderArr.length())
+            for (i in 0 until orderArr.length()) {
+                val sid = orderArr.optString(i)
+                val entry = map[sid] ?: return null
+                ordered.add(entry.copy(centralRank = i + 1))
+            }
+            val computedSha = computeTop500ConfigsSetSha256(ordered)
+            val targetSha = expectedTargetConfigsSha.ifBlank { dObj.optString("target_configs_sha256", "") }
+            if (targetSha.isNotBlank() && !targetSha.equals(computedSha, ignoreCase = true)) {
+                return null
+            }
+            Top500SyncOutcome(
+                datasetVersion = if (targetVersion > 0L) targetVersion else dObj.optLong("target_dataset_version", base.datasetVersion + 1L),
+                generatedAt = if (targetGeneratedAt != "—") targetGeneratedAt else dObj.optString("target_generated_at", base.generatedAt),
+                generatedAtEpoch = if (targetEpoch > 0L) targetEpoch else dObj.optLong("target_generated_at_epoch", base.generatedAtEpoch),
+                configsSha256 = computedSha,
+                qualifiedCount = ordered.size,
+                servers = ordered,
+                liveSuccess = true,
+                incrementalApplied = true,
+                checksumVerified = true,
+            )
+        }.getOrNull()
+    }
+
+    private fun top500OutcomeToLoadResult(
+        outcome: Top500SyncOutcome,
+        fallbackMeta: RemoteMeta,
+        forceCacheSource: Boolean,
+    ): LoadResult {
+        val cfgs = ArrayList<String>(outcome.servers.size)
+        val hints = HashMap<String, ServerHint>(outcome.servers.size)
+        val fps = HashMap<String, String>(outcome.servers.size)
+
+        for (entry in outcome.servers) {
+            val cleaned = Converters.cleanUri(entry.cfg)
+            if (!cleaned.contains("://") || !Converters.isSupported(cleaned)) continue
+            cfgs.add(cleaned)
+            fps[entry.serverId] = entry.configFingerprint
+            hints[cleaned] = ServerHint(
+                latencyMs = entry.preliminaryLatencyMs,
+                score = entry.centralQualityScore,
+                performanceScore = entry.centralQualityScore,
+                reliabilityScore = entry.centralQualityScore,
+                securityAssessment = entry.securityAssessment,
+                privacyAssessment = entry.privacyAssessment,
+                riskLevel = entry.riskLevel,
+                country = entry.country,
+                stabilityRuns = entry.stabilityRuns,
+                verifiedAt = outcome.generatedAt,
+            )
+        }
+
+        val liveOk = outcome.liveSuccess && !forceCacheSource
+        val effMeta = if (fallbackMeta.generatedAt != "—") fallbackMeta else RemoteMeta(
+            generatedAt = outcome.generatedAt,
+            alive = cfgs.size,
+            tested = cfgs.size,
+        )
+        return LoadResult(
+            configs = cfgs,
+            serverLatencies = hints.mapValues { it.value.latencyMs }.filterValues { it > 0L },
+            meta = effMeta,
+            source = if (liveOk) "remote" else "cache",
+            error = if (liveOk) null else (outcome.error ?: if (forceCacheSource) null else UiMessages.MSG_UPDATE_FAILED),
+            serverHints = hints,
+            fromCacheFallback = !liveOk,
+            datasetVersion = outcome.datasetVersion,
+            datasetConfigsSha256 = outcome.configsSha256,
+            serverFingerprints = fps,
+            incrementalApplied = outcome.incrementalApplied,
+            rollbackRejected = outcome.rollbackRejected,
+            recoveredFromLastValid = outcome.recoveredFromLastValid,
+        )
+    }
+
     companion object {
         @JvmField
         internal val DEFAULT_OWNER: String = "oldman-552"
@@ -885,6 +1326,7 @@ class Repo(
         private const val MAX_BODY_BYTES = 10L * 1024L * 1024L
         private const val MAX_BODY_CHARS = 8_000_000
         private const val MAX_PARSED_SERVERS = 5_000
+        private const val MAX_TOP500_CAPACITY = 500
         private const val MAX_PROMO_IMAGE_BYTES = 5 * 1024 * 1024
 
         fun containsSourceIdentifier(text: String): Boolean =

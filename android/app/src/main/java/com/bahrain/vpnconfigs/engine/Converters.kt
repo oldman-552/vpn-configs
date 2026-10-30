@@ -575,6 +575,18 @@ object Converters {
         return id
     }
 
+    /**
+     * بصمة إعداد آمنة من الأسرار (32-hex SHA-256) تتغير فور تغيّر أي معامِل اتصال
+     * أو تشفير أو نقل، وتبقى ثابتة عند تغيير الوسم النصي (#remark) فقط.
+     */
+    fun configFingerprint(rawUri: String): String {
+        val cleaned = cleanUri(rawUri)
+        if (!cleaned.contains("://")) return ""
+        val sid = stableServerId(cleaned)
+        val noFragHash = sha256Hex(cleaned).take(24)
+        return sha256Hex("bahrain-vpn:cfg-fp:v1|$sid|$noFragHash").take(32)
+    }
+
     /** اسم مضيف مقنّع آمن للسجلات التاريخية دون كشف عناوين IP الكاملة للعقد الخاصة. */
     fun maskedEndpointLabel(cfg: String): String {
         val ep = endpointLabel(cfg)

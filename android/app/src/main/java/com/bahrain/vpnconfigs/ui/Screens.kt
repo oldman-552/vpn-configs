@@ -99,6 +99,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bahrain.vpnconfigs.data.LocalPoolTier
 import com.bahrain.vpnconfigs.engine.ServerSortMode
 import com.bahrain.vpnconfigs.util.UiMessages
 import com.bahrain.vpnconfigs.vpn.VpnPhase
@@ -537,16 +538,22 @@ fun ConnectHomeScreen(
                         }
                     } else {
                         Button(
-                            onClick = { vm.startTest() },
+                            onClick = { vm.startQuickScan() },
                             enabled = !state.loading && state.servers.isNotEmpty() && state.engineReady,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("فحص السرعة")
+                            Text("فحص سريع")
                         }
                     }
                 }
+
+                Text(
+                    "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/50 مخصّصة • الاحتياطي المؤهّل: ${state.backupPoolCount}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
 
                 state.progress?.let { p ->
                     val frac = if (p.total > 0) p.done.toFloat() / p.total else 0f
@@ -687,8 +694,10 @@ fun ServersListScreen(
         state.servers.filter { srv ->
             val passFilter = when (selectedFilter) {
                 "ALL" -> true
+                "TOP_50" -> srv.localPoolTier == LocalPoolTier.TOP_50 || srv.isVip
+                "BACKUP" -> srv.localPoolTier == LocalPoolTier.BACKUP_POOL
                 "FAV" -> srv.isFavorite
-                "STABLE" -> srv.stabilityRuns >= 2 || srv.score >= 70.0
+                "STABLE" -> srv.stabilityScore >= 70.0 || srv.stabilityRuns >= 2
                 else -> srv.proto.equals(selectedFilter, ignoreCase = true)
             }
             val passCountry = state.filterCountry == "ALL" ||
@@ -715,11 +724,12 @@ fun ServersListScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text("قائمة سيرفرات bahrain-vpn", style = MaterialTheme.typography.titleLarge)
+                val poolTotal = state.datasetQualifiedCount.takeIf { it > 0 } ?: state.configs.size
                 val updatedPart = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
                 Text(
-                    "اضغط للاتصال أو التبديل الفوري (${filteredServers.size})$updatedPart",
+                    "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/50 • احتياطي ${state.backupPoolCount} • المرشّحات $poolTotal/500$updatedPart",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )
@@ -729,7 +739,7 @@ fun ServersListScreen(
             }
         }
 
-        // ── أزرار الفحص وإضافة كانفيغ ──
+        // ── أزرار الفحص السريع (Top 50) والفحص الشامل (500) وإضافة كانفيغ ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -747,24 +757,24 @@ fun ServersListScreen(
                 }
             } else {
                 Button(
-                    onClick = { vm.startTest() },
+                    onClick = { vm.startQuickScan() },
                     enabled = state.servers.isNotEmpty() && state.engineReady,
-                    modifier = Modifier.weight(1.15f),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                ) {
-                    Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("فحص السرعة")
-                }
-                OutlinedButton(
-                    onClick = { vm.startQuickPingTest() },
-                    enabled = state.servers.isNotEmpty() && state.engineReady,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                    modifier = Modifier.weight(1.1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 ) {
                     Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("فحص التأخير")
+                    Text("فحص سريع (50)")
+                }
+                OutlinedButton(
+                    onClick = { vm.startFullScan() },
+                    enabled = state.servers.isNotEmpty() && state.engineReady,
+                    modifier = Modifier.weight(1.1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                ) {
+                    Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("فحص شامل (500)")
                 }
             }
             OutlinedButton(
@@ -832,11 +842,13 @@ fun ServersListScreen(
             }
         }
 
-        // ── شرائح الفلترة (البروتوكولات + المفضلة + المستقرة) ──
+        // ── شرائح الفلترة (أفضل 50 للشبكة + الاحتياطي + البروتوكولات + المفضلة) ──
         val chips = listOf(
-            "ALL" to "الكل",
+            "ALL" to "الكل (${state.servers.size})",
+            "TOP_50" to "🏆 أفضل 50 (${state.top50Count})",
+            "BACKUP" to "🛡️ الاحتياطي (${state.backupPoolCount})",
             "FAV" to "⭐ المفضلة",
-            "STABLE" to "🛡️ المستقرة",
+            "STABLE" to "المستقرة",
             "HY2" to "HY2",
             "VLESS" to "VLESS",
             "TROJAN" to "TROJAN",
@@ -1009,6 +1021,32 @@ private fun ServerCard(
                                 color = Color(0xFFFFA000),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    } else if (item.localPoolTier == LocalPoolTier.TOP_50 && item.personalizedRank > 0) {
+                        Surface(
+                            color = VpnConnectedGreen.copy(alpha = 0.18f),
+                            shape = RoundedCornerShape(6.dp),
+                        ) {
+                            Text(
+                                "Top #${item.personalizedRank}",
+                                color = VpnConnectedGreen,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    } else if (item.localPoolTier == LocalPoolTier.BACKUP_POOL && item.personalizedRank > 50) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = RoundedCornerShape(6.dp),
+                        ) {
+                            Text(
+                                "احتياطي #${item.personalizedRank - 50}",
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }

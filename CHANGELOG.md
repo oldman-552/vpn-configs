@@ -1,5 +1,20 @@
 # CHANGELOG.md
 
+## [v3.4] — 2026-10-30 — Mandatory Final Architecture: Central GitHub Top 500 + Local Android Personalized Top 50
+
+### Added & Upgraded
+- **Central GitHub Server Database & Top-500 Candidate Pool (`central_top500.py`, `server/build_data.py`)**:
+  - Enforced strict responsibility separation: GitHub collects, validates, normalizes, deduplicates, assigns stable `server_id` + `config_fingerprint`, runs preliminary tunnel checks, filters unqualified/quarantined servers, and publishes **up to 500** qualified candidates (`top500.json`, `top500.txt`, `top500.manifest.json`, and incremental `top500.delta.json`).
+  - Never fabricates configurations or pads unqualified servers to reach 500; explicitly declares `personalized_top50_authority = "ANDROID_LOCAL_ONLY"` and `trust_posture = "UNTRUSTED_PUBLIC_SERVER"`.
+  - Publishes monotonic `dataset_version`, SHA-256 payload & canonical `configs_sha256` checksums, and incremental delta diffs.
+- **Android Dataset Delivery & Integrity Engine (`Repo.kt`, `Converters.configFingerprint`)**:
+  - Implemented `syncTop500Dataset()` with HTTP `ETag` (`304 Not Modified`), raw & canonical SHA-256 checksum verification, optional incremental `top500.delta.json` reconstruction, rollback protection (`datasetVersion` / `generatedAtEpoch` anti-replay), and automatic `top500.last_valid.json` recovery.
+- **Android Local Server Intelligence & Sequential VPN Tunnel Scanner (`LocalServerIntelligence.kt`, `SingBox.testRealTunnelSequential`, `ClientDatabase.kt` v3, `versionCode = 12`)**:
+  - **Strict Sequential Tunnel Testing (`Mutex` concurrency = 1):** Establishes one real encrypted VPN tunnel at a time, measuring handshake establishment time, median latency, jitter, packet loss, throughput, and stability without opening simultaneous tunnels.
+  - **Quick Scan (`startQuickScan`):** Prioritizes recently successful servers, current local Top 50, and Backup Pool, avoids scanning all 500 unnecessarily, optimizes mobile-data/battery budgets, and stops early when sufficient qualified servers are ready.
+  - **Full Scan (`startFullScan`):** Sequentially evaluates all configurations in the downloaded Top-500 pool to discover servers outperforming the current local Top 50, re-test stale servers, recalculate Personalized Top 50, and refresh the Backup Pool.
+  - **Network-Specific Rankings (`WIFI` vs `MOBILE_DATA`):** Isolated `network_server_stats`, `local_network_rankings`, append-only `server_scan_measurements`, and append-only `local_ranking_history` per network profile — never assuming Wi-Fi performance applies to Mobile Data.
+
 ## [v3.3] — 2026-10-30 — Historical Server Intelligence DB, Smart Explainable Selection, Persistent SQLite Client & 9-State Security
 
 ### Added & Upgraded

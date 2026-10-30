@@ -23,6 +23,10 @@ data class TestResult(
     val error: String = "",
     val engine: String = "sing-box",
     val testedAtMs: Long = System.currentTimeMillis(),
+    val establishMs: Long = 0L,
+    val jitterMs: Double = 0.0,
+    val packetLossPct: Double = 0.0,
+    val stabilityScore: Double = 0.0,
 )
 
 data class RunningDaemon(
@@ -319,6 +323,140 @@ class SingBox(private val ctx: Context) {
             } else 0.0
         } catch (_: Exception) {
             0.0
+        } finally {
+            stopProcess(proc, confFile)
+        }
+    }
+
+    /**
+     * فحص نفق VPN مشفّر حقيقي بشكل تسلسلي آمن (واحد تلو الآخر) على شبكة المستخدم الفعلية:
+     * يقيس زمن تأسيس الاتصال، الوسيط الزمني للتأخير (Latency)، التذبذب (Jitter)،
+     * فقدان الحزم (Packet Loss)، وسرعة التنزيل الفعلية عبر النفق دون كشف أي بيانات سرية.
+     */
+    fun testRealTunnelSequential(
+        cfg: String,
+        port: Int = 22650,
+        timeoutSec: Int = 5,
+        probeSamples: Int = 3,
+        measureThroughput: Boolean = true,
+        throughputBudgetBytes: Long = SPEED_BYTES,
+        dnsServer: String = "1.1.1.1",
+        useDoh: Boolean = false,
+    ): TestResult {
+        if (!isAvailable) return TestResult(cfg, error = "engine-missing")
+        val json = buildConfig(cfg, port, dnsServer, useDoh) ?: return TestResult(cfg, error = "unsupported")
+        val confFile = File(tmpDir, "cfg-seq-$port.json")
+        confFile.writeText(json, Charsets.UTF_8)
+
+        val devNull = File("/dev/null")
+        var proc: Process? = null
+        val tStartMs = System.currentTimeMillis()
+        return try {
+            val pb = ProcessBuilder(binaryPath, "run", "-c", confFile.absolutePath)
+            if (devNull.exists()) {
+                pb.redirectOutput(devNull)
+                pb.redirectError(devNull)
+            } else {
+                pb.redirectErrorStream(true)
+            }
+            proc = pb.start()
+
+            val deadline = System.currentTimeMillis() + 2600L
+            var up = false
+            while (System.currentTimeMillis() < deadline) {
+                if (Thread.currentThread().isInterrupted) return TestResult(cfg, error = "cancelled")
+                if (!proc.isAlive) return TestResult(cfg, error = "engine-exit")
+                try {
+                    Socket().use { s ->
+                        s.connect(InetSocketAddress("127.0.0.1", port), 60)
+                        up = true
+                    }
+                    if (up) break
+                } catch (_: Exception) {
+                    Thread.sleep(25)
+                }
+            }
+            if (!up) return TestResult(cfg, error = "no-listen")
+
+            val totalProbes = probeSamples.coerceIn(1, 5)
+            val rtts = ArrayList<Long>(totalProbes)
+            var establishMs = 0L
+            var failedProbes = 0
+
+            for (idx in 0 until totalProbes) {
+                if (Thread.currentThread().isInterrupted) return TestResult(cfg, error = "cancelled")
+                val pr = if (idx == 0) {
+                    Socks.measureRealDelay(port, TEST_URL, timeoutSec * 1000)
+                } else {
+                    Socks.get(port, TEST_URL, timeoutSec * 1000, maxBytes = 0)
+                }
+                if (pr.status in listOf(200, 204) && pr.elapsedMs > 0L) {
+                    if (establishMs <= 0L) {
+                        establishMs = (System.currentTimeMillis() - tStartMs).coerceAtLeast(pr.elapsedMs)
+                    }
+                    rtts.add(pr.elapsedMs)
+                } else {
+                    failedProbes++
+                    if (idx == 0) {
+                        // First encrypted handshake failed outright -> fast-fail to keep sequential scan snappy
+                        return TestResult(cfg, error = "http-${pr.status}", packetLossPct = 100.0)
+                    }
+                }
+            }
+
+            if (rtts.isEmpty()) {
+                return TestResult(cfg, error = "all-probes-failed", packetLossPct = 100.0)
+            }
+
+            val sortedRtts = rtts.sorted()
+            val medianLatency = sortedRtts[sortedRtts.size / 2]
+            val jitter = if (rtts.size >= 2) {
+                var sumDiff = 0.0
+                for (i in 1 until rtts.size) {
+                    sumDiff += kotlin.math.abs(rtts[i] - rtts[i - 1]).toDouble()
+                }
+                sumDiff / (rtts.size - 1).toDouble()
+            } else {
+                0.0
+            }
+            val lossPct = (failedProbes.toDouble() / totalProbes.toDouble()) * 100.0
+
+            var speedKbps = 0.0
+            if (measureThroughput && throughputBudgetBytes >= 16_384L && !Thread.currentThread().isInterrupted) {
+                val url = if (throughputBudgetBytes < SPEED_BYTES) {
+                    "https://speed.cloudflare.com/__down?bytes=$throughputBudgetBytes"
+                } else {
+                    SPEED_URL
+                }
+                val sp = Socks.get(port, url, maxOf(timeoutSec * 1000 + 2000, 7000), throughputBudgetBytes)
+                val dtSec = maxOf(sp.transferMs / 1000.0, 0.005)
+                if (sp.status in listOf(200, 206) && sp.bytes >= 8192L) {
+                    speedKbps = (sp.bytes / 1024.0) / dtSec
+                }
+            }
+
+            val stabScore = (
+                ((100.0 - lossPct) * 0.55) +
+                    ((1.0 - (jitter / 200.0)).coerceIn(0.0, 1.0) * 25.0) +
+                    ((1.0 - (establishMs / 4500.0)).coerceIn(0.0, 1.0) * 20.0)
+                ).coerceIn(0.0, 100.0)
+
+            TestResult(
+                cfg = cfg,
+                ok = true,
+                latencyMs = medianLatency,
+                speedKbps = speedKbps,
+                testedAtMs = System.currentTimeMillis(),
+                establishMs = establishMs,
+                jitterMs = jitter,
+                packetLossPct = lossPct,
+                stabilityScore = stabScore,
+            )
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            TestResult(cfg, error = "cancelled")
+        } catch (e: Exception) {
+            TestResult(cfg, error = e.javaClass.simpleName)
         } finally {
             stopProcess(proc, confFile)
         }

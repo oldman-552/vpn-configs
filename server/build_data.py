@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT))
 
 import collector  # noqa: E402
 import tester  # noqa: E402
+from central_top500 import export_central_top500_dataset  # noqa: E402
 from dedupe import MultiLayerDeduplicator, canonical_protocol, parse_identity  # noqa: E402
 from historical_db import HistoricalServerDB, parse_iso_epoch  # noqa: E402
 from pipeline_security import redact_text  # noqa: E402
@@ -122,6 +123,10 @@ def _preserve_last_known_good(prev_dir: Path, out_dir: Path) -> bool:
         "servers-statistics.json",
         "countries-statistics.json",
         "sources-statistics.json",
+        "top500.json",
+        "top500.txt",
+        "top500.manifest.json",
+        "top500.delta.json",
     ):
         src = prev_dir / fname
         if src.is_file():
@@ -690,6 +695,14 @@ def main(argv: list[str] | None = None) -> int:
     payload = ("\n".join(all_named) + "\n").encode("utf-8")
     write_atomic(out_dir / "all.txt.gz", gzip.compress(payload, compresslevel=9), binary=True)
 
+    # تصدير حزمة المرشّحين المركزية Top-500 (السلطة النهائية لـ Top-50 محلية على أندرويد فقط)
+    top500_manifest = export_central_top500_dataset(
+        out_dir,
+        scored_nodes,
+        prev_dir=prev_dir,
+        generated_at=now_iso,
+    )
+
     # ── 5) meta.json المتوافق رجعيًا والغني بالمؤشرات ──
     meta = {
         "schema_version": 2,
@@ -705,6 +718,9 @@ def main(argv: list[str] | None = None) -> int:
         "unique_clean": len(configs),
         "tested": len(lat),
         "alive": len(scored_nodes),
+        "central_top500_qualified": top500_manifest["qualified_count"],
+        "central_top500_version": top500_manifest["dataset_version"],
+        "personalized_top50_authority": "ANDROID_LOCAL_ONLY",
         "quarantined": len(quarantine_reg.entries),
         "skipped_unsupported": skipped,
         "alive_by_protocol": dict(Counter(n.canonical_protocol for n in scored_nodes)),
@@ -748,6 +764,10 @@ def main(argv: list[str] | None = None) -> int:
             "servers_statistics_json": _file_url("servers-statistics.json"),
             "countries_statistics_json": _file_url("countries-statistics.json"),
             "sources_statistics_json": _file_url("sources-statistics.json"),
+            "top500_json": _file_url("top500.json"),
+            "top500_txt": _file_url("top500.txt"),
+            "top500_manifest_json": _file_url("top500.manifest.json"),
+            "top500_delta_json": _file_url("top500.delta.json"),
             "all_gz": _file_url("all.txt.gz"),
             "protocols": proto_files_meta,
         },
