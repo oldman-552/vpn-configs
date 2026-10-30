@@ -206,28 +206,34 @@ function mergeHistoricalServers(srvCurrent, srvHistory, srvPerf) {
     const h = histMap[sid] || {};
     const p = perfMap[sid] || {};
     const w24 = (p.windows && p.windows["24h"]) || (h.uptime && h.uptime["24h"]) || {};
+    const rawStatus = String(c.current_status || c.status || h.current_status || (h.suppressed ? "SUPPRESSED" : "INACTIVE")).toUpperCase();
+    const isActive = c.is_active !== undefined
+      ? Boolean(c.is_active)
+      : (rawStatus === "OPERATIONAL" || rawStatus === "ACTIVE" || rawStatus === "UNSTABLE");
+    const isSuppressed = Boolean(c.suppressed || h.suppressed || rawStatus === "SUPPRESSED");
+    const upVal = w24.uptime_pct ?? c.uptime_percentage ?? h.uptime_percentage ?? null;
     merged.push({
       server_id: sid,
       protocol: (c.protocol || h.protocol || p.protocol || "vpn").toLowerCase(),
-      country: (c.country || h.country || p.country || "XX").toUpperCase(),
+      country: (c.detected_country || c.country || h.detected_country || h.country || p.detected_country || p.country || "XX").toUpperCase(),
       masked_endpoint: c.masked_endpoint || h.masked_endpoint || `node-${sid.slice(0, 8)}`,
-      is_active: c.is_active !== undefined ? Boolean(c.is_active) : Boolean(h.is_active),
-      status: c.status || (h.suppressed ? "SUPPRESSED" : (h.is_active ? "ACTIVE" : "INACTIVE")),
-      suppressed: Boolean(c.suppressed || h.suppressed),
+      is_active: isActive,
+      status: rawStatus,
+      suppressed: isSuppressed,
       suppression_reason: c.suppression_reason || h.suppression_reason || "",
-      reliability_score: Number(c.reliability_score ?? h.reliability_score ?? 0),
-      latency_ms: Number(c.latency_ms ?? w24.avg_latency_ms ?? 0),
-      speed_kbps: Number(c.download_kbps ?? w24.avg_download_kbps ?? 0),
-      uptime_24h_pct: w24.uptime_pct !== null && w24.uptime_pct !== undefined ? Number(w24.uptime_pct) : null,
-      uptime_24h_basis: w24.basis || (h.uptime && h.uptime["24h"] && h.uptime["24h"].basis) || "UNKNOWN",
-      independent_source_count: Number(c.independent_source_count ?? h.independent_source_count ?? 1),
-      security_assessment: c.security_assessment || h.security_assessment || "Unknown",
-      first_seen_at: c.first_seen_at || h.first_seen_at || "—",
-      last_seen_at: c.last_seen_at || h.last_seen_at || "—",
+      reliability_score: Number(c.latest_reliability_score ?? c.latest_composite_score ?? c.reliability_score ?? p.latest_composite_score ?? h.reliability_score ?? 0),
+      latency_ms: Number(c.median_latency ?? c.average_latency ?? c.latency_ms ?? w24.median_latency_ms ?? w24.average_latency_ms ?? w24.avg_latency_ms ?? 0),
+      speed_kbps: Number(c.download_speed ?? c.download_kbps ?? w24.average_download_kbps ?? w24.avg_download_kbps ?? 0),
+      uptime_24h_pct: upVal !== null && upVal !== undefined ? Number(upVal) : null,
+      uptime_24h_basis: w24.uptime_kind || w24.basis || c.uptime_kind || h.uptime_kind || "UNKNOWN",
+      independent_source_count: Number(c.independent_source_count ?? h.independent_source_count ?? c.source_count ?? 1),
+      security_assessment: c.security_assessment || h.security_assessment || "UNKNOWN_SERVER_TRUST",
+      first_seen_at: c.first_seen || c.first_seen_at || h.first_seen || h.first_seen_at || "—",
+      last_seen_at: c.last_seen || c.last_seen_at || h.last_seen || h.last_seen_at || "—",
       uptime_windows: h.uptime || {},
       perf_windows: p.windows || {},
-      failure_breakdown: h.failure_breakdown || {},
-      total_observations: Number(h.total_observations ?? 0),
+      failure_breakdown: c.failure_reasons || h.failure_reasons || h.failure_breakdown || {},
+      total_observations: Number(c.total_test_count ?? h.total_observations ?? w24.sample_count ?? 0),
     });
   });
 
@@ -243,11 +249,40 @@ window.setPerfWindow = function (winKey) {
   renderWindowedPerfPanel();
 };
 
-function renderWindowedPerfPanel() {
+function computeFleetWindowSummary(winKey) {
   const hs = MonData.histStats;
+  if (hs && hs.windows && hs.windows[winKey]) return hs.windows[winKey];
+  const wins = MonData.serversMerged
+    .map((s) => (s.perf_windows && s.perf_windows[winKey]) || null)
+    .filter((w) => w && Number(w.sample_count || 0) > 0);
+  if (wins.length === 0) return null;
+  const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+  const lats = wins.map((w) => Number(w.average_latency_ms ?? w.avg_latency_ms ?? 0)).filter((v) => v > 0);
+  const meds = wins.map((w) => Number(w.median_latency_ms ?? 0)).filter((v) => v > 0);
+  const p95s = wins.map((w) => Number(w.p95_latency_ms ?? 0)).filter((v) => v > 0);
+  const jits = wins.map((w) => Number(w.jitter_ms ?? w.avg_jitter_ms ?? 0)).filter((v) => v >= 0);
+  const losses = wins.map((w) => Number(w.packet_loss_pct ?? w.avg_packet_loss_pct ?? 0)).filter((v) => v >= 0);
+  const dls = wins.map((w) => Number(w.average_download_kbps ?? w.avg_download_kbps ?? 0)).filter((v) => v > 0);
+  const ups = wins.map((w) => Number(w.uptime_pct ?? 0)).filter((v) => v >= 0);
+  const samples = wins.reduce((acc, w) => acc + Number(w.sample_count || 0), 0);
+  const basis = wins.some((w) => w.uptime_kind === "OBSERVED") ? "OBSERVED" : "ESTIMATED";
+  return {
+    avg_latency_ms: mean(lats),
+    median_latency_ms: mean(meds),
+    p95_latency_ms: p95s.length ? Math.max(...p95s) : 0,
+    avg_jitter_ms: mean(jits),
+    avg_packet_loss_pct: mean(losses),
+    avg_download_kbps: mean(dls),
+    observed_uptime_pct: ups.length ? mean(ups) : null,
+    uptime_basis: basis,
+    sample_count: samples,
+  };
+}
+
+function renderWindowedPerfPanel() {
   const pa = (MonData.apiStats && MonData.apiStats.performance_analytics) || {};
   const sa = (MonData.apiStats && MonData.apiStats.security_analytics) || {};
-  const winObj = (hs && hs.windows && hs.windows[activePerfWin]) || null;
+  const winObj = computeFleetWindowSummary(activePerfWin);
 
   const avgLat = winObj ? Number(winObj.avg_latency_ms || 0) : Number(pa.avg_latency_ms || 0);
   const medLat = winObj ? Number(winObj.median_latency_ms || 0) : avgLat;
@@ -383,15 +418,21 @@ window.openServerModal = function (serverId) {
   const winRows = ["24h", "7d", "30d", "90d"].map((wk) => {
     const u = s.uptime_windows[wk] || {};
     const p = s.perf_windows[wk] || {};
-    const upVal = u.uptime_pct !== null && u.uptime_pct !== undefined ? `${Number(u.uptime_pct).toFixed(2)}%` : "—";
-    const basis = u.basis || p.basis || "UNKNOWN";
+    const rawUp = p.uptime_pct ?? u.uptime_pct;
+    const upVal = rawUp !== null && rawUp !== undefined ? `${Number(rawUp).toFixed(2)}%` : "—";
+    const basis = p.uptime_kind || u.basis || p.basis || "UNKNOWN";
+    const latAvg = p.average_latency_ms ?? p.avg_latency_ms;
+    const latP95 = p.p95_latency_ms ?? latAvg;
+    const jit = p.jitter_ms ?? p.avg_jitter_ms;
+    const loss = p.packet_loss_pct ?? p.avg_packet_loss_pct;
+    const dl = p.average_download_kbps ?? p.avg_download_kbps;
     return `<tr>
       <td><strong>${wk}</strong></td>
       <td>${upVal} <span class="pill ${basis === "OBSERVED" ? "pill-ok" : "pill-warn"}">${escHtml(basis)}</span></td>
-      <td>${p.avg_latency_ms ? `${Number(p.avg_latency_ms).toFixed(0)} / ${Number(p.p95_latency_ms || p.avg_latency_ms).toFixed(0)} ms` : "—"}</td>
-      <td>${p.avg_jitter_ms !== undefined && p.avg_jitter_ms !== null ? `${Number(p.avg_jitter_ms).toFixed(1)} ms` : "—"}</td>
-      <td>${p.avg_packet_loss_pct !== undefined && p.avg_packet_loss_pct !== null ? `${Number(p.avg_packet_loss_pct).toFixed(1)}%` : "—"}</td>
-      <td>${p.avg_download_kbps ? `${Math.round(p.avg_download_kbps)} KB/s` : "—"}</td>
+      <td>${latAvg ? `${Number(latAvg).toFixed(0)} / ${Number(latP95 || latAvg).toFixed(0)} ms` : "—"}</td>
+      <td>${jit !== undefined && jit !== null ? `${Number(jit).toFixed(1)} ms` : "—"}</td>
+      <td>${loss !== undefined && loss !== null ? `${Number(loss).toFixed(1)}%` : "—"}</td>
+      <td>${dl ? `${Math.round(dl)} KB/s` : "—"}</td>
     </tr>`;
   }).join("");
 
@@ -520,9 +561,9 @@ async function refreshMonitor(force = false) {
 
   const ov = stats.overview || {};
   const hsSummary = (srvStats && srvStats.overview) || {};
-  const totalKnown = Number(hsSummary.total_known_servers || MonData.serversMerged.length || ov.unique_clean_configs || 0);
-  const activeCount = Number(hsSummary.active_servers ?? ov.active_servers ?? 0);
-  const inactiveCount = Number(hsSummary.inactive_servers ?? Math.max(0, totalKnown - activeCount));
+  const totalKnown = Number(hsSummary.total_discovered_servers ?? hsSummary.total_known_servers ?? (MonData.serversMerged.length || ov.unique_clean_configs || 0));
+  const activeCount = Number(hsSummary.currently_operational_servers ?? hsSummary.active_servers ?? ov.active_servers ?? 0);
+  const inactiveCount = Number(hsSummary.failed_servers ?? hsSummary.inactive_servers ?? Math.max(0, totalKnown - activeCount));
   const suppressedCount = Number(hsSummary.suppressed_servers ?? MonData.serversMerged.filter((s) => s.suppressed).length);
 
   document.getElementById("hdrMeta").textContent =
@@ -550,7 +591,7 @@ async function refreshMonitor(force = false) {
     else if (s.reliability_score >= 40) relBuckets["40–59"]++;
     else relBuckets["<40"]++;
   });
-  const failTotals = (srvStats && srvStats.failure_categories_24h) || {};
+  const failTotals = (srvStats && (srvStats.failure_categories || srvStats.failure_categories_24h)) || {};
   const failPills = Object.entries(failTotals)
     .map(([k, v]) => `<span class="pill pill-warn" style="margin:2px">${escHtml(k)}: ${Number(v)}</span>`)
     .join(" ");
@@ -577,16 +618,16 @@ async function refreshMonitor(force = false) {
     <div style="font-size:0.82rem"><strong style="color:#ef4444">⏸ ${tr("موقوفة مؤقتًا / غير نشطة", "Suppressed / Inactive")}:</strong> ${deadSup.map((s) => `<code>${escHtml(s.server_id.slice(0, 8))} (${escHtml(s.status)})</code>`).join(" • ") || tr("لا يوجد", "None")}</div>
   `;
 
-  const cRows = ((countries || {}).countries || []).slice(0, 12);
-  const maxCountryCnt = Math.max(1, ...cRows.map((c) => Number(c.active_servers ?? c.total_servers ?? 0)));
+  const cRows = ((countries || {}).countries || []).filter((c) => c.country && c.country !== "XX").slice(0, 12);
+  const maxCountryCnt = Math.max(1, ...cRows.map((c) => Number(c.operational_servers ?? c.active_servers ?? c.total_discovered ?? c.total_servers ?? 0)));
   document.getElementById("geoAnalyticsBox").innerHTML = `
     <table class="mon-tbl">
       <thead><tr><th>${tr("الدولة", "Country")}</th><th>${tr("نشط", "Active")}</th><th>${tr("أفضل/متوسط Ping", "RTT")}</th><th>${tr("الموثوقية", "Reliability")}</th></tr></thead>
       <tbody>
         ${cRows.map((c) => {
-          const act = Number(c.active_servers ?? 0);
-          const lat = Number(c.best_latency_ms ?? c.avg_latency_ms ?? 0);
-          const rel = Number(c.avg_reliability_score ?? 0);
+          const act = Number(c.operational_servers ?? c.active_servers ?? 0);
+          const lat = Number(c.avg_median_latency_ms ?? c.best_latency_ms ?? c.avg_latency_ms ?? 0);
+          const rel = Number(c.avg_composite_score ?? c.avg_reliability_score ?? 0);
           return `<tr>
             <td><strong>${escHtml(c.country)}</strong></td>
             <td>${act} <div class="bar-track"><div class="bar-fill" style="width:${((act / maxCountryCnt) * 100).toFixed(0)}%"></div></div></td>
@@ -614,20 +655,22 @@ async function refreshMonitor(force = false) {
     </table>
   `;
 
-  const opRows = (sourcesStats && Array.isArray(sourcesStats.operators)) ? sourcesStats.operators.slice(0, 15) : null;
+  const opRows = sourcesStats
+    ? (Array.isArray(sourcesStats.sources) ? sourcesStats.sources.slice(0, 15) : (Array.isArray(sourcesStats.operators) ? sourcesStats.operators.slice(0, 15) : null))
+    : null;
   const ghRows = ((sources || {}).github_sources || []).slice(0, 15);
   const srcSum = ((sources || {}).summary || {});
   document.getElementById("sourceAnalyticsBox").innerHTML = opRows
     ? `
       <table class="mon-tbl">
-        <thead><tr><th>${tr("مشغّل المصدر المستقل", "Independent Operator")}</th><th>${tr("إجمالي/حيّ", "Active/Total")}</th><th>${tr("حصري (Unique)", "Unique")}</th><th>${tr("مكرر", "Dup")}</th><th>${tr("درجة الثقة", "Reliability")}</th></tr></thead>
+        <thead><tr><th>${tr("مشغّل المصدر المستقل", "Independent Operator")}</th><th>${tr("إجمالي/حيّ", "Active/Total")}</th><th>${tr("حصري (Unique)", "Unique")}</th><th>${tr("مكرر%", "Dup%")}</th><th>${tr("درجة الثقة", "Confidence")}</th></tr></thead>
         <tbody>
           ${opRows.map((op) => `<tr>
-            <td><strong>${escHtml(op.operator_id)}</strong></td>
-            <td>${Number(op.active_servers || 0)} / ${Number(op.total_contributed || 0)}</td>
-            <td>${Number(op.unique_servers || 0)}</td>
-            <td>${Number(op.duplicate_submissions || 0)}</td>
-            <td><strong>${Number(op.reliability_score || 0).toFixed(1)}</strong></td>
+            <td><strong>${escHtml(op.operator_id || op.source_id || "")}</strong></td>
+            <td>${Number(op.alive_servers ?? op.active_servers ?? 0)} / ${Number(op.discovered_configs ?? op.total_contributed ?? 0)}</td>
+            <td>${Number(op.exclusive_servers ?? op.unique_servers ?? 0)}</td>
+            <td>${op.duplicate_rate !== undefined ? `${(Number(op.duplicate_rate) * 100).toFixed(0)}%` : Number(op.duplicate_submissions || 0)}</td>
+            <td><strong>${Number(op.confidence_score ?? op.reliability_score ?? 0).toFixed(1)}</strong></td>
           </tr>`).join("")}
         </tbody>
       </table>
