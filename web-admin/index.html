@@ -41,6 +41,9 @@
       <button class="btn" style="padding:12px;margin-top:6px" onclick="handleAdminUnlock()">
         فك تشفير الخزنة والدخول للوحة التحكم / Unlock Console
       </button>
+      <a class="btn btn-outline" href="monitor.html" style="padding:10px;text-align:center;text-decoration:none;margin-top:4px">
+        📡 فتح لوحة الرصد الحي العامة (بدون تسجيل دخول) / Public Live Monitor
+      </a>
     </div>
   </div>
 
@@ -62,6 +65,7 @@
           <input placeholder="بحث فوري في المستخدمين، الأجهزة، الخوادم… / Quick Search…" oninput="onGlobalSearch(this.value)" />
         </div>
         <div class="toolbar-actions">
+          <a class="btn btn-outline" href="monitor.html" style="text-decoration:none">📡 Live Monitor</a>
           <button class="btn btn-outline" onclick="syncFromGitHub()">↻ GitHub Sync</button>
           <button class="btn btn-success" onclick="saveAndPublishToGitHub('Manual admin publish')">☁ Publish Signed Bundle</button>
           <button class="btn btn-outline" onclick="exportExcel()">⇩ CSV/Excel</button>

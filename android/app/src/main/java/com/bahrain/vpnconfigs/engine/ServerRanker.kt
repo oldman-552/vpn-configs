@@ -28,16 +28,18 @@ enum class ServerSortMode(val key: String, val titleAr: String) {
     LOWEST_LATENCY("LOWEST_LATENCY", "الأقل تأخيرًا"),
     MOST_STABLE("MOST_STABLE", "الأكثر استقرارًا"),
     BEST_OVERALL("BEST_OVERALL", "الأفضل إجمالًا"),
+    PRIVACY_AWARE("PRIVACY_AWARE", "الأعلى أمانًا وخصوصية"),
     RECENTLY_TESTED("RECENTLY_TESTED", "الأحدث اختبارًا");
 
     companion object {
         val DEFAULT: ServerSortMode = FASTEST_DOWNLOAD
 
         fun fromKey(raw: String?): ServerSortMode = when (raw?.trim()?.uppercase()) {
-            "FASTEST_DOWNLOAD", "SPEED" -> FASTEST_DOWNLOAD
-            "LOWEST_LATENCY", "REAL_DELAY" -> LOWEST_LATENCY
-            "MOST_STABLE", "STABILITY" -> MOST_STABLE
-            "BEST_OVERALL", "OVERALL" -> BEST_OVERALL
+            "FASTEST_DOWNLOAD", "SPEED", "HIGH_SPEED" -> FASTEST_DOWNLOAD
+            "LOWEST_LATENCY", "REAL_DELAY", "LOW_LATENCY" -> LOWEST_LATENCY
+            "MOST_STABLE", "STABILITY", "HIGH_RELIABILITY" -> MOST_STABLE
+            "BEST_OVERALL", "OVERALL", "BALANCED" -> BEST_OVERALL
+            "PRIVACY_AWARE", "SECURITY" -> PRIVACY_AWARE
             "RECENTLY_TESTED", "RECENT" -> RECENTLY_TESTED
             else -> DEFAULT
         }
@@ -49,8 +51,15 @@ data class RankableServer(
     val latencyMs: Long = 0L,
     val jitterMs: Double = 0.0,
     val speedKbps: Double = 0.0,
+    val uploadKbps: Double = 0.0,
+    val packetLossPct: Double = 0.0,
+    val uptimePct: Double = 100.0,
+    val recentFailures: Int = 0,
     val stabilityRuns: Int = 0,
     val cloudQualityHint: Double = 0.0,
+    val securityAssessment: String = "Unknown",
+    val privacyAssessment: String = "Unknown",
+    val riskLevel: String = "UNKNOWN",
     val locallyTested: Boolean = false,
     val localFailed: Boolean = false,
     val isFavorite: Boolean = false,
@@ -189,7 +198,75 @@ object ServerRanker {
         return (weightedSum * freshness).coerceIn(0.0, 100.0)
     }
 
-    /** مقارن معتمد لجميع أوضاع الترتيب الخمسة. */
+    /**
+     * يحسب درجة مخصّصة لكل ملف تعريف (BALANCED, LOW_LATENCY, HIGH_SPEED, HIGH_RELIABILITY, PRIVACY_AWARE)
+     * مع دمج فقدان الحزم، التذبذب، سرعة التنزيل والرفع، وقت التشغيل التاريخي، الإخفاقات الأخيرة، ومستوى أمان النقل.
+     */
+    fun computeProfileScore(
+        item: RankableServer,
+        profileKey: String,
+        nowMs: Long = System.currentTimeMillis(),
+    ): Double {
+        if (item.localFailed) return 0.0
+        val mode = ServerSortMode.fromKey(profileKey)
+        val dl = computeSpeedComponent(item.speedKbps) ?: 0.0
+        val ul = computeSpeedComponent(item.uploadKbps) ?: 0.0
+        val throughput = if (item.uploadKbps > 0.0) (0.75 * dl + 0.25 * ul) else dl
+        val lat = computeLatencyComponent(item.latencyMs, item.localFailed) ?: 0.0
+        val stab = computeStabilityComponent(
+            item.stabilityRuns,
+            item.jitterMs,
+            item.locallyTested,
+            item.latencyMs,
+            item.localFailed,
+        ) ?: 0.0
+        val lossScore = (100.0 - item.packetLossPct * 2.0).coerceIn(0.0, 100.0)
+        val upScore = item.uptimePct.coerceIn(0.0, 100.0)
+        val failPenalty = (item.recentFailures * 10.0).coerceAtMost(35.0)
+
+        val secScore = when (item.securityAssessment) {
+            "Verified" -> 100.0
+            "Partial" -> 58.0
+            "Unknown" -> 30.0
+            else -> 0.0
+        }
+        val privScore = when (item.privacyAssessment) {
+            "Verified" -> 100.0
+            "Unverified" -> 65.0
+            "Unknown" -> 35.0
+            else -> 0.0
+        }
+        val riskPenalty = when (item.riskLevel) {
+            "CRITICAL" -> 100.0
+            "HIGH" -> 55.0
+            "MEDIUM" -> 15.0
+            else -> 0.0
+        }
+
+        val raw = when (mode) {
+            ServerSortMode.FASTEST_DOWNLOAD ->
+                0.60 * throughput + 0.20 * lat + 0.15 * stab + 0.05 * lossScore - failPenalty * 0.4
+            ServerSortMode.LOWEST_LATENCY ->
+                0.55 * lat + 0.20 * stab + 0.15 * lossScore + 0.10 * throughput - failPenalty * 0.5
+            ServerSortMode.MOST_STABLE ->
+                0.35 * stab + 0.25 * upScore + 0.25 * lossScore + 0.15 * lat - failPenalty
+            ServerSortMode.PRIVACY_AWARE -> {
+                if (item.securityAssessment == "Failed" ||
+                    item.privacyAssessment == "High Risk" ||
+                    item.riskLevel in setOf("HIGH", "CRITICAL")
+                ) {
+                    return 0.0
+                }
+                0.42 * secScore + 0.23 * privScore + 0.15 * stab + 0.10 * lat + 0.10 * throughput - riskPenalty - failPenalty * 0.5
+            }
+            else ->
+                0.35 * throughput + 0.25 * lat + 0.20 * stab + 0.10 * upScore + 0.10 * secScore - failPenalty * 0.6
+        }
+        val freshness = if (item.lastTestedAtMs > 0L) computeFreshnessFactor(item.lastTestedAtMs, nowMs) else 0.90
+        return (raw * freshness).coerceIn(0.0, 100.0)
+    }
+
+    /** مقارن معتمد لجميع أوضاع الترتيب الستة. */
     fun comparatorFor(mode: ServerSortMode, nowMs: Long = System.currentTimeMillis()): Comparator<RankableServer> {
         fun delayRank(ms: Long): Long = if (ms > 0L) ms else Long.MAX_VALUE
         fun stabilityValue(s: RankableServer): Double =
@@ -219,6 +296,11 @@ object ServerRanker {
             ServerSortMode.BEST_OVERALL ->
                 compareByDescending<RankableServer> { computeOverallScore(it, nowMs) }
                     .thenByDescending { it.speedKbps }
+                    .thenBy { delayRank(it.latencyMs) }
+
+            ServerSortMode.PRIVACY_AWARE ->
+                compareByDescending<RankableServer> { computeProfileScore(it, ServerSortMode.PRIVACY_AWARE.key, nowMs) }
+                    .thenByDescending { computeOverallScore(it, nowMs) }
                     .thenBy { delayRank(it.latencyMs) }
 
             ServerSortMode.RECENTLY_TESTED ->

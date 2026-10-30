@@ -1,11 +1,12 @@
 // =====================================================================
-// BahrainVpnService.kt — خدمة نفق الـ VPN المتكاملة لتطبيق bahrain-vpn:
-//   • إنشاء واجهة TUN عبر Android VpnService مع استثناء التطبيقات (Split Tunneling)
-//   • تشغيل hev-socks5-tunnel (JNI C/lwIP + MapDNS لمنع تسريب DNS)
-//   • تشغيل نواة sing-box محليًا والتبديل السلس بين السيرفرات دون هدم واجهة TUN
-//   • اتصال ذكي متوازٍ (Smart Parallel Failover) يتحقق من عمل الإنترنت فعليًا على شبكة المستخدم
-//   • مراقب ذكي (Watchdog) لقياس البينغ الحيّ والتبديل التلقائي عند سقوط العقدة
-//   • إشعار دائم حيّ يعرض سرعة التنزيل والرفع والبينغ وأزرار التحكم السريع
+// BahrainVpnService.kt — خدمة نفق الـ VPN المتكاملة لتطبيق bahrain-vpn (v3.2):
+//   • حماية صارمة من تسرب IPv6 و DNS (التقاط ::/0 دائمًا + tunnel-dns داخل النفق)
+//   • مفتاح إيقاف حقيقي (Fail-Closed Kill Switch): يقفل واجهة TUN قبل الفحص،
+//     ويحتفظ بالحجب في وضع PROTECTION_ACTIVE عند انقطاع جميع السيرفرات لمنع التسرب
+//   • انتقال سلس بين شبكات Wi-Fi والجيل الخامس عبر ConnectivityManager.NetworkCallback
+//   • محرك تبديل استباقي ذكي بثلاثة أوضاع (OFF / SMART / AGGRESSIVE) مع Hysteresis
+//   • حالات اتصال موثّقة لا تعلن CONNECTED إلا بعد التحقق الفعلي من مرور البيانات
+//   • جدولة مراقبة تكيّفية موفّرة للبطارية ومنع تكرار تحديثات الإشعار غير المتغيّرة
 // =====================================================================
 package com.bahrain.vpnconfigs.vpn
 
@@ -30,6 +31,7 @@ import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.data.Repo
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.RunningDaemon
+import com.bahrain.vpnconfigs.engine.SecurityEvaluator
 import com.bahrain.vpnconfigs.engine.SingBox
 import com.bahrain.vpnconfigs.engine.Socks
 import com.bahrain.vpnconfigs.enterprise.AppHealthMonitor
@@ -71,8 +73,9 @@ class BahrainVpnService : VpnService() {
 
         fun startConnect(ctx: Context, cfg: String, label: String) {
             val appCtx = ctx.applicationContext
+            val curPhase = VpnStateManager.status.value.phase
             val i = Intent(appCtx, BahrainVpnService::class.java).apply {
-                action = if (VpnStateManager.status.value.phase == VpnPhase.CONNECTED) {
+                action = if (curPhase == VpnPhase.CONNECTED || curPhase == VpnPhase.CONNECTION_DEGRADED) {
                     ACTION_SWITCH
                 } else {
                     ACTION_CONNECT
@@ -91,7 +94,7 @@ class BahrainVpnService : VpnService() {
             val inst = activeInstance
             if (inst != null) {
                 inst.requestReloadTun()
-            } else if (VpnStateManager.status.value.phase == VpnPhase.CONNECTED) {
+            } else if (VpnStateManager.status.value.isActive) {
                 runCatching {
                     ctx.applicationContext.startService(
                         Intent(ctx.applicationContext, BahrainVpnService::class.java).apply {
@@ -118,15 +121,17 @@ class BahrainVpnService : VpnService() {
         }
 
         fun stopVpn(ctx: Context) {
+            val appCtx = ctx.applicationContext
+            runCatching { Prefs(appCtx).wasVpnDesiredActive = false }
             val inst = activeInstance
             if (inst != null) {
                 inst.requestDisconnect()
             } else {
                 VpnStateManager.resetDisconnected(infoMsg = "تم قطع الاتصال")
-                QuickTileService.requestTileUpdate(ctx.applicationContext)
+                QuickTileService.requestTileUpdate(appCtx)
                 runCatching {
-                    ctx.applicationContext.startService(
-                        Intent(ctx.applicationContext, BahrainVpnService::class.java).apply {
+                    appCtx.startService(
+                        Intent(appCtx, BahrainVpnService::class.java).apply {
                             action = ACTION_DISCONNECT
                         }
                     )
@@ -149,24 +154,36 @@ class BahrainVpnService : VpnService() {
 
     private var monitorJob: Job? = null
     private var probeJob: Job? = null
+    private var recoveryJob: Job? = null
     private var traceJob: Job? = null
 
     @Volatile
     private var lastPhysicalNetHandle: Long = 0L
+
+    @Volatile
+    private var lastNotifSignature: String = ""
 
     private val netCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             val handle = network.networkHandle
             val prev = lastPhysicalNetHandle
             lastPhysicalNetHandle = handle
-            // عند انتقال الهاتف الفعلي من Wi-Fi إلى 5G أو العكس نعيد ربط sing-box بسلاسة
-            if (prev != 0L && prev != handle && VpnStateManager.status.value.phase == VpnPhase.CONNECTED) {
+            val cur = VpnStateManager.status.value
+            // عند انتقال الهاتف من Wi-Fi إلى 5G أو العودة بعد انقطاع الشبكة نستعيد النفق المشفّر بسلاسة
+            if (prev != 0L && prev != handle && (cur.isTunnelVerified || cur.phase == VpnPhase.PROTECTION_ACTIVE)) {
                 serviceScope.launch {
-                    delay(450L)
+                    delay(400L)
                     opLock.withLock {
                         val st = VpnStateManager.status.value
-                        if (st.phase == VpnPhase.CONNECTED && st.activeCfg != null) {
-                            handleConnect(st.activeCfg, st.activeLabel, forceRebuildTun = false)
+                        if ((st.isTunnelVerified || st.phase == VpnPhase.PROTECTION_ACTIVE) && st.activeCfg != null) {
+                            VpnStateManager.update {
+                                it.copy(
+                                    phase = VpnPhase.RECONNECTING,
+                                    switchingStatus = "تغيّرت الشبكة — جارٍ إعادة التحقق من النفق…",
+                                    statusMessage = "تغيّرت الشبكة الفعلية — جارٍ تأمين المسار دون تسريب…",
+                                )
+                            }
+                            handleConnect(st.activeCfg, st.activeLabel, forceRebuildTun = false, isNetworkHandover = true)
                         }
                     }
                 }
@@ -210,9 +227,10 @@ class BahrainVpnService : VpnService() {
     }
 
     fun requestDisconnect() {
+        prefs.wasVpnDesiredActive = false
         serviceScope.launch {
             opLock.withLock {
-                teardownInternal(null, "تم قطع الاتصال")
+                teardownInternal(null, "تم قطع الاتصال", userInitiated = true)
             }
             stopSelf()
         }
@@ -232,7 +250,6 @@ class BahrainVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action ?: ACTION_CONNECT
 
-        // دائمًا نستدعي promoteToForeground أولًا لتفادي استثناء أندرويد 8-15 عند البدء كخدمة أمامية
         val initialLabel = intent?.getStringExtra(EXTRA_LABEL)
             ?: VpnStateManager.status.value.activeLabel.ifBlank { prefs.selectedLabel }
         promoteToForeground(buildNotification("جارٍ المعالجة…", initialLabel, ""))
@@ -242,6 +259,7 @@ class BahrainVpnService : VpnService() {
             return START_NOT_STICKY
         }
 
+        prefs.wasVpnDesiredActive = true
         val targetCfg = intent?.getStringExtra(EXTRA_CFG)
         val targetLabel = intent?.getStringExtra(EXTRA_LABEL)
 
@@ -264,11 +282,18 @@ class BahrainVpnService : VpnService() {
         return START_STICKY
     }
 
-    private suspend fun handleConnect(rawCfg: String?, rawLabel: String?, forceRebuildTun: Boolean) {
+    private suspend fun handleConnect(
+        rawCfg: String?,
+        rawLabel: String?,
+        forceRebuildTun: Boolean,
+        isNetworkHandover: Boolean = false,
+    ) {
+        recoveryJob?.cancel()
         val guard = EnterpriseLicenseGuard(applicationContext)
         val licState = guard.currentState()
         if (!licState.canConnectVpn) {
-            teardownInternal(licState.statusDetailAr.ifBlank { "غير مصرّح بالاتصال حاليًا" }, null)
+            prefs.wasVpnDesiredActive = false
+            teardownInternal(licState.statusDetailAr.ifBlank { "غير مصرّح بالاتصال حاليًا" }, null, userInitiated = true)
             stopSelf()
             return
         }
@@ -279,11 +304,13 @@ class BahrainVpnService : VpnService() {
             ?: pool.firstOrNull()?.cfg
 
         if (chosenCfg.isNullOrBlank()) {
-            teardownInternal(UiMessages.MSG_NO_SERVERS, null)
+            prefs.wasVpnDesiredActive = false
+            teardownInternal(UiMessages.MSG_NO_SERVERS, null, userInitiated = true)
             stopSelf()
             return
         }
 
+        val prevLabel = VpnStateManager.status.value.activeLabel
         val chosenLabel = rawLabel?.takeIf { it.isNotBlank() }
             ?: pool.firstOrNull { it.cfg == chosenCfg }?.label
             ?: prefs.selectedLabel.ifBlank { "bahrain-vpn #1" }
@@ -291,22 +318,55 @@ class BahrainVpnService : VpnService() {
         prefs.selectedCfg = chosenCfg
         prefs.selectedLabel = chosenLabel
 
-        val isSwitching = tunFd != null && !forceRebuildTun && TProxyService.TProxyIsRunning()
+        val osLockdown = KillSwitchController.isOsLockdownActive(this)
+        val killSwitchOn = prefs.killSwitch
+        val foMode = FailoverMode.fromKey(prefs.failoverMode)
+        val tunAlreadyUp = tunFd != null && !forceRebuildTun && TProxyService.TProxyIsRunning()
+
+        val initialPhase = when {
+            isNetworkHandover -> VpnPhase.RECONNECTING
+            tunAlreadyUp -> VpnPhase.SWITCHING_SERVER
+            else -> VpnPhase.CONNECTING
+        }
 
         VpnStateManager.update { prev ->
             prev.copy(
-                phase = if (isSwitching) VpnPhase.SWITCHING else VpnPhase.CONNECTING,
+                phase = initialPhase,
                 activeCfg = chosenCfg,
                 activeLabel = chosenLabel,
                 activeProto = Converters.protocolBadge(chosenCfg),
                 activeEndpoint = Converters.endpointLabel(chosenCfg),
-                statusMessage = if (isSwitching) "جارٍ التبديل إلى $chosenLabel…" else "جارٍ الربط والتحقق من الاتصال…",
+                failoverMode = foMode.key,
+                killSwitchActive = killSwitchOn,
+                osLockdownActive = osLockdown,
+                targetServerLabel = chosenLabel,
+                switchingStatus = when (initialPhase) {
+                    VpnPhase.RECONNECTING -> "إعادة ربط بعد تغيّر الشبكة…"
+                    VpnPhase.SWITCHING_SERVER -> "تبديل سلس إلى $chosenLabel…"
+                    else -> "إنشاء نفق مشفّر والتحقق منه…"
+                },
+                statusMessage = if (initialPhase == VpnPhase.SWITCHING_SERVER) {
+                    "جارٍ التبديل الآمن إلى $chosenLabel…"
+                } else {
+                    "جارٍ تأمين المسار والتحقق من الاتصال…"
+                },
                 error = null,
             )
         }
         updateNotification("جارٍ الاتصال بـ $chosenLabel…", "")
 
-        // 1) إيقاف عملية sing-box السابقة قبل تشغيل الجديدة على المنفذ 20808
+        // Phase 4 Kill Switch: قفل واجهة TUN قبل تشغيل وفحص السيرفر لمنع تسرب أي حزمة أثناء الربط
+        if (KillSwitchController.shouldEstablishTunBeforeProbe(killSwitchOn) && !tunAlreadyUp) {
+            stopTunLayer()
+            if (!startTunLayer()) {
+                prefs.wasVpnDesiredActive = false
+                teardownInternal("رفض النظام إنشاء واجهة الـ VPN (تحقّق من صلاحية الـ VPN)", null, userInitiated = true)
+                stopSelf()
+                return
+            }
+        }
+
+        // إيقاف عملية sing-box السابقة قبل تشغيل الجديدة على المنفذ 20808
         singBox.stopDaemon(daemon)
         daemon = null
 
@@ -316,6 +376,7 @@ class BahrainVpnService : VpnService() {
             dnsServer = prefs.dnsServer,
             useDoh = prefs.dnsDoh,
             tag = "vpn",
+            enableIpv6 = prefs.enableIpv6,
         )
 
         val initialPing = if (newDaemon != null) {
@@ -329,30 +390,43 @@ class BahrainVpnService : VpnService() {
 
         if (newDaemon == null || initialPing < 0L) {
             singBox.stopDaemon(newDaemon)
-            VpnStateManager.markServerDropped(Converters.cleanUri(chosenCfg))
-            if (prefs.autoFailover && pool.size > 1) {
+            val cleanFailed = Converters.cleanUri(chosenCfg)
+            SmartFailoverEngine.recordServerDrop(cleanFailed)
+            VpnStateManager.markServerDropped(cleanFailed)
+
+            if (foMode != FailoverMode.OFF && pool.size > 1) {
                 VpnStateManager.update { prev ->
-                    prev.copy(statusMessage = "$chosenLabel لم يستجب — جارٍ البحث الذكي عن أسرع بديل…")
+                    prev.copy(
+                        phase = VpnPhase.SWITCHING_SERVER,
+                        switchingStatus = "بحث متوازٍ عن بديل شغّال…",
+                        statusMessage = "$chosenLabel لم يستجب — جارٍ البحث الذكي عن أسرع بديل…",
+                    )
                 }
-                updateNotification("جارٍ البحث الذكي عن سيرفر سريع…", "")
+                updateNotification("جارٍ البحث الذكي عن سيرفر بديل…", "")
                 val alt = findWorkingAlternativeParallel(excludeCfg = chosenCfg, pool = pool)
                 if (alt != null) {
-                    connectWithVerifiedDaemon(alt.first, alt.second, alt.third, forceRebuildTun)
+                    connectWithVerifiedDaemon(
+                        cand = alt.first,
+                        verifiedDaemon = alt.second,
+                        verifiedPingMs = alt.third,
+                        forceRebuildTun = false,
+                        previousLabel = chosenLabel,
+                    )
                     return
                 }
             }
-            teardownInternal("تعذّر الاتصال عبر السيرفر المحدد — افحص القائمة لاختيار الأسرع على شبكتك", null)
-            stopSelf()
+            handleAllCandidatesFailed("تعذّر الاتصال عبر السيرفر المحدد — مفتاح الإيقاف يحمي اتصالك")
             return
         }
 
         daemon = newDaemon
 
-        // 2) إنشاء واجهة TUN وتشغيل hev-socks5-tunnel عند الحاجة
-        if (!isSwitching) {
+        // ضمان عمل طبقة TUN إذا كان Kill Switch معطّلًا ولم تُنشأ بعد
+        if (tunFd == null || (!tunAlreadyUp && !killSwitchOn)) {
             stopTunLayer()
             if (!startTunLayer()) {
-                teardownInternal("رفض النظام إنشاء واجهة الـ VPN (تحقّق من صلاحية الـ VPN)", null)
+                prefs.wasVpnDesiredActive = false
+                teardownInternal("رفض النظام إنشاء واجهة الـ VPN (تحقّق من صلاحية الـ VPN)", null, userInitiated = true)
                 stopSelf()
                 return
             }
@@ -367,6 +441,7 @@ class BahrainVpnService : VpnService() {
             proto = chosenProto,
             pingMs = initialPing,
         )
+        SmartFailoverEngine.recordServerHealthy(Converters.cleanUri(chosenCfg))
         VpnStateManager.markServerHealthy(Converters.cleanUri(chosenCfg))
         VpnStateManager.update { prev ->
             prev.copy(
@@ -375,10 +450,20 @@ class BahrainVpnService : VpnService() {
                 activeLabel = chosenLabel,
                 activeProto = chosenProto,
                 activeEndpoint = chosenEndpoint,
-                connectedSinceMs = if (isSwitching && prev.connectedSinceMs > 0L) prev.connectedSinceMs else now,
+                connectedSinceMs = if (tunAlreadyUp && prev.connectedSinceMs > 0L) prev.connectedSinceMs else now,
                 livePingMs = initialPing,
+                jitterMs = 0.0,
+                packetLossPct = 0.0,
+                connectionQuality = if (initialPing <= 220L) "ممتازة" else "جيدة ومستقرة",
                 exitIp = "",
                 exitCountry = "",
+                failoverMode = foMode.key,
+                switchingStatus = "متّصل ومستقر",
+                previousServerLabel = if (tunAlreadyUp && prevLabel != chosenLabel) prevLabel else prev.previousServerLabel,
+                targetServerLabel = "",
+                lastSuccessfulSwitchAtMs = if (tunAlreadyUp && prevLabel != chosenLabel) now else prev.lastSuccessfulSwitchAtMs,
+                killSwitchActive = killSwitchOn,
+                osLockdownActive = osLockdown,
                 statusMessage = "متّصل بأمان عبر $chosenLabel (${initialPing} ms)",
                 error = null,
             )
@@ -393,6 +478,7 @@ class BahrainVpnService : VpnService() {
         verifiedDaemon: RunningDaemon,
         verifiedPingMs: Long,
         forceRebuildTun: Boolean,
+        previousLabel: String = "",
     ) {
         daemon = verifiedDaemon
         prefs.selectedCfg = cand.cfg
@@ -401,7 +487,8 @@ class BahrainVpnService : VpnService() {
         if (tunFd == null || forceRebuildTun || !TProxyService.TProxyIsRunning()) {
             stopTunLayer()
             if (!startTunLayer()) {
-                teardownInternal("تعذّر إنشاء نفق TUN", null)
+                prefs.wasVpnDesiredActive = false
+                teardownInternal("تعذّر إنشاء نفق TUN", null, userInitiated = true)
                 stopSelf()
                 return
             }
@@ -416,7 +503,9 @@ class BahrainVpnService : VpnService() {
             proto = candProto,
             pingMs = verifiedPingMs,
         )
+        SmartFailoverEngine.recordServerHealthy(Converters.cleanUri(cand.cfg))
         VpnStateManager.markServerHealthy(Converters.cleanUri(cand.cfg))
+        val osLockdown = KillSwitchController.isOsLockdownActive(this)
         VpnStateManager.update { prev ->
             prev.copy(
                 phase = VpnPhase.CONNECTED,
@@ -426,9 +515,19 @@ class BahrainVpnService : VpnService() {
                 activeEndpoint = candEndpoint,
                 connectedSinceMs = if (prev.connectedSinceMs > 0L) prev.connectedSinceMs else now,
                 livePingMs = verifiedPingMs,
+                jitterMs = 0.0,
+                packetLossPct = 0.0,
+                connectionQuality = if (verifiedPingMs <= 220L) "ممتازة" else "جيدة ومستقرة",
                 exitIp = "",
                 exitCountry = "",
+                failoverMode = prefs.failoverMode,
+                switchingStatus = "نجح الانتقال الذكي",
+                previousServerLabel = previousLabel.ifBlank { prev.activeLabel },
+                targetServerLabel = "",
+                lastSuccessfulSwitchAtMs = now,
                 failoverCount = prev.failoverCount + 1,
+                killSwitchActive = prefs.killSwitch,
+                osLockdownActive = osLockdown,
                 statusMessage = "تم الربط الذكي عبر ${cand.label} (${verifiedPingMs} ms)",
                 error = null,
             )
@@ -436,6 +535,79 @@ class BahrainVpnService : VpnService() {
         QuickTileService.requestTileUpdate(applicationContext)
         startMonitorLoop()
         fetchExitTraceAsync()
+    }
+
+    /**
+     * Phase 4 Kill Switch Hold: عند سقوط جميع السيرفرات وتفعيل Kill Switch، نُبقي واجهة TUN
+     * مقفلة في حالة PROTECTION_ACTIVE لمنع تسرب بيانات التطبيقات عبر الشبكة غير المحمية،
+     * ونشغّل حلقة استعادة هادئة في الخلفية حتى يعود اتصال موثّق أو يطلب المستخدم الإيقاف.
+     */
+    private fun handleAllCandidatesFailed(reasonMsg: String) {
+        monitorJob?.cancel()
+        probeJob?.cancel()
+        traceJob?.cancel()
+        singBox.stopDaemon(daemon)
+        daemon = null
+
+        val retainTun = KillSwitchController.shouldRetainTunOnFailure(
+            appKillSwitchEnabled = prefs.killSwitch,
+            userRequestedDisconnect = !prefs.wasVpnDesiredActive,
+        )
+
+        if (!retainTun) {
+            teardownInternal(
+                "تعذّر الاتصال عبر السيرفر المحدد — افحص القائمة لاختيار الأسرع على شبكتك",
+                null,
+                userInitiated = false,
+            )
+            stopSelf()
+            return
+        }
+
+        // تأكد من بقاء واجهة TUN مقفلة لحجب أي تسرب عبر شبكة الهاتف المباشرة
+        if (tunFd == null || !TProxyService.TProxyIsRunning()) {
+            startTunLayer()
+        }
+
+        val osLockdown = KillSwitchController.isOsLockdownActive(this)
+        VpnStateManager.update { prev ->
+            prev.copy(
+                phase = VpnPhase.PROTECTION_ACTIVE,
+                downSpeedBps = 0L,
+                upSpeedBps = 0L,
+                livePingMs = -1L,
+                connectionQuality = "حجب طوارئ (Kill Switch)",
+                switchingStatus = "حماية Kill Switch تحجب التسرب — إعادة المحاولة تلقائيًا…",
+                killSwitchActive = true,
+                osLockdownActive = osLockdown,
+                statusMessage = "مفتاح الإيقاف نشط: تم حجب الإنترنت غير المحمي لحين استعادة النفق",
+                error = reasonMsg,
+            )
+        }
+        updateNotification("حماية Kill Switch نشطة", "تم حجب التسرب — جارٍ محاولة استعادة النفق…")
+        QuickTileService.requestTileUpdate(applicationContext)
+
+        recoveryJob?.cancel()
+        recoveryJob = serviceScope.launch {
+            while (isActive && VpnStateManager.status.value.phase == VpnPhase.PROTECTION_ACTIVE && prefs.wasVpnDesiredActive) {
+                delay(15_000L)
+                opLock.withLock {
+                    if (VpnStateManager.status.value.phase == VpnPhase.PROTECTION_ACTIVE && prefs.wasVpnDesiredActive) {
+                        val pool = ensureServerPool()
+                        val alt = findWorkingAlternativeParallel(excludeCfg = "", pool = pool)
+                        if (alt != null) {
+                            connectWithVerifiedDaemon(
+                                cand = alt.first,
+                                verifiedDaemon = alt.second,
+                                verifiedPingMs = alt.third,
+                                forceRebuildTun = false,
+                                previousLabel = VpnStateManager.status.value.activeLabel,
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /** يجلب عنوان الخروج والدولة عبر Cloudflare Trace داخل النفق دون حجب الاتصال. */
@@ -464,7 +636,7 @@ class BahrainVpnService : VpnService() {
                         prefs.updateLatestHistoryCountry(curEp, loc)
                     }
                     VpnStateManager.update { st ->
-                        if (st.phase == VpnPhase.CONNECTED) {
+                        if (st.isTunnelVerified) {
                             st.copy(exitIp = ip, exitCountry = loc)
                         } else st
                     }
@@ -482,17 +654,27 @@ class BahrainVpnService : VpnService() {
         handleConnect(next.cfg, next.label, forceRebuildTun = false)
     }
 
+    /**
+     * Phase 3 Leak Protection: يلتقط المسارين 0.0.0.0/0 و ::/0 دائمًا داخل واجهة TUN؛
+     * وعند تعطيل توجيه IPv6 يتم إسقاط حزم IPv6 داخل النفق لمنع تسربها عبر الشبكة المزدوجة.
+     */
     private fun startTunLayer(): Boolean {
         return try {
+            val plan = LeakProtectionEngine.buildTunProtectionPlan(
+                enableIpv6Tunnel = prefs.enableIpv6,
+                rawDnsServer = prefs.dnsServer,
+                useDoh = prefs.dnsDoh,
+            )
+
             val builder = Builder()
                 .setSession("bahrain-vpn")
                 .setBlocking(false)
                 .setMtu(8500)
                 .addAddress("198.18.0.1", 32)
                 .addRoute("0.0.0.0", 0)
-                .addDnsServer("198.18.0.2")
+                .addDnsServer(plan.mapDnsAddress)
 
-            if (prefs.enableIpv6) {
+            if (plan.captureIpv6Route) {
                 builder.addAddress("fc00::1", 128)
                 builder.addRoute("::", 0)
             }
@@ -526,7 +708,7 @@ class BahrainVpnService : VpnService() {
             tunFd = pfd
 
             val udpMode = if (prefs.udpInTcp) "tcp" else "udp"
-            val ipv6Line = if (prefs.enableIpv6) "\n  ipv6: 'fc00::1'" else ""
+            val ipv6Line = if (plan.forwardIpv6Upstream) "\n  ipv6: 'fc00::1'" else ""
             val hevConfig = """
                 tunnel:
                   mtu: 8500
@@ -536,7 +718,7 @@ class BahrainVpnService : VpnService() {
                   address: 127.0.0.1
                   udp: '$udpMode'
                 mapdns:
-                  address: 198.18.0.2
+                  address: ${plan.mapDnsAddress}
                   port: 53
                   network: 240.0.0.0
                   netmask: 240.0.0.0
@@ -585,7 +767,7 @@ class BahrainVpnService : VpnService() {
             var tick = 0
             val guard = EnterpriseLicenseGuard(applicationContext)
 
-            while (isActive && VpnStateManager.status.value.phase == VpnPhase.CONNECTED) {
+            while (isActive && VpnStateManager.status.value.isTunnelVerified) {
                 delay(1000L)
                 val stats = runCatching { TProxyService.TProxyGetStats() }.getOrNull()
                 if (stats != null && stats.size >= 4) {
@@ -617,27 +799,36 @@ class BahrainVpnService : VpnService() {
                         val liveLic = guard.currentState()
                         if (!liveLic.canConnectVpn) {
                             opLock.withLock {
-                                teardownInternal(liveLic.statusDetailAr.ifBlank { "انتهت صلاحية الجلسة أو الحصة" }, null)
+                                prefs.wasVpnDesiredActive = false
+                                teardownInternal(liveLic.statusDetailAr.ifBlank { "انتهت صلاحية الجلسة أو الحصة" }, null, userInitiated = true)
                                 stopSelf()
                             }
                             return@launch
                         }
                     }
-                    if (tick % 2 == 0) {
+                    // تحديث الإشعار كل 3 ثوانٍ فقط مع إلغاء الاستدعاء إذا لم يتغيّر النص لتوفير البطارية
+                    if (tick % 3 == 0) {
                         val st = VpnStateManager.status.value
                         val pingTxt = if (st.livePingMs > 0) " • ${st.livePingMs} ms" else ""
                         val detail = "↓ ${VpnStateManager.formatSpeed(downSpd)}  ↑ ${VpnStateManager.formatSpeed(upSpd)}$pingTxt"
-                        updateNotification("متّصل (${st.activeLabel})", detail)
+                        val prefix = if (st.phase == VpnPhase.CONNECTION_DEGRADED) "متّصل (تذبذب)" else "متّصل"
+                        updateNotification("$prefix (${st.activeLabel})", detail)
                     }
                 }
             }
         }
 
-        // فحص البينغ الحيّ ومراقب التبديل الذكي السريع (~ثانيتان عند الانقطاع الفعلي) — v3.1
+        // Phase 6 & 9: مراقب الجودة الاستباقي والتبديل الذكي التكيّفي
         probeJob = serviceScope.launch {
-            delay(SmartFailoverEngine.HEALTHY_CHECK_INTERVAL_MS)
+            val recentPings = ArrayDeque<Long>()
+            val recentOutcomes = ArrayDeque<Boolean>()
+            var consecutiveHealthy = 0
             val guard = EnterpriseLicenseGuard(applicationContext)
-            while (isActive && VpnStateManager.status.value.phase == VpnPhase.CONNECTED) {
+
+            delay(SmartFailoverEngine.HEALTHY_CHECK_INTERVAL_MS)
+
+            while (isActive && VpnStateManager.status.value.isTunnelVerified) {
+                val foMode = FailoverMode.fromKey(prefs.failoverMode)
                 val aliveProc = daemon?.process?.isAlive == true
                 val primaryProbe = if (aliveProc) {
                     runCatching {
@@ -663,31 +854,134 @@ class BahrainVpnService : VpnService() {
                     }
                 }
 
-                if (!SmartFailoverEngine.shouldTriggerFailover(aliveProc, primaryOk, secondaryOk)) {
+                val anyProbeOk = aliveProc && (primaryOk || secondaryOk)
+                if (recentOutcomes.size >= 6) recentOutcomes.removeFirst()
+                recentOutcomes.addLast(anyProbeOk)
+
+                if (anyProbeOk) {
+                    val newPing = if (primaryOk) primaryProbe!!.elapsedMs else secondaryElapsed
+                    if (newPing > 0L) {
+                        if (recentPings.size >= 5) recentPings.removeFirst()
+                        recentPings.addLast(newPing)
+                    }
+
                     val activeClean = Converters.cleanUri(VpnStateManager.status.value.activeCfg ?: "")
                     SmartFailoverEngine.recordServerHealthy(activeClean)
                     VpnStateManager.markServerHealthy(activeClean)
-                    val newPing = if (primaryOk) primaryProbe!!.elapsedMs else secondaryElapsed
-                    if (newPing > 0L) {
-                        VpnStateManager.update { s -> s.copy(livePingMs = newPing) }
+
+                    val curStatus = VpnStateManager.status.value
+                    val bestCandLat = VpnStateManager.serverPool
+                        .asSequence()
+                        .filter { Converters.cleanUri(it.cfg) != activeClean && it.latencyMs > 0L }
+                        .minOfOrNull { it.latencyMs } ?: 0L
+
+                    val health = SmartFailoverEngine.evaluateTunnelHealth(
+                        recentSamplesMs = recentPings.toList(),
+                        recentOutcomes = recentOutcomes.toList(),
+                        mode = foMode,
+                        lastSwitchAtMs = curStatus.lastSuccessfulSwitchAtMs.coerceAtLeast(curStatus.connectedSinceMs),
+                        bestCandidateLatencyMs = bestCandLat,
+                    )
+
+                    consecutiveHealthy = if (health.isDegraded) 0 else (consecutiveHealthy + 1)
+
+                    VpnStateManager.update { s ->
+                        s.copy(
+                            phase = if (health.isDegraded) VpnPhase.CONNECTION_DEGRADED else VpnPhase.CONNECTED,
+                            livePingMs = if (newPing > 0L) newPing else s.livePingMs,
+                            jitterMs = health.jitterMs,
+                            packetLossPct = health.packetLossPct,
+                            connectionQuality = health.qualityLabelAr,
+                            failoverMode = foMode.key,
+                            switchingStatus = if (health.isDegraded) "رُصد بطء في الاستجابة" else "متّصل ومستقر",
+                        )
                     }
+
+                    val remoteAutoFailover = guard.getRemoteConfig().optBoolean("auto_failover_enabled", true)
+                    if (health.shouldProactiveSwitch && remoteAutoFailover) {
+                        val switched = opLock.withLock {
+                            if (!VpnStateManager.status.value.isTunnelVerified) {
+                                false
+                            } else {
+                                val pool = ensureServerPool()
+                                val curCfg = VpnStateManager.status.value.activeCfg ?: ""
+                                val prevLbl = VpnStateManager.status.value.activeLabel
+                                VpnStateManager.update { s ->
+                                    s.copy(
+                                        phase = VpnPhase.SWITCHING_SERVER,
+                                        switchingStatus = "فحص بديل أسرع بالخلفية…",
+                                        statusMessage = health.reasonAr.ifBlank { "جارٍ الانتقال السلس لسيرفر أفضل…" },
+                                    )
+                                }
+                                // نتحقق من البديل على منافذ الاختبار أولًا دون قطع النفق الحالي إلا عند نجاح البديل!
+                                val alt = probeVerifiedCandidateWithoutStoppingCurrent(curCfg, pool)
+                                if (alt != null) {
+                                    AppHealthMonitor.recordIssue(
+                                        applicationContext,
+                                        type = "PROACTIVE_FAILOVER",
+                                        summary = "Proactively switched to ${alt.first.label} (${alt.second} ms)",
+                                    )
+                                    singBox.stopDaemon(daemon)
+                                    daemon = null
+                                    val started = singBox.startDaemon(
+                                        cfg = alt.first.cfg,
+                                        port = SingBox.VPN_SOCKS_PORT,
+                                        dnsServer = prefs.dnsServer,
+                                        useDoh = prefs.dnsDoh,
+                                        tag = "vpn",
+                                        enableIpv6 = prefs.enableIpv6,
+                                    )
+                                    if (started != null) {
+                                        connectWithVerifiedDaemon(
+                                            cand = alt.first,
+                                            verifiedDaemon = started,
+                                            verifiedPingMs = alt.second,
+                                            forceRebuildTun = false,
+                                            previousLabel = prevLbl,
+                                        )
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    // لا يوجد بديل أفضل متاح الآن — أبقِ السيرفر الحالي يعمل دون انقطاع
+                                    VpnStateManager.update { s ->
+                                        s.copy(
+                                            phase = VpnPhase.CONNECTION_DEGRADED,
+                                            switchingStatus = "الإبقاء على النفق الحالي (لا يوجد بديل أسرع)",
+                                        )
+                                    }
+                                    false
+                                }
+                            }
+                        }
+                        if (switched) return@launch
+                    }
+
+                    delay(SmartFailoverEngine.computeAdaptiveCheckIntervalMs(consecutiveHealthy, health.isDegraded))
                 } else {
+                    consecutiveHealthy = 0
                     val droppedCur = VpnStateManager.status.value.activeCfg ?: ""
+                    val prevLbl = VpnStateManager.status.value.activeLabel
                     if (droppedCur.isNotBlank()) {
                         val cleanDropped = Converters.cleanUri(droppedCur)
                         SmartFailoverEngine.recordServerDrop(cleanDropped)
                         VpnStateManager.markServerDropped(cleanDropped)
                     }
                     val remoteAutoFailover = guard.getRemoteConfig().optBoolean("auto_failover_enabled", true)
-                    if (prefs.autoFailover && remoteAutoFailover) {
+                    if (foMode != FailoverMode.OFF && remoteAutoFailover) {
                         val switched = opLock.withLock {
-                            if (VpnStateManager.status.value.phase != VpnPhase.CONNECTED) {
+                            if (!VpnStateManager.status.value.isTunnelVerified) {
                                 false
                             } else {
                                 val pool = ensureServerPool()
                                 val curCfg = VpnStateManager.status.value.activeCfg ?: ""
                                 VpnStateManager.update { s ->
-                                    s.copy(statusMessage = "انقطع السيرفر الحالي — جارٍ الانتقال الذكي لأسرع بديل…")
+                                    s.copy(
+                                        phase = VpnPhase.SWITCHING_SERVER,
+                                        switchingStatus = "انقطع السيرفر — جارٍ التبديل الفوري…",
+                                        statusMessage = "انقطع السيرفر الحالي — جارٍ الانتقال الذكي لأسرع بديل…",
+                                    )
                                 }
                                 val alt = findWorkingAlternativeParallel(curCfg, pool)
                                 if (alt != null) {
@@ -696,40 +990,43 @@ class BahrainVpnService : VpnService() {
                                         type = "AUTO_FAILOVER",
                                         summary = "Switched to ${alt.first.label} (${alt.third} ms)",
                                     )
-                                    singBox.stopDaemon(daemon)
-                                    connectWithVerifiedDaemon(alt.first, alt.second, alt.third, forceRebuildTun = false)
+                                    connectWithVerifiedDaemon(
+                                        cand = alt.first,
+                                        verifiedDaemon = alt.second,
+                                        verifiedPingMs = alt.third,
+                                        forceRebuildTun = false,
+                                        previousLabel = prevLbl,
+                                    )
                                     true
                                 } else {
-                                    false
+                                    handleAllCandidatesFailed("انقطع السيرفر الحالي وتعذّر الوصول للبدائل")
+                                    true
                                 }
                             }
                         }
                         if (switched) return@launch
                     } else {
                         opLock.withLock {
-                            teardownInternal("انقطع الاتصال بالسيرفر الحالي", null)
-                            stopSelf()
+                            handleAllCandidatesFailed("انقطع الاتصال بالسيرفر الحالي (التبديل التلقائي متوقف)")
                         }
                         return@launch
                     }
                 }
-                delay(SmartFailoverEngine.HEALTHY_CHECK_INTERVAL_MS)
             }
         }
     }
 
     /**
-     * يختبر دفعات من 4 سيرفرات بالتوازي على منافذ مؤقتة (20901..20904) مرتبةً عبر SmartFailoverEngine
-     * (أولوية VIP + أعلى سرعة تنزيل مقاسة + أقل تأخير) للانتقال الفوري دون هدم واجهة TUN.
+     * يتحقق من عمل سيرفر بديل على منافذ معزولة (20901..20904) دون إيقاف النفق النشط على 20808.
      */
-    private suspend fun findWorkingAlternativeParallel(
+    private suspend fun probeVerifiedCandidateWithoutStoppingCurrent(
         excludeCfg: String,
         pool: List<ServerCandidate>,
-    ): Triple<ServerCandidate, RunningDaemon, Long>? {
+    ): Pair<ServerCandidate, Long>? {
         val candidates = SmartFailoverEngine.rankFailoverCandidates(
             excludeCfg = excludeCfg,
             pool = pool,
-            maxCandidates = 16,
+            maxCandidates = 8,
         )
         for (batch in candidates.chunked(4)) {
             val tested = coroutineScope {
@@ -755,20 +1052,37 @@ class BahrainVpnService : VpnService() {
                     VpnStateManager.markServerDropped(clean)
                 }
             }
-            val winners = tested.filter { it.second.ok }.sortedBy { it.second.latencyMs }
-            for ((winner, res) in winners) {
-                singBox.stopDaemon(daemon)
-                daemon = null
-                val started = singBox.startDaemon(
-                    cfg = winner.cfg,
-                    port = SingBox.VPN_SOCKS_PORT,
-                    dnsServer = prefs.dnsServer,
-                    useDoh = prefs.dnsDoh,
-                    tag = "vpn",
-                )
-                if (started != null) {
-                    return Triple(winner, started, res.latencyMs)
-                }
+            val winner = tested.filter { it.second.ok && it.second.latencyMs > 0L }
+                .minByOrNull { it.second.latencyMs }
+            if (winner != null) {
+                return winner.first to winner.second.latencyMs
+            }
+        }
+        return null
+    }
+
+    /**
+     * يختبر دفعات من 4 سيرفرات بالتوازي على منافذ مؤقتة (20901..20904) مرتبةً عبر SmartFailoverEngine
+     * للانتقال الفوري دون هدم واجهة TUN (تبقى واجهة TUN مقفلة طوال العملية).
+     */
+    private suspend fun findWorkingAlternativeParallel(
+        excludeCfg: String,
+        pool: List<ServerCandidate>,
+    ): Triple<ServerCandidate, RunningDaemon, Long>? {
+        val winner = probeVerifiedCandidateWithoutStoppingCurrent(excludeCfg, pool)
+        if (winner != null) {
+            singBox.stopDaemon(daemon)
+            daemon = null
+            val started = singBox.startDaemon(
+                cfg = winner.first.cfg,
+                port = SingBox.VPN_SOCKS_PORT,
+                dnsServer = prefs.dnsServer,
+                useDoh = prefs.dnsDoh,
+                tag = "vpn",
+                enableIpv6 = prefs.enableIpv6,
+            )
+            if (started != null) {
+                return Triple(winner.first, started, winner.second)
             }
         }
         return null
@@ -805,16 +1119,27 @@ class BahrainVpnService : VpnService() {
         val merged = (vipUris + prefs.customConfigs + savedBest + cachedAll)
             .distinct()
             .filter { Converters.isSupported(it) }
-        val built = merged.mapIndexed { idx, cfg ->
+        val built = merged.mapIndexedNotNull { idx, cfg ->
             val clean = Converters.cleanUri(cfg)
             val vip = vipByClean[clean]
+            val hint = hints[clean]
+            val sec = SecurityEvaluator.evaluate(
+                rawCfg = clean,
+                isVipAttested = vip != null,
+                hintSecurity = hint?.securityAssessment.orEmpty(),
+                hintPrivacy = hint?.privacyAssessment.orEmpty(),
+                hintRisk = hint?.riskLevel.orEmpty(),
+            )
+            if (sec.quarantined) return@mapIndexedNotNull null
             val localRes = bestByClean[clean]
             ServerCandidate(
                 cfg = cfg,
                 label = if (vip != null) "💎 VIP • ${vip.label}" else "bahrain-vpn #${idx + 1}",
                 speedKbps = localRes?.speedKbps ?: 0.0,
-                latencyMs = localRes?.latencyMs ?: (hints[clean]?.latencyMs ?: 0L),
+                latencyMs = localRes?.latencyMs ?: (hint?.latencyMs ?: 0L),
                 isVip = vip != null,
+                securityAssessment = sec.securityAssessment,
+                riskLevel = sec.riskLevel,
             )
         }
         VpnStateManager.serverPool = built
@@ -823,15 +1148,18 @@ class BahrainVpnService : VpnService() {
 
     private fun ConvergedKey(uri: String): String = Converters.cleanUri(uri)
 
-    private fun teardownInternal(errorMsg: String?, infoMsg: String?) {
+    private fun teardownInternal(errorMsg: String?, infoMsg: String?, userInitiated: Boolean = true) {
         monitorJob?.cancel()
         probeJob?.cancel()
+        recoveryJob?.cancel()
         traceJob?.cancel()
         singBox.stopDaemon(daemon)
         daemon = null
         stopTunLayer()
-        val cleanErr = errorMsg?.let { UiMessages.sanitizeError(it, UiMessages.MSG_SERVER_UNREACHABLE) }
-        VpnStateManager.resetDisconnected(errorMsg = cleanErr, infoMsg = infoMsg)
+        lastNotifSignature = ""
+        val cleanErr = if (userInitiated) null else errorMsg?.let { UiMessages.sanitizeError(it, UiMessages.MSG_SERVER_UNREACHABLE) }
+        val finalErr = errorMsg?.takeIf { userInitiated && infoMsg == null }?.let { UiMessages.sanitizeError(it, UiMessages.MSG_SERVER_UNREACHABLE) } ?: cleanErr
+        VpnStateManager.resetDisconnected(errorMsg = finalErr, infoMsg = infoMsg)
         QuickTileService.requestTileUpdate(applicationContext)
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -851,12 +1179,12 @@ class BahrainVpnService : VpnService() {
     override fun onDestroy() {
         if (activeInstance === this) activeInstance = null
         unregisterPhysicalNetworkWatcher()
-        teardownInternal(null, null)
+        teardownInternal(null, null, userInitiated = true)
         serviceScope.cancel()
         super.onDestroy()
     }
 
-    // ─────────────────── الإشعارات ───────────────────
+    // ─────────────────── الإشعارات الموفّرة للطاقة ───────────────────
     private fun ensureNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -865,7 +1193,7 @@ class BahrainVpnService : VpnService() {
                 "اتصال bahrain-vpn",
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "يعرض حالة اتصال الـ VPN والسرعة الحيّة"
+                description = "يعرض حالة اتصال الـ VPN ومفتاح الإيقاف والسرعة الحيّة"
                 setShowBadge(false)
             }
             nm.createNotificationChannel(ch)
@@ -885,6 +1213,9 @@ class BahrainVpnService : VpnService() {
     }
 
     private fun updateNotification(titleSuffix: String, body: String) {
+        val sig = "$titleSuffix|$body"
+        if (sig == lastNotifSignature) return
+        lastNotifSignature = sig
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIF_ID, buildNotification(titleSuffix, "", body))
     }

@@ -81,7 +81,36 @@ class Prefs(ctx: Context) {
 
     var autoFailover: Boolean
         get() = sp.getBoolean("auto_failover", true)
-        set(v) = sp.edit { putBoolean("auto_failover", v) }
+        set(v) {
+            sp.edit {
+                putBoolean("auto_failover", v)
+                if (!v) putString("failover_mode", "OFF")
+                else if ((sp.getString("failover_mode", "SMART") ?: "SMART") == "OFF") {
+                    putString("failover_mode", "SMART")
+                }
+            }
+        }
+
+    var failoverMode: String
+        get() {
+            val raw = (sp.getString("failover_mode", if (autoFailover) "SMART" else "OFF") ?: "SMART").uppercase()
+            return if (raw in setOf("OFF", "SMART", "AGGRESSIVE")) raw else "SMART"
+        }
+        set(v) {
+            val norm = v.trim().uppercase().let { if (it in setOf("OFF", "SMART", "AGGRESSIVE")) it else "SMART" }
+            sp.edit {
+                putString("failover_mode", norm)
+                putBoolean("auto_failover", norm != "OFF")
+            }
+        }
+
+    var killSwitch: Boolean
+        get() = sp.getBoolean("kill_switch_v32", true)
+        set(v) = sp.edit { putBoolean("kill_switch_v32", v) }
+
+    var wasVpnDesiredActive: Boolean
+        get() = sp.getBoolean("vpn_desired_active", false)
+        set(v) = sp.edit { putBoolean("vpn_desired_active", v) }
 
     var dnsServer: String
         get() = (sp.getString("dns_server", "1.1.1.1") ?: "1.1.1.1").ifBlank { "1.1.1.1" }

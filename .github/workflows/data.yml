@@ -13,6 +13,8 @@ on:
       - "dedupe.py"
       - "scoring.py"
       - "pipeline_security.py"
+      - "security_intelligence.py"
+      - "public_api.py"
       - "channels.txt"
       - "github_sources.txt"
       - "requirements.txt"
@@ -101,7 +103,12 @@ jobs:
           from pathlib import Path
 
           dist = Path("dist")
-          for req in ("alive.txt", "best100.txt", "sub.txt", "alive.json", "meta.json", "source_health.json"):
+          for req in (
+              "alive.txt", "best100.txt", "sub.txt", "alive.json",
+              "meta.json", "source_health.json", "quarantined.json",
+              "api/v1/health.json", "api/v1/statistics.json",
+              "api/v1/servers.json", "api/v1/openapi.json",
+          ):
               p = dist / req
               assert p.is_file() and p.stat().st_size > 0, f"Missing or empty artifact: {req}"
           meta = json.loads((dist / "meta.json").read_text(encoding="utf-8"))

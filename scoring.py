@@ -204,9 +204,13 @@ class NodeHistoryEntry:
     runs_seen: int = 0
     runs_alive: int = 0
     consecutive_alive: int = 0
+    consecutive_failures: int = 0
     ema_reliability: float = 0.5
     best_speed_kbps: float = 0.0
     last_latency_ms: float = 0.0
+    last_performance_score: float = 0.0
+    last_reliability_score: float = 0.0
+    last_security_mode: str = ""
     exit_country: str = "XX"
     country_source: str = "unknown"
     last_seen_at: str = ""
@@ -216,9 +220,13 @@ class NodeHistoryEntry:
             "runs_seen": self.runs_seen,
             "runs_alive": self.runs_alive,
             "consecutive_alive": self.consecutive_alive,
+            "consecutive_failures": self.consecutive_failures,
             "ema_reliability": round(self.ema_reliability, 4),
             "best_speed_kbps": round(self.best_speed_kbps, 1),
             "last_latency_ms": round(self.last_latency_ms, 1),
+            "last_performance_score": round(self.last_performance_score, 1),
+            "last_reliability_score": round(self.last_reliability_score, 1),
+            "last_security_mode": self.last_security_mode,
             "exit_country": self.exit_country,
             "country_source": self.country_source,
             "last_seen_at": self.last_seen_at,
@@ -230,9 +238,13 @@ class NodeHistoryEntry:
             runs_seen=int(d.get("runs_seen", 0)),
             runs_alive=int(d.get("runs_alive", 0)),
             consecutive_alive=int(d.get("consecutive_alive", 0)),
+            consecutive_failures=int(d.get("consecutive_failures", 0)),
             ema_reliability=float(d.get("ema_reliability", 0.5)),
             best_speed_kbps=float(d.get("best_speed_kbps", 0.0)),
             last_latency_ms=float(d.get("last_latency_ms", 0.0)),
+            last_performance_score=float(d.get("last_performance_score", 0.0)),
+            last_reliability_score=float(d.get("last_reliability_score", 0.0)),
+            last_security_mode=str(d.get("last_security_mode", "")),
             exit_country=str(d.get("exit_country", "XX")),
             country_source=str(d.get("country_source", "unknown")),
             last_seen_at=str(d.get("last_seen_at", "")),
@@ -314,6 +326,7 @@ class NodeHistoryStore:
         if ok:
             entry.runs_alive += 1
             entry.consecutive_alive += 1
+            entry.consecutive_failures = 0
             entry.ema_reliability = (1.0 - alpha) * entry.ema_reliability + alpha * 1.0
             if latency_ms > 0:
                 entry.last_latency_ms = latency_ms
@@ -325,6 +338,7 @@ class NodeHistoryStore:
                     entry.country_source = country_source
         else:
             entry.consecutive_alive = 0
+            entry.consecutive_failures += 1
             entry.ema_reliability = (1.0 - alpha) * entry.ema_reliability
 
         entry.last_seen_at = ts
@@ -383,11 +397,22 @@ class ScoredNode:
     score: float = 0.0
     score_breakdown: dict[str, float] = field(default_factory=dict)
     verified_at: str = ""
+    # Phase 2 & Phase 5 multi-dimensional intelligence fields (100% additive & backward-compatible)
+    performance_score: float = 0.0
+    reliability_score: float = 0.0
+    security_assessment: str = "Unknown"
+    privacy_assessment: str = "Unverified"
+    risk_level: str = "UNKNOWN"
+    packet_loss_pct: float = 0.0
+    uptime_pct: float = 100.0
+    score_delta: float = 0.0
+    upload_kbps: float = 0.0
+    recent_failures: int = 0
 
     def to_alive_json_dict(self, *, index: int = 1, labeled_uri: str | None = None) -> dict:
         """
         100% backward-compatible with `bahrain-vpn` Android `Repo.kt` (`name`, `cfg`,
-        `latency_ms`, `engine`, `proto`) plus rich additive telemetry.
+        `latency_ms`, `engine`, `proto`) plus multi-dimensional security & reliability telemetry.
         """
         cfg_out = labeled_uri or self.uri
         return {
@@ -405,8 +430,17 @@ class ScoredNode:
             "median_latency_ms": round(self.median_latency_ms),
             "jitter_ms": round(self.jitter_ms, 1),
             "probe_pass_rate": round(self.probe_pass_rate, 3),
+            "packet_loss_pct": round(self.packet_loss_pct, 2),
             "speed_kbps": round(self.speed_kbps),
+            "upload_kbps": round(self.upload_kbps),
             "score": round(self.score, 1),
+            "performance_score": round(self.performance_score or self.score, 1),
+            "reliability_score": round(self.reliability_score or self.score, 1),
+            "security_assessment": self.security_assessment,
+            "privacy_assessment": self.privacy_assessment,
+            "risk_level": self.risk_level,
+            "uptime_pct": round(self.uptime_pct, 2),
+            "score_delta": round(self.score_delta, 1),
             "exit_country": self.exit_country,
             "country_source": self.country_source,
             "is_cdn": self.is_cdn,
@@ -579,17 +613,180 @@ def build_specialized_lists(nodes: list[ScoredNode], *, best_n: int = 100) -> di
     }
 
 
-# ───────────────── Source Health Lifecycle Registry (Phase 12) ─────────────────
+# ───────────────── Intelligent Multi-Profile Server Ranking Engine (Phase 5) ─────────────────
+RANKING_PROFILES = (
+    "BALANCED",
+    "LOW_LATENCY",
+    "HIGH_SPEED",
+    "HIGH_RELIABILITY",
+    "PRIVACY_AWARE",
+)
+
+
+@dataclass(frozen=True)
+class ProfileWeights:
+    latency: float
+    jitter: float
+    packet_loss: float
+    download: float
+    upload: float
+    uptime: float
+    security: float
+
+
+PROFILE_WEIGHT_PRESETS: dict[str, ProfileWeights] = {
+    "BALANCED": ProfileWeights(latency=0.22, jitter=0.10, packet_loss=0.14, download=0.24, upload=0.04, uptime=0.18, security=0.08),
+    "LOW_LATENCY": ProfileWeights(latency=0.46, jitter=0.22, packet_loss=0.14, download=0.06, upload=0.02, uptime=0.07, security=0.03),
+    "HIGH_SPEED": ProfileWeights(latency=0.14, jitter=0.08, packet_loss=0.12, download=0.46, upload=0.08, uptime=0.08, security=0.04),
+    "HIGH_RELIABILITY": ProfileWeights(latency=0.12, jitter=0.14, packet_loss=0.24, download=0.08, upload=0.02, uptime=0.32, security=0.08),
+    "PRIVACY_AWARE": ProfileWeights(latency=0.14, jitter=0.08, packet_loss=0.14, download=0.10, upload=0.02, uptime=0.18, security=0.34),
+}
+
+
+def compute_profile_rank_score(
+    node: ScoredNode,
+    profile: str = "BALANCED",
+    *,
+    preferred_protocols: set[str] | None = None,
+    preferred_country: str = "",
+    now_iso: str = "",
+    weights_override: ProfileWeights | None = None,
+) -> float:
+    """
+    Evaluate a `ScoredNode` under one of the 5 Phase-5 ranking profiles:
+      BALANCED | LOW_LATENCY | HIGH_SPEED | HIGH_RELIABILITY | PRIVACY_AWARE
+
+    Key invariants:
+      - Never treats missing throughput (`speed_kbps == 0`) as average throughput.
+      - Applies continuous staleness decay for outdated measurements.
+      - Uses historical EMA & Bayesian uptime to avoid overreacting to 1-run spikes.
+      - `PRIVACY_AWARE` strictly rejects `Failed` security / `HIGH`+`CRITICAL` risk
+        nodes (score = 0.0) and never fabricates operator trust for anonymous servers.
+    """
+    prof = (profile or "BALANCED").strip().upper()
+    if prof not in PROFILE_WEIGHT_PRESETS:
+        prof = "BALANCED"
+    w = weights_override or PROFILE_WEIGHT_PRESETS[prof]
+
+    # Protocol compatibility gate
+    if preferred_protocols:
+        allowed = {canonical_protocol(p) for p in preferred_protocols}
+        if node.canonical_protocol not in allowed and node.protocol.lower() not in allowed:
+            return 0.0
+
+    # Strict privacy-aware gate: never select failed/high-risk transport security
+    if prof == "PRIVACY_AWARE":
+        if node.security_assessment == "Failed" or node.risk_level in ("HIGH", "CRITICAL") or node.privacy_assessment == "High Risk":
+            return 0.0
+
+    # 1. Latency (0..100)
+    eff_lat = node.median_latency_ms if node.median_latency_ms > 0 else node.latency_ms
+    lat_s = 100.0 * math.exp(-max(0.0, eff_lat - 15.0) / 680.0) if eff_lat > 0 else 0.0
+
+    # 2. Jitter (0..100)
+    base_lat = max(35.0, eff_lat if eff_lat > 0 else 400.0)
+    jit_s = max(0.0, 100.0 - min(90.0, (max(0.0, node.jitter_ms) / base_lat) * 70.0 + max(0.0, node.jitter_ms) / 14.0))
+
+    # 3. Packet loss & connection success rate (0..100)
+    pass_rate = max(0.0, min(1.0, node.probe_pass_rate if node.probe_pass_rate > 0 else (1.0 - node.packet_loss_pct / 100.0)))
+    loss_s = (pass_rate ** 1.4) * 100.0
+
+    # 4. Download & Upload throughput (0.0 when unmeasured — never fabricated!)
+    dl_s = max(5.0, min(100.0, ((math.log10(max(16.0, node.speed_kbps)) - 1.2) / 3.2) * 100.0)) if node.speed_kbps > 0 else 0.0
+    ul_s = max(5.0, min(100.0, ((math.log10(max(16.0, node.upload_kbps)) - 1.2) / 3.0) * 100.0)) if node.upload_kbps > 0 else 0.0
+
+    # 5. Historical uptime & dampened EMA (prevents 1-run fluctuations from dominating)
+    bayes_up = (max(0, node.runs_alive) + 1.4) / (max(1, node.runs_seen) + 2.5)
+    streak_s = min(1.0, math.log2(max(1, node.consecutive_alive) + 1) / 3.2)
+    fail_pen = min(45.0, node.recent_failures * 14.0)
+    uptime_s = max(0.0, min(100.0, (0.45 * node.ema_reliability + 0.35 * bayes_up + 0.20 * streak_s) * 100.0 - fail_pen))
+
+    # 6. Technical Security & Privacy Assessment score (explicitly distinguishes Verified vs Unverified operator)
+    sec_map = {"Verified": 92.0, "Partial": 68.0, "Unknown": 35.0, "Failed": 0.0}
+    priv_bonus = 8.0 if node.privacy_assessment == "Verified" else (0.0 if node.privacy_assessment == "Unverified" else -20.0)
+    sec_s = max(0.0, min(100.0, sec_map.get(node.security_assessment, 35.0) + priv_bonus))
+
+    total_w = w.latency + w.jitter + w.packet_loss + w.download + w.upload + w.uptime + w.security
+    raw = (
+        w.latency * lat_s
+        + w.jitter * jit_s
+        + w.packet_loss * loss_s
+        + w.download * dl_s
+        + w.upload * ul_s
+        + w.uptime * uptime_s
+        + w.security * sec_s
+    ) / max(0.001, total_w)
+
+    # Freshness decay for stale measurements
+    freshness = 1.0
+    if node.verified_at:
+        try:
+            t_ver = datetime.fromisoformat(node.verified_at.replace("Z", "+00:00"))
+            t_now = datetime.fromisoformat(now_iso.replace("Z", "+00:00")) if now_iso else datetime.now(timezone.utc)
+            age_h = max(0.0, (t_now - t_ver).total_seconds() / 3600.0)
+            if age_h > 1.0:
+                freshness = max(0.55, min(1.0, math.exp(-(age_h - 1.0) / 85.0)))
+        except Exception:
+            freshness = 0.85
+
+    # Geographic suitability boost (bounded, never overrides dead/unsafe metrics)
+    geo_mult = 1.0
+    pref_cc = (preferred_country or "").strip().upper()
+    if pref_cc and pref_cc != "ALL" and node.exit_country.upper() == pref_cc:
+        geo_mult = 1.08 if node.country_source == "exit_trace" else 1.03
+
+    return round(max(0.0, min(100.0, raw * freshness * geo_mult)), 2)
+
+
+def rank_nodes_by_profile(
+    nodes: Iterable[ScoredNode],
+    profile: str = "BALANCED",
+    *,
+    preferred_protocols: set[str] | None = None,
+    preferred_country: str = "",
+    now_iso: str = "",
+) -> list[ScoredNode]:
+    """Return nodes filtered & ordered deterministically by the selected Phase-5 profile."""
+    prof = (profile or "BALANCED").strip().upper()
+    scored_pairs: list[tuple[float, ScoredNode]] = []
+    for n in nodes:
+        ps = compute_profile_rank_score(
+            n,
+            prof,
+            preferred_protocols=preferred_protocols,
+            preferred_country=preferred_country,
+            now_iso=now_iso,
+        )
+        if prof == "PRIVACY_AWARE" and ps <= 0.0:
+            continue
+        if preferred_protocols and ps <= 0.0:
+            continue
+        scored_pairs.append((ps, n))
+
+    scored_pairs.sort(
+        key=lambda item: (
+            -item[0],
+            item[1].median_latency_ms if item[1].median_latency_ms > 0 else 99999.0,
+            item[1].identity_id,
+        )
+    )
+    return [n for _, n in scored_pairs]
+
+
+# ───────────────── Source Health & Quarantine Intelligence (Phase 7) ─────────────────
 SOURCE_STATES = (
     "active",
     "degraded",
     "temporarily_failed",
     "disabled",
+    "quarantined",
     "retired",
     "pending_validation",
 )
 DISABLE_FAILURE_THRESHOLD = 6
 DEGRADED_FAILURE_THRESHOLD = 3
+QUARANTINE_SUSPICIOUS_MIN = 8
+QUARANTINE_SUSPICIOUS_RATIO = 0.50
 
 
 @dataclass
@@ -607,6 +804,14 @@ class SourceHealthRecord:
     last_modified: str = ""
     raw_count: int = 0
     valid_count: int = 0
+    new_configs: int = 0
+    invalid_configs: int = 0
+    duplicate_configs: int = 0
+    suspicious_configs: int = 0
+    content_sha256: str = ""
+    content_changed: bool = False
+    quarantine_reason: str = ""
+    availability_history: list[int] = field(default_factory=list)
     unique_identities: int = 0
     exclusive_identities: int = 0
     overlap_ratio: float = 0.0
@@ -615,13 +820,21 @@ class SourceHealthRecord:
     last_checked_at: str = ""
     last_success_at: str = ""
 
+    @property
+    def collection_success_rate(self) -> float:
+        if self.total_runs <= 0:
+            return 0.0
+        return round(self.successful_runs / max(1, self.total_runs), 4)
+
     def should_skip_cooldown(self) -> bool:
         """
-        Disabled sources enter cooldown and are only re-probed every 4th run
-        (i.e. every ~2 hours on a 30-min schedule) so dead feeds don't waste CI time
-        while still auto-recovering if upstream comes back!
+        Disabled/quarantined sources enter cooldown:
+          - disabled: re-probed every 4th run (~2h)
+          - quarantined: re-probed every 8th run (~4h) for safe recovery check
         """
         if self.state == "retired":
+            return True
+        if self.state == "quarantined" and (self.total_runs % 8 != 0):
             return True
         if self.state == "disabled" and (self.total_runs % 4 != 0):
             return True
@@ -637,6 +850,11 @@ class SourceHealthRecord:
         last_modified: str = "",
         raw_count: int = 0,
         valid_count: int = 0,
+        new_configs: int = 0,
+        invalid_configs: int = 0,
+        duplicate_configs: int = 0,
+        suspicious_configs: int = 0,
+        content_sha256: str = "",
         error: str = "",
         timestamp: str = "",
     ) -> None:
@@ -652,26 +870,57 @@ class SourceHealthRecord:
             if last_modified:
                 self.last_modified = last_modified
             if not_modified:
-                # Cached 304 keeps prior counts & healthy state
                 self.successful_runs += 1
                 self.consecutive_failures = 0
+                self.content_changed = False
                 self.last_error = ""
+                self.availability_history = (self.availability_history + [1])[-24:]
                 if self.state in ("pending_validation", "temporarily_failed", "disabled"):
                     self.state = "active"
                 return
 
+            if content_sha256:
+                self.content_changed = bool(self.content_sha256 and self.content_sha256 != content_sha256)
+                self.content_sha256 = content_sha256
+
             self.raw_count = raw_count
             self.valid_count = valid_count
+            self.new_configs = max(0, new_configs)
+            self.invalid_configs = max(0, invalid_configs)
+            self.duplicate_configs = max(0, duplicate_configs)
+            self.suspicious_configs = max(0, suspicious_configs)
+
+            total_inspected = max(1, raw_count + invalid_configs)
+            suspicious_ratio = self.suspicious_configs / total_inspected
+
+            # Source-level quarantine check: never trust a popular source injecting hostile/malformed floods
+            if (
+                self.suspicious_configs >= QUARANTINE_SUSPICIOUS_MIN
+                and suspicious_ratio >= QUARANTINE_SUSPICIOUS_RATIO
+            ) or (self.invalid_configs >= 20 and valid_count == 0):
+                self.consecutive_failures += 1
+                self.quarantine_reason = (
+                    f"high_suspicious_ratio:{self.suspicious_configs}/{total_inspected}"
+                    if self.suspicious_configs >= QUARANTINE_SUSPICIOUS_MIN
+                    else f"all_invalid_payload:{self.invalid_configs}"
+                )
+                self.last_error = self.quarantine_reason
+                self.state = "quarantined"
+                self.availability_history = (self.availability_history + [0])[-24:]
+                return
+
             if valid_count > 0:
                 self.successful_runs += 1
                 self.consecutive_failures = 0
                 self.last_success_at = ts
                 self.last_error = ""
+                self.quarantine_reason = ""
                 self.state = "active"
+                self.availability_history = (self.availability_history + [1])[-24:]
             else:
-                # HTTP 200 but zero valid configs -> degraded
                 self.consecutive_failures += 1
                 self.last_error = error or "zero_valid_configs"
+                self.availability_history = (self.availability_history + [0])[-24:]
                 self.state = (
                     "disabled"
                     if self.consecutive_failures >= DISABLE_FAILURE_THRESHOLD
@@ -680,6 +929,7 @@ class SourceHealthRecord:
         else:
             self.consecutive_failures += 1
             self.last_error = (error or "fetch_failed")[:160]
+            self.availability_history = (self.availability_history + [0])[-24:]
             if self.consecutive_failures >= DISABLE_FAILURE_THRESHOLD:
                 self.state = "disabled"
             elif self.consecutive_failures >= DEGRADED_FAILURE_THRESHOLD:
@@ -695,10 +945,18 @@ class SourceHealthRecord:
             "consecutive_failures": self.consecutive_failures,
             "total_runs": self.total_runs,
             "successful_runs": self.successful_runs,
+            "collection_success_rate": self.collection_success_rate,
             "last_status_code": self.last_status_code,
             "not_modified": self.not_modified,
             "raw_count": self.raw_count,
             "valid_count": self.valid_count,
+            "new_configs": self.new_configs,
+            "invalid_configs": self.invalid_configs,
+            "duplicate_configs": self.duplicate_configs,
+            "suspicious_configs": self.suspicious_configs,
+            "content_changed": self.content_changed,
+            "quarantine_reason": self.quarantine_reason,
+            "availability_history": list(self.availability_history[-24:]),
             "unique_identities": self.unique_identities,
             "exclusive_identities": self.exclusive_identities,
             "overlap_ratio": round(self.overlap_ratio, 4),
@@ -713,10 +971,13 @@ class SourceHealthRecord:
         d["url_or_handle"] = self.url_or_handle
         d["etag"] = self.etag
         d["last_modified"] = self.last_modified
+        d["content_sha256"] = self.content_sha256
         return d
 
     @classmethod
     def from_state_dict(cls, d: dict) -> "SourceHealthRecord":
+        hist = d.get("availability_history", [])
+        clean_hist = [1 if int(x) else 0 for x in hist[-24:]] if isinstance(hist, list) else []
         return cls(
             name=str(d.get("name", "")),
             kind=str(d.get("kind", "github")),
@@ -731,6 +992,14 @@ class SourceHealthRecord:
             last_modified=str(d.get("last_modified", "")),
             raw_count=int(d.get("raw_count", 0)),
             valid_count=int(d.get("valid_count", 0)),
+            new_configs=int(d.get("new_configs", 0)),
+            invalid_configs=int(d.get("invalid_configs", 0)),
+            duplicate_configs=int(d.get("duplicate_configs", 0)),
+            suspicious_configs=int(d.get("suspicious_configs", 0)),
+            content_sha256=str(d.get("content_sha256", "")),
+            content_changed=bool(d.get("content_changed", False)),
+            quarantine_reason=str(d.get("quarantine_reason", "")),
+            availability_history=clean_hist,
             unique_identities=int(d.get("unique_identities", 0)),
             exclusive_identities=int(d.get("exclusive_identities", 0)),
             overlap_ratio=float(d.get("overlap_ratio", 0.0)),
@@ -803,6 +1072,7 @@ class SourceHealthRegistry:
             "degraded": sum(1 for r in tg_records if r.state == "degraded"),
             "temporarily_failed": sum(1 for r in tg_records if r.state == "temporarily_failed"),
             "disabled": sum(1 for r in tg_records if r.state == "disabled"),
+            "quarantined": sum(1 for r in tg_records if r.state == "quarantined"),
             "top_alive_channels": [
                 r.to_public_dict()
                 for r in sorted(tg_records, key=lambda x: (-x.alive_count, -x.exclusive_identities, x.name))[:30]

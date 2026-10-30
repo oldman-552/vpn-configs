@@ -53,7 +53,12 @@ data class NetworkDiagnosticReport(
     val exitCountry: String = "",
     val ipLeakDetected: Boolean = false,
     val dnsLeakDetected: Boolean = false,
-    val webRtcLeakProtected: Boolean = true,
+    val ipv6LeakProtected: Boolean = true,
+    val webRtcLeakProtected: Boolean = false,
+    val webRtcSummaryAr: String = "",
+    val webRtcDetailAr: String = "",
+    val killSwitchEnabled: Boolean = true,
+    val osLockdownActive: Boolean = false,
     val dnsResolutionMs: Long = 0L,
     val tlsValid: Boolean = false,
     val mtuBytes: Int = 1500,
@@ -389,11 +394,15 @@ class ClientDiagnosticsEngine(private val ctx: Context) {
     }
 
     /**
-     * فحص شامل للشبكة والتسريبات (DNS / IP / TLS / MTU / Stability).
+     * فحص شامل للشبكة والتسريبات (DNS / IP / IPv6 / WebRTC / TLS / Kill Switch / Stability).
      */
     suspend fun runNetworkDiagnostics(
         viaVpnTunnel: Boolean,
         configuredDns: String,
+        killSwitchEnabled: Boolean = true,
+        osLockdownActive: Boolean = false,
+        splitIncludeOnly: Boolean = false,
+        splitApps: Set<String> = emptySet(),
     ): NetworkDiagnosticReport = withContext(Dispatchers.IO) {
         val nowIso = Instant.ofEpochMilli(EnterpriseClock.trustedNowMs()).toString()
 
@@ -474,8 +483,14 @@ class ClientDiagnosticsEngine(private val ctx: Context) {
         } else 0.0
 
         val ipLeak = viaVpnTunnel && (tunnelIp.isBlank() || (directIp.isNotBlank() && tunnelIp == directIp))
-        val trustedDns = configuredDns in setOf("1.1.1.1", "1.0.0.1", "8.8.8.8", "9.9.9.9", "94.140.14.14")
+        val trustedDns = com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isRecognizedTrustedResolver(configuredDns)
         val dnsLeak = viaVpnTunnel && (!trustedDns || dnsMs < 0L)
+
+        val webRtcEval = com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.evaluateWebRtcExposure(
+            viaVpnTunnel = viaVpnTunnel,
+            splitIncludeOnly = splitIncludeOnly,
+            splitApps = splitApps,
+        )
 
         val rawStability = 100.0 - (lossPct * 0.65) - (jitter * 0.25) - (if (ipLeak || dnsLeak) 35.0 else 0.0) - (if (!tlsOk) 25.0 else 0.0)
         val stabilityScore = (rawStability.coerceIn(0.0, 100.0) * 10.0).roundToInt() / 10.0
@@ -489,7 +504,12 @@ class ClientDiagnosticsEngine(private val ctx: Context) {
             exitCountry = tunnelLoc,
             ipLeakDetected = ipLeak,
             dnsLeakDetected = dnsLeak,
-            webRtcLeakProtected = viaVpnTunnel,
+            ipv6LeakProtected = viaVpnTunnel,
+            webRtcLeakProtected = viaVpnTunnel && webRtcEval.level == com.bahrain.vpnconfigs.vpn.WebRtcExposureLevel.TUNNEL_ROUTED_BROWSER_ADVISORY,
+            webRtcSummaryAr = webRtcEval.summaryAr,
+            webRtcDetailAr = webRtcEval.detailAr,
+            killSwitchEnabled = killSwitchEnabled,
+            osLockdownActive = osLockdownActive,
             dnsResolutionMs = dnsMs.coerceAtLeast(0L),
             tlsValid = tlsOk,
             mtuBytes = if (viaVpnTunnel) 8500 else 1500,

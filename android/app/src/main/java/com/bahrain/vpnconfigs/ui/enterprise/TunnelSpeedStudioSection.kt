@@ -50,7 +50,7 @@ fun TunnelSpeedStudioCard(
                 Column {
                     Text("اختبار السرعة الحقيقي عبر النفق", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        if (vpnStatus.phase == VpnPhase.CONNECTED) "يمر الفحص فعليًا داخل نفق ${vpnStatus.activeLabel}"
+                        if (vpnStatus.isTunnelVerified) "يمر الفحص فعليًا داخل نفق ${vpnStatus.activeLabel}"
                         else "الـ VPN غير متّصل — سيقيس سرعة الشبكة المباشرة للمقارنة",
                         style = MaterialTheme.typography.labelSmall,
                     )

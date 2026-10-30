@@ -1,5 +1,16 @@
 // =====================================================================
-// VpnState.kt — إدارة الحالة المشتركة لاتصال الـ VPN والإحصاءات الحيّة.
+// VpnState.kt — إدارة الحالة المشتركة الموثّقة لاتصال الـ VPN ومؤشرات الأمان
+// والتبديل التلقائي ومفتاح الإيقاف (Phases 4, 6 & 9).
+//
+// حالات الاتصال الثمان المعتمدة (لا يُعلَن CONNECTED إلا بعد نجاح التحقق الفعلي):
+//   1. DISCONNECTED         — متوقف بطلب المستخدم
+//   2. CONNECTING           — جارٍ إنشاء النفق والتحقق منه
+//   3. CONNECTED            — متّصل ومتحقّق من مرور البيانات عبر النفق
+//   4. RECONNECTING         — جارٍ استعادة الجلسة بعد تغيّر الشبكة (Wi-Fi / جوال)
+//   5. SWITCHING_SERVER     — جارٍ الانتقال السلس إلى سيرفر بديل موثّق
+//   6. CONNECTION_DEGRADED  — متّصل لكن رُصد ارتفاع تأخير أو تذبذب أو فقدان حزم
+//   7. PROTECTION_ACTIVE    — مفتاح الإيقاف (Kill Switch) يحجب التسرب بعد سقوط النفق
+//   8. CONNECTION_FAILED    — تعذّر الاتصال (مع إيقاف النفق عند تعطيل Kill Switch)
 // =====================================================================
 package com.bahrain.vpnconfigs.vpn
 
@@ -13,8 +24,11 @@ enum class VpnPhase {
     DISCONNECTED,
     CONNECTING,
     CONNECTED,
-    SWITCHING,
-    ERROR,
+    RECONNECTING,
+    SWITCHING_SERVER,
+    CONNECTION_DEGRADED,
+    PROTECTION_ACTIVE,
+    CONNECTION_FAILED,
 }
 
 data class ServerCandidate(
@@ -23,6 +37,8 @@ data class ServerCandidate(
     val speedKbps: Double = 0.0,
     val latencyMs: Long = 0L,
     val isVip: Boolean = false,
+    val securityAssessment: String = "Unknown",
+    val riskLevel: String = "UNKNOWN",
 )
 
 data class VpnStatus(
@@ -37,15 +53,31 @@ data class VpnStatus(
     val totalDownBytes: Long = 0L,
     val totalUpBytes: Long = 0L,
     val livePingMs: Long = 0L,
+    val jitterMs: Double = 0.0,
+    val packetLossPct: Double = 0.0,
+    val connectionQuality: String = "—",
     val exitIp: String = "",
     val exitCountry: String = "",
+    val failoverMode: String = "SMART",
+    val switchingStatus: String = "مستقر",
+    val previousServerLabel: String = "",
+    val targetServerLabel: String = "",
+    val lastSuccessfulSwitchAtMs: Long = 0L,
     val failoverCount: Int = 0,
+    val killSwitchActive: Boolean = true,
+    val osLockdownActive: Boolean = false,
     val droppedConfigs: Set<String> = emptySet(),
     val statusMessage: String? = null,
     val error: String? = null,
 ) {
+    val isTunnelVerified: Boolean
+        get() = phase == VpnPhase.CONNECTED || phase == VpnPhase.CONNECTION_DEGRADED
+
+    val isTransitioning: Boolean
+        get() = phase == VpnPhase.CONNECTING || phase == VpnPhase.RECONNECTING || phase == VpnPhase.SWITCHING_SERVER
+
     val isActive: Boolean
-        get() = phase == VpnPhase.CONNECTED || phase == VpnPhase.CONNECTING || phase == VpnPhase.SWITCHING
+        get() = isTunnelVerified || isTransitioning || phase == VpnPhase.PROTECTION_ACTIVE
 }
 
 object VpnStateManager {
@@ -76,11 +108,16 @@ object VpnStateManager {
     fun resetDisconnected(errorMsg: String? = null, infoMsg: String? = null) {
         _status.update { prev ->
             VpnStatus(
-                phase = if (errorMsg != null) VpnPhase.ERROR else VpnPhase.DISCONNECTED,
+                phase = if (errorMsg != null) VpnPhase.CONNECTION_FAILED else VpnPhase.DISCONNECTED,
                 activeCfg = prev.activeCfg,
                 activeLabel = prev.activeLabel,
                 activeProto = prev.activeProto,
                 activeEndpoint = prev.activeEndpoint,
+                failoverMode = prev.failoverMode,
+                previousServerLabel = prev.previousServerLabel,
+                lastSuccessfulSwitchAtMs = prev.lastSuccessfulSwitchAtMs,
+                killSwitchActive = prev.killSwitchActive,
+                osLockdownActive = prev.osLockdownActive,
                 droppedConfigs = prev.droppedConfigs,
                 statusMessage = infoMsg,
                 error = errorMsg,

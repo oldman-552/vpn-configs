@@ -1,24 +1,22 @@
-# bahrain-vpn — منصة ULTIMATE VPN ENTERPRISE v3.1 المتكاملة (100% على GitHub)
+# bahrain-vpn — منصة ULTIMATE VPN ENTERPRISE v3.2 المتكاملة (الأمان الذكي، منع التسرب، وواجهة API v1 — 100% على GitHub)
 
 منظومة VPN مؤسسية وسحابية متكاملة تعمل آليًا بالكامل **100% داخل بيئة GitHub دون أي خوادم خارجية (Zero VPS / Zero Third-Party Cloud)** تحت الهوية الموحّدة **`bahrain-vpn`**:
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────────────────┐
-│                         منظومة ULTIMATE VPN ENTERPRISE v3.1 (Pure-GitHub)                     │
+│                         منظومة ULTIMATE VPN ENTERPRISE v3.2 (Pure-GitHub)                     │
 ├───────────────────────────────────────────────┬───────────────────────────────────────────────┤
-│ 1) خط الجمع والفحص السحابي (كل 30 د — data)   │ 2) تطبيق المشترك للأندرويد (User APK v3.1)    │
-│ • 277 قناة تلغرام + 26 تغذية GitHub منتقاة    │ • حجم رشيق عبر R8 (27.57 MB لمعالجات ARM64)   │
-│ • حراسة SSRF + إزالة تكرار خماسية الطبقات     │ • فحص تلقائي فوري للسرعة وترتيب بالأسرع تنزيلاً│
-│ • فحص نفق L0–L6 عبر Xray-core + sing-box      │ • سيرفرات VIP 💎 مشفّرة للمشتركين مع منع النسخ│
-│ • كشف دولة الخروج الحقيقية + استقرار طولي EMA │ • تبديل تلقائي ذكي خلال ~ثانيتين عند الانقطاع │
-│ • نشر ذرّي محمي (Last-Known-Good) على @data   │ • تجربة مجانية 48 ساعة + استوديو سرعة + فحص   │
-│   + حزمة التراخيص الموقّعة enterprise/bundle   │   تسرب DNS/IP + محدّث تلقائي حسب المعمارية    │
+│ 1) الذكاء الأمني والفحص السحابي (كل 30 د)      │ 2) تطبيق المشترك للأندرويد (User APK v3.2)    │
+│ • 277 قناة تلغرام + 26 تغذية GitHub منتقاة    │ • منع تسرب DNS داخل النفق + حجب تسرب IPv6 ::/0│
+│ • فصل الأمان والخصوصية عن السرعة + حجر صحي    │ • مفتاح إيقاف صارم (Fail-Closed Kill Switch)  │
+│ • 5 ملفات ترتيب ذكية + قوائم privacy_aware    │ • تبديل استباقي (OFF / SMART / AGGRESSIVE)    │
+│ • عزل تلقائي للمصادر التالفة أو المشبوهة       │ • 8 حالات نفق موثّقة + فحص تلقائي وترتيب سرعة │
+│ • واجهة إحصاءات عامة معماة (/api/v1/* + OAS3) │ • عقد VIP 💎 مشفّرة + تجربة 48 ساعة محمية     │
 ├───────────────────────────────────────────────┼───────────────────────────────────────────────┤
-│ 3) تطبيق المشرف المستقل (Admin APK v3.1)      │ 4) لوحة تحكم الويب المعيارية (17 صفحة AR/EN)  │
-│ • حزمة مستقلة رشيقة (2.19 MB فقط عبر R8)      │ • مستضافة على GitHub Pages (فرع gh-pages)     │
-│ • توثيق ثنائي TOTP 2FA + خزنة AES-256-GCM     │ • تشفير متصفح أصيل WebCrypto بدون خادم وسيط   │
-│ • إدارة المشتركين والأجهزة وعقد VIP المشفّرة   │ • دعم كامل للعربية (RTL) والإنجليزية (LTR)    │
-│ • توقيع ECDSA P-256 ومزامنة عبر api.github    │ • تصدير تقارير CSV/Excel وPDF والوضع الداكن   │
+│ 3) تطبيق المشرف المستقل (Admin APK v3.2)      │ 4) لوحة الإدارة + شاشة المراقبة الحيّة (Web)  │
+│ • حزمة مستقلة رشيقة (~2.19 MB فقط عبر R8)     │ • 17 صفحة إدارة مشفّرة (index.html على Pages) │
+│ • توثيق ثنائي TOTP 2FA + خزنة AES-256-GCM     │ • لوحة مراقبة عامة حيّة (monitor.html AR/EN)  │
+│ • إدارة المشتركين والأجهزة وعقد VIP المشفّرة   │ • مخططات تاريخية وصحّة المصادر بدون أي أسرار  │
 └───────────────────────────────────────────────┴───────────────────────────────────────────────┘
 ```
 
@@ -86,6 +84,9 @@
 | **`reliable.txt`** / **`reliable_sub.txt`** | الأعلى استقرارًا واعتمادية عبر الجولات المتتالية (نصي + `Base64`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/reliable_sub.txt` |
 | **`low_latency.txt`** | الأقلّ زمن استجابة وتذبذبًا (`Median RTT + Jitter`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/low_latency.txt` |
 | **`high_throughput.txt`** | الأعلى سرعة تنزيل موثّقة عبر النفق الفعلي | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/high_throughput.txt` |
+| **`privacy_aware.txt`** | الأعلى أمانًا في طبقة النقل (`Verified TLS/Reality` فقط وبدون `allowInsecure`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/privacy_aware.txt` |
+| **`api/v1/statistics.json`** | واجهة الإحصاءات العامة المعماة (`v1`) ومواصفة `openapi.json` | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/api/v1/statistics.json` |
+| **`quarantined.json`** | سجل الحجر الصحي الأمني المعزول (معرّفات معماة وأسباب الرفض دون تسريب روابط) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/quarantined.json` |
 | **`protocols/*.txt`** | قوائم مفصولة حسب البروتوكول (`vless`, `trojan`, `vmess`, `ss`, `hysteria2`, `tuic`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/protocols/vless.txt` |
 | **`alive.json`** | البيانات الكاملة للعُقد الحيّة مع الدولة والدرجة والاستقرار والتذبذب لتطبيق `bahrain-vpn` | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/alive.json` |
 | **`enterprise/bundle.json`** | حزمة التراخيص الموقّعة (`ECDSA P-256`)، الإعدادات البعيدة، التحديثات، وعُقد `VIP` المشفّرة | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/enterprise/bundle.json` |
@@ -146,10 +147,13 @@ pytest -v
 
 ---
 
-## 6) التوثيق المرجعي والقيود الأمنية الصريحة
+## 6) التوثيق الهندسي المرجعي الكامل والقيود الأمنية الصريحة
 
-- التوثيق الهندسي والأمني والتشغيلي للمنصة المؤسسية (`v3.1`): [`docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md`](docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md)
-- منهجية اختيار المصادر ونتائج قياس التفرّد والتداخل: [`sources.md`](sources.md)
-- المراجعة الأمنية والمعمارية لخط الأنابيب السحابي: [`review.md`](review.md)
+- البنية المعمارية الشاملة (`v3.2`): [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md`](docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md)
+- الأمن والخصوصية ونموذج التهديدات: [`SECURITY.md`](SECURITY.md) | [`PRIVACY.md`](PRIVACY.md)
+- توثيق واجهة الإحصاءات العامة (`API v1` + `OpenAPI 3.1`): [`API.md`](API.md)
+- النشر والتشغيل والاختبارات واستكشاف الأخطاء: [`DEPLOYMENT.md`](DEPLOYMENT.md) | [`TESTING.md`](TESTING.md) | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) | [`CHANGELOG.md`](CHANGELOG.md)
+- تقارير المراجعة الهندسية الشاملة (Phase 1 Audit): [`ARCHITECTURE_AUDIT.md`](ARCHITECTURE_AUDIT.md) | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) | [`PERFORMANCE_AUDIT.md`](PERFORMANCE_AUDIT.md) | [`IMPROVEMENT_ROADMAP.md`](IMPROVEMENT_ROADMAP.md)
+- منهجية اختيار المصادر ونتائج قياس التفرّد والتداخل: [`sources.md`](sources.md) | [`review.md`](review.md)
 - **التزام الخصوصية الصارم:** لا يسجّل التطبيق ولا المنصة أي سجل تصفح، عناوين مواقع يزورها المستخدم، كلمات مرور، رسائل، أو محتوى حزم الشبكة (`Zero Traffic Sniffing`).
-- **تنبيه أمني حول العُقد العامة:** العُقد العامة المنشورة في القوائم المفتوحة تُجمع من مصادر عامة؛ مشغّل عقدة الخروج يستطيع رؤية حركة المرور غير المشفّرة ووجهات `SNI`. للعمليات الحساسة استخدم دائمًا تشفير طرف لطرف (`HTTPS/TLS`) أو اعتمد على **سيرفرات `VIP 💎` الخاصة المملوكة لك** داخل حساب المشترك.
+- **الشفافية الأمنية الصارمة:** يفصل المحرك الأمني كليًا بين سرعة السيرفر وأمان تشفيره، ولا يمنح العُقد العامة المجهولة صفة `Privacy: Verified` أبدًا (تُمنح فقط لعُقد `VIP 💎` الخاصة الموثّقة). كما يوضّح التطبيق بصراحة حدود نظام أندرويد (لحظات الإقلاع الأولى قبل تشغيل التطبيق تتطلب تفعيل `Always-On VPN + Lockdown` من إعدادات النظام).
