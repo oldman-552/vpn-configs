@@ -285,19 +285,42 @@ object QuickScanPlanner {
         val cap = min(maxQuickCandidates.coerceAtLeast(10), cfgById.size)
         val orderedIds = LinkedHashSet<String>()
 
-        // 1. Recently successful reliable servers on this network profile
-        val recentSuccess = statsById.values
-            .filter { it.networkProfile == profile && it.lastSuccessfulConnectionMs > 0L && it.consecutiveFailures == 0 && cfgById.containsKey(it.serverId) }
-            .sortedWith(
-                compareByDescending<NetworkServerProfileStats> { it.lastSuccessfulConnectionMs }
-                    .thenByDescending { it.stabilityScore }
-            )
-        for (st in recentSuccess) {
-            orderedIds.add(st.serverId)
-            if (orderedIds.size >= cap) break
+        // 1. Current local Top 50 that recently succeeded reliably on this network (#1, #2, #3...)
+        currentRankings
+            .filter { r ->
+                val st = statsById[r.serverId]
+                r.poolTier == LocalPoolTier.TOP_50 &&
+                    cfgById.containsKey(r.serverId) &&
+                    st != null &&
+                    st.networkProfile == profile &&
+                    st.lastSuccessfulConnectionMs > 0L &&
+                    st.consecutiveFailures == 0
+            }
+            .sortedBy { it.rankPosition }
+            .forEach { r ->
+                if (orderedIds.size < cap) orderedIds.add(r.serverId)
+            }
+
+        // 2. Other recently successful reliable servers on this network profile
+        if (orderedIds.size < cap) {
+            val recentSuccess = statsById.values
+                .filter {
+                    it.networkProfile == profile &&
+                        it.lastSuccessfulConnectionMs > 0L &&
+                        it.consecutiveFailures == 0 &&
+                        cfgById.containsKey(it.serverId)
+                }
+                .sortedWith(
+                    compareByDescending<NetworkServerProfileStats> { it.lastSuccessfulConnectionMs }
+                        .thenByDescending { it.stabilityScore }
+                )
+            for (st in recentSuccess) {
+                orderedIds.add(st.serverId)
+                if (orderedIds.size >= cap) break
+            }
         }
 
-        // 2. Current local Top 50 for this network profile
+        // 3. Remaining current local Top 50 for this network profile
         if (orderedIds.size < cap) {
             currentRankings
                 .filter { it.poolTier == LocalPoolTier.TOP_50 && cfgById.containsKey(it.serverId) }

@@ -455,11 +455,14 @@ class Top500AndPersonalizedTop50Test {
 
         // 6. Append-only historical measurements & ranking history preserved (never overwritten) + zero credential leaks!
         val histSamples = db.getServerScanHistory(expectedMobileRank1Id, ScanNetworkProfile.MOBILE_DATA)
-        assertTrue(histSamples.size >= 2) // 1 from FULL_SCAN + 1 from QUICK_SCAN preserved!
-        assertTrue(histSamples.all { !it.configFingerprint.contains("TOPSECRET_PASS") })
+        assertTrue("Expected >=2 append-only samples for #1 server, got ${histSamples.size}", histSamples.size >= 2)
+        assertTrue(
+            "Config fingerprint must never leak secrets",
+            histSamples.all { !it.configFingerprint.contains("TOPSECRET_PASS") }
+        )
 
         val rankSnapshots = db.getRankingHistoryForServer(expectedMobileRank1Id, ScanNetworkProfile.MOBILE_DATA)
-        assertTrue(rankSnapshots.size >= 2)
+        assertTrue("Expected >=2 ranking history snapshots, got ${rankSnapshots.size}", rankSnapshots.size >= 2)
 
         // 7. Untested Top-500 server NEVER enters Personalized Top 50 even if it existed in central pool
         val neverTestedUri = buildSampleUri(499, secretToken = "UNTESTED_SECRET")
