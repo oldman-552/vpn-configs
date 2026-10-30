@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ULTIMATE VPN ENTERPRISE — لوحة الإدارة الشاملة</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- بوابة المصادقة الإدارية المشفّرة (GitHub Serverless + AES-256-GCM + TOTP 2FA) -->
+  <div id="authOverlay" class="auth-overlay">
+    <div class="auth-box">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="brand-badge">UV</div>
+        <div>
+          <h2 style="font-size:1.15rem">ULTIMATE VPN ENTERPRISE</h2>
+          <p style="font-size:0.8rem;color:var(--muted)">100% Pure-GitHub Encrypted Control Center (WebCrypto + TOTP 2FA)</p>
+        </div>
+      </div>
+
+      <label style="font-size:0.8rem;color:var(--muted)">GitHub Repository</label>
+      <input id="loginRepo" value="oldman-552/vpn-configs" />
+
+      <label style="font-size:0.8rem;color:var(--muted)">GitHub Fine-Grained Token (Session Memory Only — Never Stored in Code)</label>
+      <input id="loginToken" type="password" placeholder="github_pat_... (Required for write/publish)" />
+
+      <label style="font-size:0.8rem;color:var(--muted)">Vault Master Passphrase (AES-256-GCM)</label>
+      <input id="loginVaultPass" type="password" placeholder="أدخل عبارة التشفير الرئيسية للخزنة…" />
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:0.8rem;color:var(--muted)">Admin Username</label>
+          <input id="loginAdmUser" value="admin" />
+        </div>
+        <div>
+          <label style="font-size:0.8rem;color:var(--muted)">2FA TOTP Code (6 digits)</label>
+          <input id="loginTotp" placeholder="000000" maxlength="6" />
+        </div>
+      </div>
+
+      <button class="btn" style="padding:12px;margin-top:6px" onclick="handleAdminUnlock()">
+        فك تشفير الخزنة والدخول للوحة التحكم / Unlock Console
+      </button>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-badge">UV</div>
+        <div>
+          <div style="font-weight:800;font-size:0.95rem">ULTIMATE VPN</div>
+          <div id="syncStatus" style="font-size:0.75rem;color:var(--muted)">GitHub Serverless v3.0</div>
+        </div>
+      </div>
+      <nav id="sidebarNav" style="display:flex;flex-direction:column;gap:4px"></nav>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div style="flex:1;min-width:220px">
+          <input placeholder="بحث فوري في المستخدمين، الأجهزة، الخوادم… / Quick Search…" oninput="onGlobalSearch(this.value)" />
+        </div>
+        <div class="toolbar-actions">
+          <button class="btn btn-outline" onclick="syncFromGitHub()">↻ GitHub Sync</button>
+          <button class="btn btn-success" onclick="saveAndPublishToGitHub('Manual admin publish')">☁ Publish Signed Bundle</button>
+          <button class="btn btn-outline" onclick="exportExcel()">⇩ CSV/Excel</button>
+          <button class="btn btn-outline" onclick="exportPdf()">⇩ PDF</button>
+          <button class="btn btn-outline" onclick="toggleLanguage()">AR / EN</button>
+          <button class="btn btn-outline" onclick="toggleTheme()">☾ / ☀</button>
+        </div>
+      </header>
+
+      <section id="pageContainer"></section>
+    </main>
+  </div>
+
+  <script src="crypto_github.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

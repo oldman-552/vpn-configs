@@ -80,7 +80,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLIC_BASE: https://cdn.jsdelivr.net/gh/${{ github.repository }}@data
           PREV_DIST: prev_dist
-        run: python server/build_data.py --prev-dir prev_dist
+        run: |
+          python server/build_data.py --prev-dir prev_dist
+          mkdir -p dist/enterprise
+          if [ -d prev_dist/enterprise ]; then
+            cp -r prev_dist/enterprise/. dist/enterprise/
+          fi
+          if [ ! -f dist/enterprise/bundle.json ]; then
+            python -m enterprise.publisher \
+              --vault dist/enterprise/vault_sqlite.enc.json \
+              --alive dist/alive.json \
+              --bundle-out dist/enterprise/bundle.json \
+              --backup-dir dist/enterprise/backups
+          fi
 
       - name: Verify generated artifacts before publishing
         run: |
@@ -166,7 +178,7 @@ jobs:
       - name: Purge jsDelivr cache
         if: success() && (github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         run: |
-          for f in alive.txt alive.json sub.txt best100.txt reliable.txt reliable_sub.txt low_latency.txt high_throughput.txt countries.json source_health.json meta.json; do
+          for f in alive.txt alive.json sub.txt best100.txt reliable.txt reliable_sub.txt low_latency.txt high_throughput.txt countries.json source_health.json meta.json enterprise/bundle.json; do
             curl -s -m 20 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/$f" > /dev/null || true
           done
           echo "تم إرسال طلبات تحديث الكاش."

@@ -14,4 +14,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "BahrainConfigs"
-include(":app")
+include(":app", ":admin")

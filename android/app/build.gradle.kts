@@ -1,7 +1,7 @@
 plugins {
-    id("com.android.application") version "8.5.2"
-    id("org.jetbrains.kotlin.android") version "2.0.20"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.0.20"
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -12,8 +12,8 @@ android {
         applicationId = "com.bahrain.vpnconfigs"
         minSdk = 29
         targetSdk = 34
-        versionCode = 7
-        versionName = "2.4"
+        versionCode = 8
+        versionName = "3.0"
     }
 
     // إنتاج APK مستقل خفيف لكل معمارية (arm64-v8a بحجم ~50% أقل) + نسخة شاملة للتوافق الكامل

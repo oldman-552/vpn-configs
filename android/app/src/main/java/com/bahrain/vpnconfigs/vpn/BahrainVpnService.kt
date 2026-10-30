@@ -32,6 +32,8 @@ import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.RunningDaemon
 import com.bahrain.vpnconfigs.engine.SingBox
 import com.bahrain.vpnconfigs.engine.Socks
+import com.bahrain.vpnconfigs.enterprise.AppHealthMonitor
+import com.bahrain.vpnconfigs.enterprise.EnterpriseLicenseGuard
 import com.bahrain.vpnconfigs.util.UiMessages
 import hev.htproxy.TProxyService
 import kotlinx.coroutines.CoroutineScope
@@ -263,6 +265,14 @@ class BahrainVpnService : VpnService() {
     }
 
     private suspend fun handleConnect(rawCfg: String?, rawLabel: String?, forceRebuildTun: Boolean) {
+        val guard = EnterpriseLicenseGuard(applicationContext)
+        val licState = guard.currentState()
+        if (!licState.canConnectVpn) {
+            teardownInternal(licState.statusDetailAr.ifBlank { "غير مصرّح بالاتصال حاليًا" }, null)
+            stopSelf()
+            return
+        }
+
         val pool = ensureServerPool()
         val chosenCfg = rawCfg?.takeIf { it.isNotBlank() }
             ?: prefs.selectedCfg.takeIf { it.isNotBlank() }
@@ -573,6 +583,7 @@ class BahrainVpnService : VpnService() {
             var prevUp = initStats?.getOrNull(1) ?: 0L
             var prevDown = initStats?.getOrNull(3) ?: 0L
             var tick = 0
+            val guard = EnterpriseLicenseGuard(applicationContext)
 
             while (isActive && VpnStateManager.status.value.phase == VpnPhase.CONNECTED) {
                 delay(1000L)
@@ -585,6 +596,8 @@ class BahrainVpnService : VpnService() {
                     prevUp = curUp
                     prevDown = curDown
 
+                    guard.recordTrafficDeltaBytes(downSpd, upSpd)
+
                     VpnStateManager.update { s ->
                         s.copy(
                             upSpeedBps = upSpd,
@@ -595,6 +608,21 @@ class BahrainVpnService : VpnService() {
                     }
 
                     tick++
+                    if (tick % 60 == 0) {
+                        runCatching {
+                            Repo(applicationContext).fetchEnterpriseBundleRaw()?.let { guard.applySignedBundleRaw(it) }
+                        }
+                    }
+                    if (tick % 5 == 0) {
+                        val liveLic = guard.currentState()
+                        if (!liveLic.canConnectVpn) {
+                            opLock.withLock {
+                                teardownInternal(liveLic.statusDetailAr.ifBlank { "انتهت صلاحية الجلسة أو الحصة" }, null)
+                                stopSelf()
+                            }
+                            return@launch
+                        }
+                    }
                     if (tick % 2 == 0) {
                         val st = VpnStateManager.status.value
                         val pingTxt = if (st.livePingMs > 0) " • ${st.livePingMs} ms" else ""
