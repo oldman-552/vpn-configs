@@ -21,4 +21,15 @@ This upgrade (`v3.3`, Phases 1–10) transforms `bahrain-vpn` (`oldman-552/vpn-c
 | **Part 3 — 9-State Security Classification** | `vpn/ConnectionSecurityClassifier.kt`, `ui/SecurityStatusScreen.kt` | Implements all 9 states (`CONNECTED`, `ENCRYPTED_TUNNEL`, `UNKNOWN_SERVER_TRUST`, `DNS_LEAK_DETECTED`, `IPV6_LEAK_DETECTED`, `UNSTABLE_CONNECTION`, `KILL_SWITCH_ACTIVE`, `SECURITY_CHECK_FAILED`, `SECURITY_CHECK_INCOMPLETE`) + DNS/IPv6 leak inspectors with honest disclosures. |
 | **Part 4 & 5 — Historical Intelligence DB** | `historical_db.py`, `migrations/history/*.sql`, `dedupe.py`, `collector.py`, `server/build_data.py` | WAL SQLite with migrations, corruption auto-recovery, secret-safe `canonical_sha256`, operator-level source independence (`gh:<owner>`, `tg:<channel>`), 10 failure categories, outage-aware `24h`/`7d`/`30d`/`90d` analytics (`OBSERVED`/`ESTIMATED`/`UNKNOWN`), temporary suppression without deletion, 30d/90d/365d retention. |
 | **Part 6 & 7 — Web Visualization & Exports** | `web-admin/monitor.html`, `web-admin/monitor.js`, `web-admin/modules/pages_infrastructure.js` | Publishes secret-free `servers-{current,history,performance,statistics}.json`, `countries-statistics.json`, `sources-statistics.json`; interactive 24h/7d/30d/90d dashboard, 8-criteria server explorer, and historical server detail modal. |
-| **Part 8–11 — UX, Privacy & Tests** | `MainActivity.kt`, `tests/test_historical_intelligence.py`, `SmartVpnUpgradeTest.kt` | Clean 6-tab navigation (`Home`, `Servers`, `Favorites`, `History`, `Security`, `Settings`), privacy-by-design, `48/48` Python tests passing + expanded Robolectric test suite. |
+| **Part 8–11 — UX, Privacy & Tests** | `MainActivity.kt`, `tests/test_historical_intelligence.py`, `SmartVpnUpgradeTest.kt` | Clean 6-tab navigation (`Home`, `Servers`, `Favorites`, `History`, `Security`, `Settings`), privacy-by-design, `48/48` Python tests + `25/25` Android Robolectric tests passing in CI + zero-leak R8 APK audit. |
+
+---
+
+## Published Production Artifacts (`v3.3` Release & `@data`)
+- **GitHub Release `v3.3` (`bahrain-vpn v3.3`):**
+  - `app-arm64-v8a-release.apk`: `29,238,295 B` (`sha256:78a592fb0d7b68b529114fc362bb6ef3217094c5a438ec1bedf663c61cb469f9`)
+  - `app-x86_64-release.apk`: `31,138,598 B` (`sha256:31a61ee7d9f42aaabc8e6f400ece4c74f36390f18184e3cf3e74721c6d3a38dc`)
+  - `app-release.apk` / `app-universal-release.apk`: `57,169,592 B` (`sha256:84d7aaaccaf1b344902eda95910d9b2a125d63c9ba3d327935c9524afc75edca`)
+  - `app-admin-release.apk`: `2,292,980 B` (`sha256:7c776d30fe4ff825a53b9def5ac5fd4eba2d8905b461704288c750ac987247e0`)
+- **Live `@data` Historical Intelligence Feed:**
+  - `state/history.sqlite3` (`21.17 MB`), `servers-current.json`, `servers-history.json`, `servers-performance.json`, `servers-statistics.json`, `countries-statistics.json`, and `sources-statistics.json`.
