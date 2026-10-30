@@ -30,6 +30,7 @@ import com.bahrain.vpnconfigs.R
 import com.bahrain.vpnconfigs.data.ClientDatabase
 import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.data.Repo
+import com.bahrain.vpnconfigs.data.ScanNetworkProfile
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.RunningDaemon
 import com.bahrain.vpnconfigs.engine.SecurityEvaluator
@@ -630,6 +631,17 @@ class BahrainVpnService : VpnService() {
             )
         }.getOrDefault(0L)
         runCatching {
+            val curProf = ScanNetworkProfile.fromTransportCode(curNetCode)
+            clientDb.recordNetworkScanMeasurement(
+                cfgOrServerId = cand.cfg,
+                networkProfile = curProf,
+                scanMode = "LIVE_SESSION",
+                success = true,
+                establishMs = verifiedPingMs,
+                latencyMs = verifiedPingMs,
+                stabilityScore = 88.0,
+                nowMs = now,
+            )
             clientDb.recordServerProbeOrSessionOutcome(
                 cfgOrServerId = cand.cfg,
                 ok = true,
@@ -1226,7 +1238,8 @@ class BahrainVpnService : VpnService() {
     }
 
     /**
-     * يتحقق من عمل سيرفر بديل على منافذ معزولة (20901..20904) دون إيقاف النفق النشط على 20808.
+     * يتحقق من عمل سيرفر بديل بالتسلسل الصارم (نفق واحد في كل مرة على منفذ معزول 20901)
+     * احترامًا لقيود Android VpnService وتوفيرًا للبطارية، ويتوقف فور إيجاد أول بديل شغّال.
      */
     private suspend fun probeVerifiedCandidateWithoutStoppingCurrent(
         excludeCfg: String,
@@ -1237,34 +1250,40 @@ class BahrainVpnService : VpnService() {
             pool = pool,
             maxCandidates = 8,
         )
-        for (batch in candidates.chunked(4)) {
-            val tested = coroutineScope {
-                batch.mapIndexed { idx, cand ->
-                    async(Dispatchers.IO) {
-                        val r = singBox.test(
-                            cfg = cand.cfg,
-                            port = 20901 + idx,
-                            timeoutSec = 4,
-                            measureSpeed = false,
-                            dnsServer = prefs.dnsServer,
-                            useDoh = prefs.dnsDoh,
-                        )
-                        cand to r
-                    }
-                }.awaitAll()
+        val curProf = ScanNetworkProfile.fromTransportCode(netAwareness.snapshot.value.transport.code)
+        for (cand in candidates) {
+            val r = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                singBox.testRealTunnelSequential(
+                    cfg = cand.cfg,
+                    port = 20901,
+                    timeoutSec = 4,
+                    probeSamples = 2,
+                    measureThroughput = false,
+                    dnsServer = prefs.dnsServer,
+                    useDoh = prefs.dnsDoh,
+                )
             }
-            tested.forEach { (cand, r) ->
-                val clean = Converters.cleanUri(cand.cfg)
-                if (r.ok && r.latencyMs > 0L) {
-                    VpnStateManager.markServerHealthy(clean)
-                } else {
-                    VpnStateManager.markServerDropped(clean)
-                }
+            val clean = Converters.cleanUri(cand.cfg)
+            val ok = r.ok && r.latencyMs > 0L
+            runCatching {
+                clientDb.recordNetworkScanMeasurement(
+                    cfgOrServerId = clean,
+                    networkProfile = curProf,
+                    scanMode = "FAILOVER_PROBE",
+                    success = ok,
+                    establishMs = r.establishMs,
+                    latencyMs = r.latencyMs,
+                    jitterMs = r.jitterMs,
+                    packetLossPct = if (ok) r.packetLossPct else 100.0,
+                    stabilityScore = r.stabilityScore,
+                    failureReason = if (ok) "" else r.error,
+                )
             }
-            val winner = tested.filter { it.second.ok && it.second.latencyMs > 0L }
-                .minByOrNull { it.second.latencyMs }
-            if (winner != null) {
-                return winner.first to winner.second.latencyMs
+            if (ok) {
+                VpnStateManager.markServerHealthy(clean)
+                return cand to r.latencyMs
+            } else {
+                VpnStateManager.markServerDropped(clean)
             }
         }
         return null
@@ -1313,19 +1332,18 @@ class BahrainVpnService : VpnService() {
         ).map { it.cfg }
         val cached = repo.loadCached(prefs.feedProfile)
         val hints = cached?.serverHints ?: emptyMap()
-        val cachedAll = (cached?.configs ?: emptyList()).sortedWith(
-            compareByDescending<String> {
-                val spd = hints[ConvergedKey(it)]?.speedKbps ?: hints[it]?.speedKbps ?: 0.0
-                spd > 0.0
-            }.thenByDescending {
-                hints[ConvergedKey(it)]?.speedKbps ?: hints[it]?.speedKbps ?: 0.0
-            }.thenBy {
-                val lat = hints[ConvergedKey(it)]?.latencyMs ?: hints[it]?.latencyMs ?: 0L
-                if (lat > 0L) lat else Long.MAX_VALUE
-            }
-        )
+        val cachedAll = (cached?.configs ?: emptyList())
+        val curProf = ScanNetworkProfile.fromTransportCode(netAwareness.snapshot.value.transport.code)
+        val personalRanks = clientDb.getPersonalizedRankings(curProf)
+        val cfgById = HashMap<String, String>()
+        cachedAll.forEach { raw ->
+            val cl = Converters.cleanUri(raw)
+            val sid = Converters.stableServerId(cl)
+            if (sid.isNotBlank() && !cfgById.containsKey(sid)) cfgById[sid] = cl
+        }
+        val personalOrderedCfgs = personalRanks.mapNotNull { cfgById[it.serverId] }
         val vipUris = vipNodes.map { Converters.cleanUri(it.uri) }
-        val merged = (vipUris + prefs.customConfigs + savedBest + cachedAll)
+        val merged = (vipUris + prefs.customConfigs + personalOrderedCfgs + savedBest + cachedAll)
             .distinct()
             .filter { Converters.isSupported(it) }
         val built = merged.mapIndexedNotNull { idx, cfg ->

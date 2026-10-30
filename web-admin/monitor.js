@@ -492,6 +492,7 @@ async function refreshMonitor(force = false) {
     srvStats,
     countriesStats,
     sourcesStats,
+    top500Manifest,
   ] = await Promise.all([
     cachedJsonFetch("api/v1/statistics.json", force),
     cachedJsonFetch("api/v1/countries.json", force),
@@ -503,6 +504,7 @@ async function refreshMonitor(force = false) {
     cachedJsonFetch("servers-statistics.json", force),
     cachedJsonFetch("countries-statistics.json", force),
     cachedJsonFetch("sources-statistics.json", force),
+    cachedJsonFetch("top500.manifest.json", force),
   ]);
 
   let stats = apiStatsRaw;
@@ -569,9 +571,11 @@ async function refreshMonitor(force = false) {
   document.getElementById("hdrMeta").textContent =
     `${tr("آخر تحديث موثّق", "Last Verified Build")}: ${ov.last_successful_execution || stats.generated_at || "—"} | ${ov.degraded_mode ? tr("وضع الحماية Last-Known-Good", "Degraded LKG Mode") : tr("يعمل بكفاءة قياسية", "Operational")}`;
 
+  const top500Qualified = top500Manifest ? Number(top500Manifest.qualified_count || 0) : Math.min(500, activeCount);
   const kpis = [
     { lbl: tr("إجمالي السيرفرات المعروفة تاريخيًا", "Total Known Servers"), val: totalKnown.toLocaleString(), cls: "" },
     { lbl: tr("السيرفرات النشطة حاليًا", "Active Servers"), val: activeCount.toLocaleString(), cls: "color:#10b981" },
+    { lbl: tr("مجمّع المرشّحين المركزي (Top 500)", "Central Candidate Pool (Top 500)"), val: `${top500Qualified} / 500`, cls: "color:#06b6d4" },
     { lbl: tr("السيرفرات غير النشطة (محفوظة للتاريخ)", "Inactive (Retained History)"), val: inactiveCount.toLocaleString(), cls: "color:#94a3b8" },
     { lbl: tr("الموقوفة مؤقتًا (Suppressed)", "Temporarily Suppressed"), val: suppressedCount.toLocaleString(), cls: "color:#f59e0b" },
     { lbl: tr("المعزولة أمنيًا (Quarantined)", "Security Quarantined"), val: Number(ov.quarantined_servers || 0).toLocaleString(), cls: "color:#ef4444" },

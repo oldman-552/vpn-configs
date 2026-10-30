@@ -1,4 +1,8 @@
-# Android Client Architecture (`v3.3`)
+# Android Client Architecture (`v3.4` — Central GitHub Top 500 + Local Personalized Top 50)
+
+## 0. Mandatory Responsibility Separation
+- **GitHub (`central_top500.py` -> `@data/top500.{manifest,delta,}.json`):** Collect -> Validate -> Normalize -> Deduplicate -> Assign `server_id` & `config_fingerprint` -> Preliminary Check -> Rank Centrally -> Publish **up to 500** untrusted candidate configurations with SHA-256 checksums and optional incremental deltas. GitHub **never** selects a user's personalized Top 50.
+- **Android (`Repo.kt` + `LocalServerIntelligence.kt` + `ClientDatabase.kt` v3):** Download & verify Top-500 dataset (ETag + SHA-256 + rollback protection + last-known-valid recovery) -> Test sequentially (`concurrency = 1`) via real encrypted VPN tunnels on the user's actual network -> Append historical measurements (`server_scan_measurements`) -> Maintain strictly isolated **Wi-Fi** (`WIFI`) vs **Mobile Data** (`MOBILE_DATA`) rankings -> Select Personalized **Top 50** + **Qualified Backup Pool** (`local_network_rankings` + `local_ranking_history`).
 
 ## 1. High-Level Module & Package Layout
 The Android application (`:app`, `com.bahrain.vpnconfigs`, `minSdk = 29`, `targetSdk = 34`) follows a reactive unidirectional architecture powered by Kotlin Coroutines, `StateFlow`, Jetpack Compose Material 3 (RTL Arabic-first), embedded SQLite (`WAL`), `sing-box`, and `hev-socks5-tunnel`.

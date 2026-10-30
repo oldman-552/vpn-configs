@@ -110,12 +110,108 @@ data class ProtectionEventRecord(
     val detailAr: String,
 )
 
+/**
+ * ملف تعريف الشبكة المستقل للترتيب المخصّص وسجل القياسات المحلية (القسم 5):
+ * لا يُفترض أبدًا أن السيرفر السريع على Wi-Fi سيعمل بنفس الكفاءة على بيانات الجوال.
+ */
+enum class ScanNetworkProfile(val code: String, val labelAr: String, val labelEn: String) {
+    WIFI("WIFI", "شبكة Wi‑Fi", "Wi-Fi"),
+    MOBILE_DATA("MOBILE_DATA", "بيانات الجوال", "Mobile Data");
+
+    companion object {
+        fun fromTransportCode(raw: String?): ScanNetworkProfile {
+            val u = raw?.trim()?.uppercase().orEmpty()
+            return if (u.contains("CELL") || u.contains("MOBILE")) MOBILE_DATA else WIFI
+        }
+    }
+}
+
+enum class LocalPoolTier(val code: String, val labelAr: String) {
+    TOP_50("TOP_50", "أفضل 50 للشبكة"),
+    BACKUP_POOL("BACKUP_POOL", "الاحتياطي المؤهّل"),
+    CANDIDATE_ONLY("CANDIDATE_ONLY", "مرشّح غير مفحوص محليًا");
+
+    companion object {
+        fun fromCode(raw: String?): LocalPoolTier =
+            entries.firstOrNull { it.code.equals(raw?.trim(), ignoreCase = true) } ?: CANDIDATE_ONLY
+    }
+}
+
+data class ScanMeasurementSample(
+    val id: Long = 0L,
+    val serverId: String,
+    val configFingerprint: String,
+    val networkProfile: ScanNetworkProfile,
+    val scanMode: String,
+    val scannedAtMs: Long,
+    val success: Boolean,
+    val establishMs: Long,
+    val latencyMs: Long,
+    val jitterMs: Double,
+    val packetLossPct: Double,
+    val throughputKbps: Double,
+    val stabilityScore: Double,
+    val personalizedScore: Double,
+    val failureReason: String = "",
+)
+
+data class NetworkServerProfileStats(
+    val serverId: String,
+    val networkProfile: ScanNetworkProfile,
+    val configFingerprint: String,
+    val lastSuccessfulConnectionMs: Long = 0L,
+    val lastScanAtMs: Long = 0L,
+    val scanCount: Int = 0,
+    val successCount: Int = 0,
+    val failureCount: Int = 0,
+    val consecutiveFailures: Int = 0,
+    val connectionSuccessRate: Double = 0.0,
+    val latestEstablishMs: Long = 0L,
+    val latestLatencyMs: Long = 0L,
+    val ewmaLatencyMs: Double = 0.0,
+    val latestJitterMs: Double = 0.0,
+    val ewmaJitterMs: Double = 0.0,
+    val latestPacketLossPct: Double = 0.0,
+    val ewmaPacketLossPct: Double = 0.0,
+    val latestThroughputKbps: Double = 0.0,
+    val bestThroughputKbps: Double = 0.0,
+    val stabilityScore: Double = 0.0,
+    val personalizedScore: Double = 0.0,
+) {
+    val isQualifiedLocally: Boolean
+        get() = successCount >= 1 && consecutiveFailures < 3 && latestLatencyMs > 0L && latestPacketLossPct < 60.0
+}
+
+data class PersonalizedRankEntry(
+    val networkProfile: ScanNetworkProfile,
+    val serverId: String,
+    val configFingerprint: String,
+    val poolTier: LocalPoolTier,
+    val rankPosition: Int,
+    val personalizedScore: Double,
+    val stabilityScore: Double,
+    val updatedAtMs: Long,
+)
+
+data class RankingHistorySnapshotRow(
+    val id: Long,
+    val scanBatchId: String,
+    val rankedAtMs: Long,
+    val networkProfile: ScanNetworkProfile,
+    val scanMode: String,
+    val serverId: String,
+    val poolTier: LocalPoolTier,
+    val rankPosition: Int,
+    val personalizedScore: Double,
+    val stabilityScore: Double,
+)
+
 class ClientDatabase private constructor(ctx: Context) :
     SQLiteOpenHelper(ctx.applicationContext, DB_NAME, null, DB_VERSION) {
 
     companion object {
         const val DB_NAME = "bahrain_vpn_client.db"
-        const val DB_VERSION = 2
+        const val DB_VERSION = 3
 
         @Volatile
         private var instance: ClientDatabase? = null
@@ -137,6 +233,7 @@ class ClientDatabase private constructor(ctx: Context) :
     override fun onCreate(db: SQLiteDatabase) {
         createSchemaV1(db)
         upgradeToV2(db)
+        upgradeToV3(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -145,6 +242,9 @@ class ClientDatabase private constructor(ctx: Context) :
         }
         if (oldVersion < 2 && newVersion >= 2) {
             upgradeToV2(db)
+        }
+        if (oldVersion < 3 && newVersion >= 3) {
+            upgradeToV3(db)
         }
     }
 
@@ -234,6 +334,114 @@ class ClientDatabase private constructor(ctx: Context) :
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_prot_events_at ON protection_events(event_at_ms DESC);")
+    }
+
+    private fun upgradeToV3(db: SQLiteDatabase) {
+        // 1) Append-only historical scan measurements (preserves latency, jitter, packet-loss, throughput history)
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS server_scan_measurements (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                server_id           TEXT NOT NULL,
+                config_fingerprint  TEXT NOT NULL,
+                network_profile     TEXT NOT NULL,
+                scan_mode           TEXT NOT NULL,
+                scanned_at_ms       INTEGER NOT NULL,
+                success             INTEGER NOT NULL DEFAULT 0,
+                establish_ms        INTEGER NOT NULL DEFAULT 0,
+                latency_ms          INTEGER NOT NULL DEFAULT 0,
+                jitter_ms           REAL NOT NULL DEFAULT 0.0,
+                packet_loss_pct     REAL NOT NULL DEFAULT 0.0,
+                throughput_kbps     REAL NOT NULL DEFAULT 0.0,
+                stability_score     REAL NOT NULL DEFAULT 0.0,
+                personalized_score  REAL NOT NULL DEFAULT 0.0,
+                failure_reason      TEXT NOT NULL DEFAULT ''
+            );
+            """.trimIndent()
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_scan_meas_srv_net ON server_scan_measurements(server_id, network_profile, scanned_at_ms DESC);"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_scan_meas_net_time ON server_scan_measurements(network_profile, scanned_at_ms DESC);"
+        )
+
+        // 2) Per-network-profile aggregated server intelligence (WIFI vs MOBILE_DATA kept strictly separate)
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS network_server_stats (
+                server_id                      TEXT NOT NULL,
+                network_profile                TEXT NOT NULL,
+                config_fingerprint             TEXT NOT NULL DEFAULT '',
+                last_successful_connection_ms  INTEGER NOT NULL DEFAULT 0,
+                last_scan_at_ms                INTEGER NOT NULL DEFAULT 0,
+                scan_count                     INTEGER NOT NULL DEFAULT 0,
+                success_count                  INTEGER NOT NULL DEFAULT 0,
+                failure_count                  INTEGER NOT NULL DEFAULT 0,
+                consecutive_failures           INTEGER NOT NULL DEFAULT 0,
+                connection_success_rate        REAL NOT NULL DEFAULT 0.0,
+                latest_establish_ms            INTEGER NOT NULL DEFAULT 0,
+                latest_latency_ms              INTEGER NOT NULL DEFAULT 0,
+                ewma_latency_ms                REAL NOT NULL DEFAULT 0.0,
+                latest_jitter_ms               REAL NOT NULL DEFAULT 0.0,
+                ewma_jitter_ms                 REAL NOT NULL DEFAULT 0.0,
+                latest_packet_loss_pct         REAL NOT NULL DEFAULT 0.0,
+                ewma_packet_loss_pct           REAL NOT NULL DEFAULT 0.0,
+                latest_throughput_kbps         REAL NOT NULL DEFAULT 0.0,
+                best_throughput_kbps           REAL NOT NULL DEFAULT 0.0,
+                stability_score                REAL NOT NULL DEFAULT 0.0,
+                personalized_score             REAL NOT NULL DEFAULT 0.0,
+                PRIMARY KEY (server_id, network_profile)
+            );
+            """.trimIndent()
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_net_stats_profile_score ON network_server_stats(network_profile, personalized_score DESC);"
+        )
+
+        // 3) Current materialized Personalized Top 50 + Qualified Backup Pool per Network Profile
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS local_network_rankings (
+                network_profile     TEXT NOT NULL,
+                server_id           TEXT NOT NULL,
+                config_fingerprint  TEXT NOT NULL DEFAULT '',
+                pool_tier           TEXT NOT NULL,
+                rank_position       INTEGER NOT NULL,
+                personalized_score  REAL NOT NULL DEFAULT 0.0,
+                stability_score     REAL NOT NULL DEFAULT 0.0,
+                updated_at_ms       INTEGER NOT NULL,
+                PRIMARY KEY (network_profile, server_id)
+            );
+            """.trimIndent()
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_local_rank_profile_pos ON local_network_rankings(network_profile, rank_position ASC);"
+        )
+
+        // 4) Append-only local ranking history (never overwrites prior ranking snapshots)
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS local_ranking_history (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                scan_batch_id       TEXT NOT NULL,
+                ranked_at_ms        INTEGER NOT NULL,
+                network_profile     TEXT NOT NULL,
+                scan_mode           TEXT NOT NULL,
+                server_id           TEXT NOT NULL,
+                pool_tier           TEXT NOT NULL,
+                rank_position       INTEGER NOT NULL,
+                personalized_score  REAL NOT NULL DEFAULT 0.0,
+                stability_score     REAL NOT NULL DEFAULT 0.0
+            );
+            """.trimIndent()
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_rank_hist_net_time ON local_ranking_history(network_profile, ranked_at_ms DESC);"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_rank_hist_srv ON local_ranking_history(server_id, network_profile, ranked_at_ms DESC);"
+        )
     }
 
     /** ترحيل المفضلة القديمة المخزنة في SharedPreferences إلى جدول SQLite المستقر لمرة واحدة. */
@@ -748,6 +956,391 @@ class ClientDatabase private constructor(ctx: Context) :
                             category = c.getString(c.getColumnIndexOrThrow("category")),
                             titleAr = c.getString(c.getColumnIndexOrThrow("title_ar")),
                             detailAr = c.getString(c.getColumnIndexOrThrow("detail_ar")),
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    // ─────────────── 5) Personalized Network Intelligence & Append-Only Scan History (v3.4) ───────────────
+
+    /**
+     * يضيف قراءة فحص جديدة دون استبدال القراءات التاريخية السابقة (Append-Only)،
+     * ويحدّث إحصائيات السيرفر المخصّصة لنوع الشبكة الحالي فقط (WIFI أو MOBILE_DATA).
+     */
+    fun recordNetworkScanMeasurement(
+        cfgOrServerId: String,
+        configFingerprint: String = "",
+        networkProfile: ScanNetworkProfile,
+        scanMode: String,
+        success: Boolean,
+        establishMs: Long = 0L,
+        latencyMs: Long = 0L,
+        jitterMs: Double = 0.0,
+        packetLossPct: Double = 0.0,
+        throughputKbps: Double = 0.0,
+        stabilityScore: Double = 0.0,
+        personalizedScore: Double = 0.0,
+        failureReason: String = "",
+        nowMs: Long = System.currentTimeMillis(),
+    ): NetworkServerProfileStats? = synchronized(lock) {
+        val sid = if (cfgOrServerId.contains("://")) Converters.stableServerId(cfgOrServerId) else cfgOrServerId.trim()
+        if (sid.isBlank()) return null
+        val fp = configFingerprint.ifBlank {
+            if (cfgOrServerId.contains("://")) Converters.configFingerprint(cfgOrServerId) else sid
+        }.take(64)
+
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // 1. Append-only historical measurement row (never overwrites prior rows)
+            val mCv = ContentValues().apply {
+                put("server_id", sid)
+                put("config_fingerprint", fp)
+                put("network_profile", networkProfile.code)
+                put("scan_mode", scanMode.take(24))
+                put("scanned_at_ms", nowMs)
+                put("success", if (success) 1 else 0)
+                put("establish_ms", establishMs.coerceAtLeast(0L))
+                put("latency_ms", latencyMs.coerceAtLeast(0L))
+                put("jitter_ms", jitterMs.coerceAtLeast(0.0))
+                put("packet_loss_pct", packetLossPct.coerceIn(0.0, 100.0))
+                put("throughput_kbps", throughputKbps.coerceAtLeast(0.0))
+                put("stability_score", stabilityScore.coerceIn(0.0, 100.0))
+                put("personalized_score", personalizedScore.coerceIn(0.0, 100.0))
+                put("failure_reason", failureReason.take(64))
+            }
+            db.insert("server_scan_measurements", null, mCv)
+
+            // Keep bounded per-(server, network) tail of 120 historical observations to prevent unbounded disk bloat
+            db.execSQL(
+                """
+                DELETE FROM server_scan_measurements
+                WHERE server_id = ? AND network_profile = ?
+                  AND id NOT IN (
+                      SELECT id FROM server_scan_measurements
+                      WHERE server_id = ? AND network_profile = ?
+                      ORDER BY scanned_at_ms DESC, id DESC LIMIT 120
+                  )
+                """.trimIndent(),
+                arrayOf(sid, networkProfile.code, sid, networkProfile.code),
+            )
+
+            // 2. Roll up per-network-profile stats (WIFI and MOBILE_DATA strictly isolated)
+            val prev = readSingleNetworkStatLocked(db, sid, networkProfile)
+            // If config_fingerprint changed upstream, preserve history rows while resetting stale EWMA bias
+            val fpChanged = prev != null && prev.configFingerprint.isNotBlank() && prev.configFingerprint != fp
+            val baseScans = (prev?.scanCount ?: 0) + 1
+            val baseSucc = (prev?.successCount ?: 0) + (if (success) 1 else 0)
+            val baseFail = (prev?.failureCount ?: 0) + (if (success) 0 else 1)
+            val consecFail = if (success) 0 else ((prev?.consecutiveFailures ?: 0) + 1)
+            val succRate = baseSucc.toDouble() / max(1, baseScans).toDouble()
+            val alpha = 0.35
+
+            val nextEwmaLat = when {
+                success && latencyMs > 0L && (prev == null || prev.ewmaLatencyMs <= 0.0 || fpChanged) -> latencyMs.toDouble()
+                success && latencyMs > 0L && prev != null -> alpha * latencyMs.toDouble() + (1.0 - alpha) * prev.ewmaLatencyMs
+                else -> prev?.ewmaLatencyMs ?: 0.0
+            }
+            val nextEwmaJit = when {
+                success && (prev == null || fpChanged) -> jitterMs.coerceAtLeast(0.0)
+                success && prev != null -> alpha * jitterMs.coerceAtLeast(0.0) + (1.0 - alpha) * prev.ewmaJitterMs
+                else -> prev?.ewmaJitterMs ?: 0.0
+            }
+            val effLoss = if (success) packetLossPct.coerceIn(0.0, 100.0) else 100.0
+            val nextEwmaLoss = if (prev == null || fpChanged) {
+                effLoss
+            } else {
+                alpha * effLoss + (1.0 - alpha) * prev.ewmaPacketLossPct
+            }
+            val nextLatestTp = when {
+                success && throughputKbps > 0.0 -> throughputKbps
+                fpChanged -> 0.0
+                else -> prev?.latestThroughputKbps ?: 0.0
+            }
+            val nextBestTp = if (fpChanged) {
+                if (success) throughputKbps.coerceAtLeast(0.0) else 0.0
+            } else {
+                max(prev?.bestThroughputKbps ?: 0.0, if (success) throughputKbps else 0.0)
+            }
+
+            val computedStab = if (stabilityScore > 0.0) {
+                stabilityScore
+            } else {
+                val srPart = succRate * 48.0
+                val lossPart = ((100.0 - nextEwmaLoss).coerceIn(0.0, 100.0) / 100.0) * 27.0
+                val jitPart = ((1.0 - (nextEwmaJit / 220.0)).coerceIn(0.0, 1.0)) * 15.0
+                val sampleBonus = (minOf(baseSucc, 5) / 5.0) * 10.0
+                val failPenalty = consecFail * 14.0
+                (srPart + lossPart + jitPart + sampleBonus - failPenalty).coerceIn(0.0, 100.0)
+            }
+
+            val sCv = ContentValues().apply {
+                put("server_id", sid)
+                put("network_profile", networkProfile.code)
+                put("config_fingerprint", fp)
+                put("last_successful_connection_ms", if (success) nowMs else (prev?.lastSuccessfulConnectionMs ?: 0L))
+                put("last_scan_at_ms", nowMs)
+                put("scan_count", baseScans)
+                put("success_count", baseSucc)
+                put("failure_count", baseFail)
+                put("consecutive_failures", consecFail)
+                put("connection_success_rate", succRate)
+                put("latest_establish_ms", if (success && establishMs > 0L) establishMs else (prev?.latestEstablishMs ?: 0L))
+                put("latest_latency_ms", if (success && latencyMs > 0L) latencyMs else (if (fpChanged) 0L else (prev?.latestLatencyMs ?: 0L)))
+                put("ewma_latency_ms", nextEwmaLat)
+                put("latest_jitter_ms", if (success) jitterMs.coerceAtLeast(0.0) else (prev?.latestJitterMs ?: 0.0))
+                put("ewma_jitter_ms", nextEwmaJit)
+                put("latest_packet_loss_pct", effLoss)
+                put("ewma_packet_loss_pct", nextEwmaLoss)
+                put("latest_throughput_kbps", nextLatestTp)
+                put("best_throughput_kbps", nextBestTp)
+                put("stability_score", computedStab)
+                put("personalized_score", if (personalizedScore > 0.0) personalizedScore else (prev?.personalizedScore ?: 0.0))
+            }
+            db.insertWithOnConflict("network_server_stats", null, sCv, SQLiteDatabase.CONFLICT_REPLACE)
+
+            val updated = readSingleNetworkStatLocked(db, sid, networkProfile)
+            db.setTransactionSuccessful()
+            return updated
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun readSingleNetworkStatLocked(
+        db: SQLiteDatabase,
+        serverId: String,
+        profile: ScanNetworkProfile,
+    ): NetworkServerProfileStats? =
+        db.rawQuery(
+            "SELECT * FROM network_server_stats WHERE server_id = ? AND network_profile = ? LIMIT 1",
+            arrayOf(serverId, profile.code),
+        ).use { c ->
+            if (!c.moveToFirst()) null else readNetworkStatRow(c)
+        }
+
+    private fun readNetworkStatRow(c: android.database.Cursor): NetworkServerProfileStats =
+        NetworkServerProfileStats(
+            serverId = c.getString(c.getColumnIndexOrThrow("server_id")),
+            networkProfile = ScanNetworkProfile.fromTransportCode(c.getString(c.getColumnIndexOrThrow("network_profile"))),
+            configFingerprint = c.getString(c.getColumnIndexOrThrow("config_fingerprint")),
+            lastSuccessfulConnectionMs = c.getLong(c.getColumnIndexOrThrow("last_successful_connection_ms")),
+            lastScanAtMs = c.getLong(c.getColumnIndexOrThrow("last_scan_at_ms")),
+            scanCount = c.getInt(c.getColumnIndexOrThrow("scan_count")),
+            successCount = c.getInt(c.getColumnIndexOrThrow("success_count")),
+            failureCount = c.getInt(c.getColumnIndexOrThrow("failure_count")),
+            consecutiveFailures = c.getInt(c.getColumnIndexOrThrow("consecutive_failures")),
+            connectionSuccessRate = c.getDouble(c.getColumnIndexOrThrow("connection_success_rate")),
+            latestEstablishMs = c.getLong(c.getColumnIndexOrThrow("latest_establish_ms")),
+            latestLatencyMs = c.getLong(c.getColumnIndexOrThrow("latest_latency_ms")),
+            ewmaLatencyMs = c.getDouble(c.getColumnIndexOrThrow("ewma_latency_ms")),
+            latestJitterMs = c.getDouble(c.getColumnIndexOrThrow("latest_jitter_ms")),
+            ewmaJitterMs = c.getDouble(c.getColumnIndexOrThrow("ewma_jitter_ms")),
+            latestPacketLossPct = c.getDouble(c.getColumnIndexOrThrow("latest_packet_loss_pct")),
+            ewmaPacketLossPct = c.getDouble(c.getColumnIndexOrThrow("ewma_packet_loss_pct")),
+            latestThroughputKbps = c.getDouble(c.getColumnIndexOrThrow("latest_throughput_kbps")),
+            bestThroughputKbps = c.getDouble(c.getColumnIndexOrThrow("best_throughput_kbps")),
+            stabilityScore = c.getDouble(c.getColumnIndexOrThrow("stability_score")),
+            personalizedScore = c.getDouble(c.getColumnIndexOrThrow("personalized_score")),
+        )
+
+    fun getNetworkStatsMap(profile: ScanNetworkProfile): Map<String, NetworkServerProfileStats> = synchronized(lock) {
+        readableDatabase.rawQuery(
+            "SELECT * FROM network_server_stats WHERE network_profile = ?",
+            arrayOf(profile.code),
+        ).use { c ->
+            val out = HashMap<String, NetworkServerProfileStats>()
+            while (c.moveToNext()) {
+                val r = readNetworkStatRow(c)
+                out[r.serverId] = r
+            }
+            out
+        }
+    }
+
+    fun getServerScanHistory(
+        serverId: String,
+        profile: ScanNetworkProfile? = null,
+        limit: Int = 50,
+    ): List<ScanMeasurementSample> = synchronized(lock) {
+        val where = if (profile != null) "WHERE server_id = ? AND network_profile = ?" else "WHERE server_id = ?"
+        val args = if (profile != null) {
+            arrayOf(serverId, profile.code, limit.coerceIn(1, 200).toString())
+        } else {
+            arrayOf(serverId, limit.coerceIn(1, 200).toString())
+        }
+        readableDatabase.rawQuery(
+            "SELECT * FROM server_scan_measurements $where ORDER BY scanned_at_ms DESC, id DESC LIMIT ?",
+            args,
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        ScanMeasurementSample(
+                            id = c.getLong(c.getColumnIndexOrThrow("id")),
+                            serverId = c.getString(c.getColumnIndexOrThrow("server_id")),
+                            configFingerprint = c.getString(c.getColumnIndexOrThrow("config_fingerprint")),
+                            networkProfile = ScanNetworkProfile.fromTransportCode(c.getString(c.getColumnIndexOrThrow("network_profile"))),
+                            scanMode = c.getString(c.getColumnIndexOrThrow("scan_mode")),
+                            scannedAtMs = c.getLong(c.getColumnIndexOrThrow("scanned_at_ms")),
+                            success = c.getInt(c.getColumnIndexOrThrow("success")) == 1,
+                            establishMs = c.getLong(c.getColumnIndexOrThrow("establish_ms")),
+                            latencyMs = c.getLong(c.getColumnIndexOrThrow("latency_ms")),
+                            jitterMs = c.getDouble(c.getColumnIndexOrThrow("jitter_ms")),
+                            packetLossPct = c.getDouble(c.getColumnIndexOrThrow("packet_loss_pct")),
+                            throughputKbps = c.getDouble(c.getColumnIndexOrThrow("throughput_kbps")),
+                            stabilityScore = c.getDouble(c.getColumnIndexOrThrow("stability_score")),
+                            personalizedScore = c.getDouble(c.getColumnIndexOrThrow("personalized_score")),
+                            failureReason = c.getString(c.getColumnIndexOrThrow("failure_reason")),
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * يحفظ الترتيب المحلي المخصّص (Top 50 + الاحتياطي المؤهّل) لشبكة معيّنة (WIFI أو MOBILE_DATA)،
+     * ويضيف لقطة تاريخية دائمة في `local_ranking_history` دون الكتابة فوق السجلات السابقة.
+     */
+    fun savePersonalizedNetworkRankings(
+        profile: ScanNetworkProfile,
+        scanMode: String,
+        entries: List<PersonalizedRankEntry>,
+        recordHistorySnapshot: Boolean = true,
+        nowMs: Long = System.currentTimeMillis(),
+    ) {
+        synchronized(lock) {
+            val db = writableDatabase
+            val batchId = "${profile.code}_${scanMode}_${nowMs}"
+            db.beginTransaction()
+            try {
+                db.delete("local_network_rankings", "network_profile = ?", arrayOf(profile.code))
+                for (e in entries) {
+                    val cv = ContentValues().apply {
+                        put("network_profile", profile.code)
+                        put("server_id", e.serverId)
+                        put("config_fingerprint", e.configFingerprint)
+                        put("pool_tier", e.poolTier.code)
+                        put("rank_position", e.rankPosition)
+                        put("personalized_score", e.personalizedScore)
+                        put("stability_score", e.stabilityScore)
+                        put("updated_at_ms", nowMs)
+                    }
+                    db.insertWithOnConflict("local_network_rankings", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+
+                    // Sync personalized_score back into network_server_stats for fast indexed lookup
+                    val stUpdate = ContentValues().apply {
+                        put("personalized_score", e.personalizedScore)
+                        put("stability_score", e.stabilityScore)
+                    }
+                    db.update(
+                        "network_server_stats",
+                        stUpdate,
+                        "server_id = ? AND network_profile = ?",
+                        arrayOf(e.serverId, profile.code),
+                    )
+
+                    if (recordHistorySnapshot) {
+                        val hCv = ContentValues().apply {
+                            put("scan_batch_id", batchId)
+                            put("ranked_at_ms", nowMs)
+                            put("network_profile", profile.code)
+                            put("scan_mode", scanMode.take(24))
+                            put("server_id", e.serverId)
+                            put("pool_tier", e.poolTier.code)
+                            put("rank_position", e.rankPosition)
+                            put("personalized_score", e.personalizedScore)
+                            put("stability_score", e.stabilityScore)
+                        }
+                        db.insert("local_ranking_history", null, hCv)
+                    }
+                }
+                if (recordHistorySnapshot) {
+                    db.execSQL(
+                        """
+                        DELETE FROM local_ranking_history
+                        WHERE network_profile = ?
+                          AND id NOT IN (
+                              SELECT id FROM local_ranking_history
+                              WHERE network_profile = ?
+                              ORDER BY ranked_at_ms DESC, id DESC LIMIT 2500
+                          )
+                        """.trimIndent(),
+                        arrayOf(profile.code, profile.code),
+                    )
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+        }
+    }
+
+    fun getPersonalizedRankings(
+        profile: ScanNetworkProfile,
+        tierFilter: LocalPoolTier? = null,
+    ): List<PersonalizedRankEntry> = synchronized(lock) {
+        val where = if (tierFilter != null) {
+            "WHERE network_profile = ? AND pool_tier = ?"
+        } else {
+            "WHERE network_profile = ?"
+        }
+        val args = if (tierFilter != null) arrayOf(profile.code, tierFilter.code) else arrayOf(profile.code)
+        readableDatabase.rawQuery(
+            "SELECT * FROM local_network_rankings $where ORDER BY rank_position ASC",
+            args,
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        PersonalizedRankEntry(
+                            networkProfile = ScanNetworkProfile.fromTransportCode(c.getString(c.getColumnIndexOrThrow("network_profile"))),
+                            serverId = c.getString(c.getColumnIndexOrThrow("server_id")),
+                            configFingerprint = c.getString(c.getColumnIndexOrThrow("config_fingerprint")),
+                            poolTier = LocalPoolTier.fromCode(c.getString(c.getColumnIndexOrThrow("pool_tier"))),
+                            rankPosition = c.getInt(c.getColumnIndexOrThrow("rank_position")),
+                            personalizedScore = c.getDouble(c.getColumnIndexOrThrow("personalized_score")),
+                            stabilityScore = c.getDouble(c.getColumnIndexOrThrow("stability_score")),
+                            updatedAtMs = c.getLong(c.getColumnIndexOrThrow("updated_at_ms")),
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun getRankingHistoryForServer(
+        serverId: String,
+        profile: ScanNetworkProfile? = null,
+        limit: Int = 30,
+    ): List<RankingHistorySnapshotRow> = synchronized(lock) {
+        val where = if (profile != null) "WHERE server_id = ? AND network_profile = ?" else "WHERE server_id = ?"
+        val args = if (profile != null) {
+            arrayOf(serverId, profile.code, limit.coerceIn(1, 100).toString())
+        } else {
+            arrayOf(serverId, limit.coerceIn(1, 100).toString())
+        }
+        readableDatabase.rawQuery(
+            "SELECT * FROM local_ranking_history $where ORDER BY ranked_at_ms DESC, id DESC LIMIT ?",
+            args,
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        RankingHistorySnapshotRow(
+                            id = c.getLong(c.getColumnIndexOrThrow("id")),
+                            scanBatchId = c.getString(c.getColumnIndexOrThrow("scan_batch_id")),
+                            rankedAtMs = c.getLong(c.getColumnIndexOrThrow("ranked_at_ms")),
+                            networkProfile = ScanNetworkProfile.fromTransportCode(c.getString(c.getColumnIndexOrThrow("network_profile"))),
+                            scanMode = c.getString(c.getColumnIndexOrThrow("scan_mode")),
+                            serverId = c.getString(c.getColumnIndexOrThrow("server_id")),
+                            poolTier = LocalPoolTier.fromCode(c.getString(c.getColumnIndexOrThrow("pool_tier"))),
+                            rankPosition = c.getInt(c.getColumnIndexOrThrow("rank_position")),
+                            personalizedScore = c.getDouble(c.getColumnIndexOrThrow("personalized_score")),
+                            stabilityScore = c.getDouble(c.getColumnIndexOrThrow("stability_score")),
                         )
                     )
                 }
