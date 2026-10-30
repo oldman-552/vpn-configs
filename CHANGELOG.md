@@ -1,5 +1,21 @@
 # CHANGELOG.md
 
+## [v3.3] — 2026-10-30 — Historical Server Intelligence DB, Smart Explainable Selection, Persistent SQLite Client & 9-State Security
+
+### Added & Upgraded
+- **Historical Server Intelligence SQLite Engine (`historical_db.py`, `migrations/history/001..002.sql`, `dedupe.py`)**:
+  - Secret-safe canonical SHA-256 server identity (`server_id`, zero plaintext credentials in fingerprints or DB), operator-level source independence (`extract_source_operator_id` collapsing multi-file operators like `Leon406/SubCrawler` to `1` operator), 10-category failure intelligence, outage-aware `24h`/`7d`/`30d`/`90d` analytics (`OBSERVED` / `ESTIMATED` / `UNKNOWN` uptime basis), temporary failure suppression without deletion, 30d/90d/365d retention rollups, corruption auto-recovery, and `node_history.json` bootstrap.
+  - Published 6 sanitized public JSON exports on `@data`: `servers-current.json`, `servers-history.json`, `servers-performance.json`, `servers-statistics.json`, `countries-statistics.json`, and `sources-statistics.json`.
+- **Android Smart Client & Local SQLite Persistence (`v3.3`, `versionCode = 11`)**:
+  - Added `ClientDatabase.kt` (`bahrain_vpn_client.db` WAL v2) persisting `connection_history`, `favorite_servers` (custom names, groups, legacy migration), `local_server_telemetry`, and `protection_events` with zero raw credentials.
+  - Added `SmartServerSelector.kt` (configurable normalized weights `25/20/15/15/10/10/5`, missing measurements != perfect, confidence level, cooldown exclusion, geo preference, primary + fallback, deterministic Arabic/English reasons).
+  - Added `AutoReconnectManager.kt` (`2s, 5s, 10s, 20s, 40s, capped 60s` exponential backoff + `±15%` jitter, 8 disconnect triggers, single-flight guard), `NetworkAwarenessMonitor.kt` (modern `ConnectivityManager`/`NetworkCapabilities`, zero SSID/location collection), and `ResourceAndBatteryMonitor.kt` (zero `WakeLock`s, 45s/60s background adaptive polling).
+  - Added `ConnectionSecurityClassifier.kt` + `SecurityStatusScreen.kt` (all 9 mandatory `ConnectionSecurityState` values, DNS/IPv6 leak diagnostics, strict separation of app-level fail-closed TUN hold vs OS `VpnService.isLockdownEnabled`), `ConnectionMonitorCard.kt` (live Canvas traffic chart), `FavoritesScreen.kt`, `ServerHistoryScreen.kt`, and clean 6-tab navigation (`الاتصال`, `السيرفرات`, `المفضّلة`, `السجل`, `الأمان`, `الإعدادات`).
+- **Web Historical Intelligence Visualization (`web-admin/monitor.html`, `web-admin/monitor.js`)**:
+  - Added `24h`/`7d`/`30d`/`90d` windowed performance selector, 8-criteria historical server explorer, failure category pills, and clickable Historical Server Details modal.
+- **QA & Documentation (`48/48` Python tests + `SmartVpnUpgradeTest.kt` + `docs/*.md`)**:
+  - Added `tests/test_historical_intelligence.py`, `SmartVpnUpgradeTest.kt`, and `docs/{ANDROID_AND_DATA_UPGRADE_PLAN,ANDROID_BATTERY_OPTIMIZATION,DATABASE_SCHEMA,SECURITY_MODEL,ANDROID_ARCHITECTURE,TESTING_REPORT,DEPLOYMENT_GUIDE,IMPLEMENTATION_REPORT}.md`.
+
 ## [v3.2] — 2026-10-30 — Security Intelligence, Zero-Leak Tunnel, Real Kill Switch & Public API v1
 
 ### Signed Release Artifacts (`v3.2`)

@@ -117,6 +117,7 @@ fun ConnectHomeScreen(
     vm: AppViewModel,
     modifier: Modifier = Modifier,
     onToggleConnect: () -> Unit,
+    onConnectBestSmart: () -> Unit = onToggleConnect,
     onNextServer: () -> Unit,
     onOpenServersTab: () -> Unit,
     onCopy: (String, String) -> Unit,
@@ -337,6 +338,20 @@ fun ConnectHomeScreen(
                 accent = MaterialTheme.colorScheme.primary,
             )
         }
+
+        // ── لوحة الاختيار الذكي الموزون + المراقب اللحظي لحركة النفق (v3.3) ──
+        SmartSelectionSummaryCard(
+            smartAutoEnabled = state.smartAutoSelect,
+            preferredCountry = state.preferredCountry,
+            decision = state.smartDecision,
+            onToggleSmartAuto = { vm.setSmartAutoSelect(it) },
+            onConnectBestNow = onConnectBestSmart,
+        )
+
+        RealTimeConnectionMonitorCard(
+            vpnStatus = vpnStatus,
+            elapsedSeconds = elapsedSec,
+        )
 
         // ── بطاقة السيرفر الحالي ──
         val currentServer = if (vpnStatus.isActive && vpnStatus.activeCfg != null) {
@@ -1316,6 +1331,8 @@ fun SettingsAndExportScreen(
     onCopy: (String, String) -> Unit,
     onCopyFile: (File) -> Unit,
     onShareFile: (File) -> Unit,
+    onOpenSplitApps: () -> Unit = {},
+    onOpenEnterpriseHub: () -> Unit = {},
 ) {
     val p = vm.settings()
     var dnsServer by remember { mutableStateOf(p.dnsServer) }
@@ -1377,6 +1394,60 @@ fun SettingsAndExportScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("إعدادات bahrain-vpn", style = MaterialTheme.typography.titleLarge)
+
+        // ── الوصول السريع لاستثناء التطبيقات والمركز المؤسسي (فحص السرعة والحساب) ──
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(
+                onClick = onOpenSplitApps,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("استثناء التطبيقات (${state.splitApps.size})")
+            }
+            OutlinedButton(
+                onClick = onOpenEnterpriseHub,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("المركز المؤسسي والسرعة")
+            }
+        }
+
+        // ── الدولة المفضّلة للاختيار الذكي ──
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("تفضيلات الاختيار الذكي والسجل", style = MaterialTheme.typography.titleMedium)
+                SettingToggleRow(
+                    title = "الاختيار التلقائي الذكي للسيرفر",
+                    subtitle = "يختار أفضل سيرفر موثوق حسب الموثوقية والتأخير والسرعة وفقدان الحزم",
+                    checked = state.smartAutoSelect,
+                    onCheckedChange = { vm.setSmartAutoSelect(it) },
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    FilterChip(
+                        selected = state.preferredCountry == "ALL",
+                        onClick = { vm.setPreferredCountry("ALL") },
+                        label = { Text("أي دولة (تلقائي)") },
+                    )
+                    state.availableCountries.take(8).forEach { (cc, _) ->
+                        FilterChip(
+                            selected = state.preferredCountry == cc,
+                            onClick = { vm.setPreferredCountry(cc) },
+                            label = { Text("${VpnStateManager.countryFlag(cc)} $cc") },
+                        )
+                    }
+                }
+            }
+        }
 
         state.info?.let { BannerCard(text = it, isError = false) }
         state.error?.let { BannerCard(text = it, isError = true) }

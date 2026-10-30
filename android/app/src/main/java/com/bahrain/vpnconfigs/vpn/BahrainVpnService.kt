@@ -27,6 +27,7 @@ import android.os.ParcelFileDescriptor
 import androidx.core.app.NotificationCompat
 import com.bahrain.vpnconfigs.MainActivity
 import com.bahrain.vpnconfigs.R
+import com.bahrain.vpnconfigs.data.ClientDatabase
 import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.data.Repo
 import com.bahrain.vpnconfigs.engine.Converters
@@ -145,6 +146,9 @@ class BahrainVpnService : VpnService() {
 
     private lateinit var prefs: Prefs
     private lateinit var singBox: SingBox
+    private lateinit var clientDb: ClientDatabase
+    private lateinit var netAwareness: NetworkAwarenessMonitor
+    private lateinit var reconnectManager: AutoReconnectManager
 
     @Volatile
     private var tunFd: ParcelFileDescriptor? = null
@@ -158,44 +162,31 @@ class BahrainVpnService : VpnService() {
     private var traceJob: Job? = null
 
     @Volatile
-    private var lastPhysicalNetHandle: Long = 0L
+    private var activeHistoryRowId: Long = 0L
+
+    @Volatile
+    private var sessionPeakDownBps: Long = 0L
+
+    @Volatile
+    private var sessionPeakUpBps: Long = 0L
 
     @Volatile
     private var lastNotifSignature: String = ""
-
-    private val netCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            val handle = network.networkHandle
-            val prev = lastPhysicalNetHandle
-            lastPhysicalNetHandle = handle
-            val cur = VpnStateManager.status.value
-            // عند انتقال الهاتف من Wi-Fi إلى 5G أو العودة بعد انقطاع الشبكة نستعيد النفق المشفّر بسلاسة
-            if (prev != 0L && prev != handle && (cur.isTunnelVerified || cur.phase == VpnPhase.PROTECTION_ACTIVE)) {
-                serviceScope.launch {
-                    delay(400L)
-                    opLock.withLock {
-                        val st = VpnStateManager.status.value
-                        if ((st.isTunnelVerified || st.phase == VpnPhase.PROTECTION_ACTIVE) && st.activeCfg != null) {
-                            VpnStateManager.update {
-                                it.copy(
-                                    phase = VpnPhase.RECONNECTING,
-                                    switchingStatus = "تغيّرت الشبكة — جارٍ إعادة التحقق من النفق…",
-                                    statusMessage = "تغيّرت الشبكة الفعلية — جارٍ تأمين المسار دون تسريب…",
-                                )
-                            }
-                            handleConnect(st.activeCfg, st.activeLabel, forceRebuildTun = false, isNetworkHandover = true)
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     override fun onCreate() {
         super.onCreate()
         activeInstance = this
         prefs = Prefs(applicationContext)
         singBox = SingBox(applicationContext)
+        clientDb = ClientDatabase.getInstance(applicationContext)
+        runCatching {
+            clientDb.migrateLegacyFavoritesIfNeeded(prefs)
+            clientDb.pruneExpiredHistory(prefs.historyRetentionDays)
+        }
+        reconnectManager = AutoReconnectManager(
+            cappedIntervalMs = prefs.reconnectCappedSec.toLong() * 1000L,
+        )
+        netAwareness = NetworkAwarenessMonitor(applicationContext)
         ensureNotificationChannel()
         registerPhysicalNetworkWatcher()
     }
@@ -209,27 +200,111 @@ class BahrainVpnService : VpnService() {
     }
 
     private fun registerPhysicalNetworkWatcher() {
-        runCatching {
-            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val req = NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-                .build()
-            cm.registerNetworkCallback(req, netCallback)
+        val initSnap = netAwareness.refreshNow()
+        VpnStateManager.update {
+            it.copy(
+                underlyingNetwork = initSnap.transport.code,
+                underlyingNetworkAr = initSnap.transport.labelAr,
+                isMeteredNetwork = initSnap.isMetered,
+            )
+        }
+        netAwareness.start { prev, curr ->
+            VpnStateManager.update {
+                it.copy(
+                    underlyingNetwork = curr.transport.code,
+                    underlyingNetworkAr = curr.transport.labelAr,
+                    isMeteredNetwork = curr.isMetered,
+                )
+            }
+            val cur = VpnStateManager.status.value
+            if (!curr.connected) {
+                if (cur.isTunnelVerified || cur.phase == VpnPhase.PROTECTION_ACTIVE) {
+                    val msg = "انقطعت الشبكة الأساسية — بانتظار عودة الإشارة دون استنزاف البطارية"
+                    VpnStateManager.appendEvent(msg)
+                    runCatching { clientDb.recordProtectionEvent("NETWORK_LOST", "انقطاع الشبكة الأساسية", msg) }
+                }
+                return@start
+            }
+
+            val networkChanged = prev.transport != curr.transport ||
+                (prev.networkHandle != 0L && curr.networkHandle != 0L && prev.networkHandle != curr.networkHandle) ||
+                (!prev.connected && curr.connected)
+
+            if (networkChanged && (cur.isTunnelVerified || cur.phase == VpnPhase.PROTECTION_ACTIVE)) {
+                serviceScope.launch {
+                    delay(450L)
+                    // Part 2.7: نتحقق أولًا من صلاحية النفق الحالي بعد انتقال الشبكة قبل فرض إعادة ربط غير ضرورية
+                    val aliveAndValid = cur.isTunnelVerified && daemon?.process?.isAlive == true && run {
+                        val quick = runCatching {
+                            Socks.measureRealDelay(SingBox.VPN_SOCKS_PORT, SingBox.TEST_URL, 2200)
+                        }.getOrNull()
+                        quick != null && quick.status in listOf(200, 204)
+                    }
+                    if (aliveAndValid) {
+                        val note = "انتقلت الشبكة إلى ${curr.transport.labelAr} — استمر النفق دون انقطاع"
+                        VpnStateManager.appendEvent(note)
+                        VpnStateManager.update { it.copy(statusMessage = note) }
+                        fetchExitTraceAsync()
+                        return@launch
+                    }
+
+                    opLock.withLock {
+                        val st = VpnStateManager.status.value
+                        if ((st.isTunnelVerified || st.phase == VpnPhase.PROTECTION_ACTIVE) && st.activeCfg != null) {
+                            val handoverNote = "تغيّرت الشبكة (${curr.transport.labelAr}) — جارٍ إعادة ربط النفق تلقائيًا…"
+                            VpnStateManager.appendEvent(handoverNote)
+                            runCatching {
+                                clientDb.recordProtectionEvent("NETWORK_HANDOVER", "انتقال الشبكة الأساسية", handoverNote)
+                            }
+                            VpnStateManager.update {
+                                it.copy(
+                                    phase = VpnPhase.RECONNECTING,
+                                    switchingStatus = handoverNote,
+                                    statusMessage = "تغيّرت الشبكة الفعلية — جارٍ تأمين المسار دون تسريب…",
+                                )
+                            }
+                            handleConnect(st.activeCfg, st.activeLabel, forceRebuildTun = false, isNetworkHandover = true)
+                        }
+                    }
+                }
+            }
         }
     }
 
     private fun unregisterPhysicalNetworkWatcher() {
+        netAwareness.stop()
+    }
+
+    private fun finalizeActiveSessionRow(failureReason: String = "") {
+        val rowId = activeHistoryRowId
+        if (rowId <= 0L) return
+        activeHistoryRowId = 0L
+        val st = VpnStateManager.status.value
         runCatching {
-            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            cm.unregisterNetworkCallback(netCallback)
+            clientDb.completeSessionRecord(
+                rowId = rowId,
+                avgLatencyMs = st.livePingMs.coerceAtLeast(0L),
+                jitterMs = st.jitterMs,
+                packetLossPct = st.packetLossPct,
+                peakDownloadBps = sessionPeakDownBps,
+                peakUploadBps = sessionPeakUpBps,
+                totalDownBytes = st.totalDownBytes,
+                totalUpBytes = st.totalUpBytes,
+                country = st.exitCountry,
+                failureReason = failureReason,
+            )
         }
+        sessionPeakDownBps = 0L
+        sessionPeakUpBps = 0L
     }
 
     fun requestDisconnect() {
         prefs.wasVpnDesiredActive = false
+        reconnectManager.cancelByUser()
         serviceScope.launch {
             opLock.withLock {
+                finalizeActiveSessionRow()
+                VpnStateManager.appendEvent("تم قطع الاتصال بطلب المستخدم")
                 teardownInternal(null, "تم قطع الاتصال", userInitiated = true)
             }
             stopSelf()
@@ -260,6 +335,10 @@ class BahrainVpnService : VpnService() {
         }
 
         prefs.wasVpnDesiredActive = true
+        reconnectManager.cappedIntervalMs = prefs.reconnectCappedSec.toLong() * 1000L
+        if (action == ACTION_CONNECT) {
+            reconnectManager.resetForNewUserConnect()
+        }
         val targetCfg = intent?.getStringExtra(EXTRA_CFG)
         val targetLabel = intent?.getStringExtra(EXTRA_LABEL)
 
@@ -370,6 +449,7 @@ class BahrainVpnService : VpnService() {
         singBox.stopDaemon(daemon)
         daemon = null
 
+        val establishStartMs = System.currentTimeMillis()
         val newDaemon = singBox.startDaemon(
             cfg = chosenCfg,
             port = SingBox.VPN_SOCKS_PORT,
@@ -387,12 +467,28 @@ class BahrainVpnService : VpnService() {
         } else {
             -1L
         }
+        val establishDurationMs = (System.currentTimeMillis() - establishStartMs).coerceAtLeast(1L)
+        val curNetCode = netAwareness.snapshot.value.transport.code
 
         if (newDaemon == null || initialPing < 0L) {
             singBox.stopDaemon(newDaemon)
             val cleanFailed = Converters.cleanUri(chosenCfg)
             SmartFailoverEngine.recordServerDrop(cleanFailed)
             VpnStateManager.markServerDropped(cleanFailed)
+            runCatching {
+                clientDb.recordFailedConnectionAttempt(
+                    cfg = cleanFailed,
+                    serverLabel = chosenLabel,
+                    failureReason = if (newDaemon == null) "فشل تشغيل محرك النفق" else "انتهاء مهلة استجابة السيرفر",
+                    networkType = curNetCode,
+                )
+                clientDb.recordServerProbeOrSessionOutcome(
+                    cfgOrServerId = cleanFailed,
+                    ok = false,
+                    failureCategory = if (newDaemon == null) "ENGINE_START_FAIL" else "CONNECTION_TIMEOUT",
+                    networkType = curNetCode,
+                )
+            }
 
             if (foMode != FailoverMode.OFF && pool.size > 1) {
                 VpnStateManager.update { prev ->
@@ -435,6 +531,29 @@ class BahrainVpnService : VpnService() {
         val now = System.currentTimeMillis()
         val chosenProto = Converters.protocolBadge(chosenCfg)
         val chosenEndpoint = Converters.endpointLabel(chosenCfg)
+        finalizeActiveSessionRow()
+        activeHistoryRowId = runCatching {
+            clientDb.startSessionRecord(
+                cfg = chosenCfg,
+                serverLabel = chosenLabel,
+                country = "",
+                initialLatencyMs = initialPing,
+                networkType = curNetCode,
+                nowMs = now,
+            )
+        }.getOrDefault(0L)
+        runCatching {
+            clientDb.recordServerProbeOrSessionOutcome(
+                cfgOrServerId = chosenCfg,
+                ok = true,
+                establishMs = establishDurationMs,
+                latencyMs = initialPing,
+                networkType = curNetCode,
+                nowMs = now,
+            )
+        }
+        reconnectManager.onTunnelVerified()
+        VpnStateManager.appendEvent("تم التحقق من الاتصال عبر $chosenLabel (${initialPing} ms)")
         prefs.recordConnection(
             label = chosenLabel,
             endpoint = chosenEndpoint,
@@ -464,6 +583,7 @@ class BahrainVpnService : VpnService() {
                 lastSuccessfulSwitchAtMs = if (tunAlreadyUp && prevLabel != chosenLabel) now else prev.lastSuccessfulSwitchAtMs,
                 killSwitchActive = killSwitchOn,
                 osLockdownActive = osLockdown,
+                reconnectAttempt = 0,
                 statusMessage = "متّصل بأمان عبر $chosenLabel (${initialPing} ms)",
                 error = null,
             )
@@ -497,6 +617,29 @@ class BahrainVpnService : VpnService() {
         val now = System.currentTimeMillis()
         val candProto = Converters.protocolBadge(cand.cfg)
         val candEndpoint = Converters.endpointLabel(cand.cfg)
+        val curNetCode = netAwareness.snapshot.value.transport.code
+        finalizeActiveSessionRow(failureReason = if (previousLabel.isNotBlank()) "انتقال تلقائي إلى ${cand.label}" else "")
+        activeHistoryRowId = runCatching {
+            clientDb.startSessionRecord(
+                cfg = cand.cfg,
+                serverLabel = cand.label,
+                country = "",
+                initialLatencyMs = verifiedPingMs,
+                networkType = curNetCode,
+                nowMs = now,
+            )
+        }.getOrDefault(0L)
+        runCatching {
+            clientDb.recordServerProbeOrSessionOutcome(
+                cfgOrServerId = cand.cfg,
+                ok = true,
+                latencyMs = verifiedPingMs,
+                networkType = curNetCode,
+                nowMs = now,
+            )
+        }
+        reconnectManager.onTunnelVerified()
+        VpnStateManager.appendEvent("انتقل الاتصال ذكيًا إلى ${cand.label} (${verifiedPingMs} ms)")
         prefs.recordConnection(
             label = cand.label,
             endpoint = candEndpoint,
@@ -528,6 +671,7 @@ class BahrainVpnService : VpnService() {
                 failoverCount = prev.failoverCount + 1,
                 killSwitchActive = prefs.killSwitch,
                 osLockdownActive = osLockdown,
+                reconnectAttempt = 0,
                 statusMessage = "تم الربط الذكي عبر ${cand.label} (${verifiedPingMs} ms)",
                 error = null,
             )
@@ -549,6 +693,7 @@ class BahrainVpnService : VpnService() {
         singBox.stopDaemon(daemon)
         daemon = null
 
+        finalizeActiveSessionRow(failureReason = reasonMsg)
         val retainTun = KillSwitchController.shouldRetainTunOnFailure(
             appKillSwitchEnabled = prefs.killSwitch,
             userRequestedDisconnect = !prefs.wasVpnDesiredActive,
@@ -570,6 +715,11 @@ class BahrainVpnService : VpnService() {
         }
 
         val osLockdown = KillSwitchController.isOsLockdownActive(this)
+        val protHeadline = "تفعيل الحجب الوقائي (Kill Switch) لمنع تسرب البيانات"
+        VpnStateManager.appendEvent(protHeadline)
+        runCatching {
+            clientDb.recordProtectionEvent("KILL_SWITCH_HOLD", protHeadline, reasonMsg)
+        }
         VpnStateManager.update { prev ->
             prev.copy(
                 phase = VpnPhase.PROTECTION_ACTIVE,
@@ -577,9 +727,10 @@ class BahrainVpnService : VpnService() {
                 upSpeedBps = 0L,
                 livePingMs = -1L,
                 connectionQuality = "حجب طوارئ (Kill Switch)",
-                switchingStatus = "حماية Kill Switch تحجب التسرب — إعادة المحاولة تلقائيًا…",
+                switchingStatus = "حماية Kill Switch تحجب التسرب — جدولة تراجع أسي…",
                 killSwitchActive = true,
                 osLockdownActive = osLockdown,
+                lastProtectionEvent = "$protHeadline — $reasonMsg",
                 statusMessage = "مفتاح الإيقاف نشط: تم حجب الإنترنت غير المحمي لحين استعادة النفق",
                 error = reasonMsg,
             )
@@ -590,21 +741,55 @@ class BahrainVpnService : VpnService() {
         recoveryJob?.cancel()
         recoveryJob = serviceScope.launch {
             while (isActive && VpnStateManager.status.value.phase == VpnPhase.PROTECTION_ACTIVE && prefs.wasVpnDesiredActive) {
-                delay(15_000L)
-                opLock.withLock {
-                    if (VpnStateManager.status.value.phase == VpnPhase.PROTECTION_ACTIVE && prefs.wasVpnDesiredActive) {
-                        val pool = ensureServerPool()
-                        val alt = findWorkingAlternativeParallel(excludeCfg = "", pool = pool)
-                        if (alt != null) {
-                            connectWithVerifiedDaemon(
-                                cand = alt.first,
-                                verifiedDaemon = alt.second,
-                                verifiedPingMs = alt.third,
-                                forceRebuildTun = false,
-                                previousLabel = VpnStateManager.status.value.activeLabel,
-                            )
+                val netSnap = netAwareness.refreshNow()
+                if (!netSnap.connected) {
+                    VpnStateManager.update {
+                        it.copy(switchingStatus = "بانتظار عودة إشارة الشبكة لاستئناف النفق…")
+                    }
+                    delay(5_000L)
+                    continue
+                }
+                val plan = reconnectManager.nextReconnectPlan(
+                    trigger = DisconnectTrigger.TUNNEL_DISCONNECTED,
+                    networkAvailable = true,
+                )
+                if (!plan.shouldRetry) {
+                    if (plan.notifyRepeatedFailure) {
+                        updateNotification("تنبيه: تعذّر استعادة النفق", plan.statusAr)
+                        VpnStateManager.appendEvent(plan.statusAr)
+                    }
+                    break
+                }
+                VpnStateManager.update {
+                    it.copy(
+                        reconnectAttempt = plan.attemptNumber,
+                        switchingStatus = plan.statusAr,
+                    )
+                }
+                if (plan.notifyRepeatedFailure) {
+                    updateNotification("حماية Kill Switch نشطة", plan.statusAr)
+                }
+                delay(plan.delayMs)
+                if (!reconnectManager.tryAcquireConnectionSlot()) continue
+                try {
+                    ResourceAndBatteryMonitor.recordReconnectAttempt()
+                    opLock.withLock {
+                        if (VpnStateManager.status.value.phase == VpnPhase.PROTECTION_ACTIVE && prefs.wasVpnDesiredActive) {
+                            val pool = ensureServerPool()
+                            val alt = findWorkingAlternativeParallel(excludeCfg = "", pool = pool)
+                            if (alt != null) {
+                                connectWithVerifiedDaemon(
+                                    cand = alt.first,
+                                    verifiedDaemon = alt.second,
+                                    verifiedPingMs = alt.third,
+                                    forceRebuildTun = false,
+                                    previousLabel = VpnStateManager.status.value.activeLabel,
+                                )
+                            }
                         }
                     }
+                } finally {
+                    reconnectManager.releaseConnectionSlot()
                 }
             }
         }
@@ -778,14 +963,18 @@ class BahrainVpnService : VpnService() {
                     prevUp = curUp
                     prevDown = curDown
 
+                    if (downSpd > sessionPeakDownBps) sessionPeakDownBps = downSpd
+                    if (upSpd > sessionPeakUpBps) sessionPeakUpBps = upSpd
                     guard.recordTrafficDeltaBytes(downSpd, upSpd)
 
                     VpnStateManager.update { s ->
+                        val nextSeries = (s.trafficHistoryBps + (downSpd to upSpd)).takeLast(30)
                         s.copy(
                             upSpeedBps = upSpd,
                             downSpeedBps = downSpd,
                             totalUpBytes = curUp,
                             totalDownBytes = curDown,
+                            trafficHistoryBps = nextSeries,
                         )
                     }
 
@@ -885,6 +1074,20 @@ class BahrainVpnService : VpnService() {
 
                     consecutiveHealthy = if (health.isDegraded) 0 else (consecutiveHealthy + 1)
 
+                    runCatching {
+                        val stNow = VpnStateManager.status.value
+                        clientDb.recordServerProbeOrSessionOutcome(
+                            cfgOrServerId = activeClean,
+                            ok = true,
+                            latencyMs = newPing.coerceAtLeast(0L),
+                            jitterMs = health.jitterMs,
+                            packetLossPct = health.packetLossPct,
+                            downloadKbps = stNow.downSpeedBps.toDouble() / 1024.0,
+                            uploadKbps = stNow.upSpeedBps.toDouble() / 1024.0,
+                            networkType = netAwareness.snapshot.value.transport.code,
+                        )
+                    }
+
                     VpnStateManager.update { s ->
                         s.copy(
                             phase = if (health.isDegraded) VpnPhase.CONNECTION_DEGRADED else VpnPhase.CONNECTED,
@@ -958,7 +1161,13 @@ class BahrainVpnService : VpnService() {
                         if (switched) return@launch
                     }
 
-                    delay(SmartFailoverEngine.computeAdaptiveCheckIntervalMs(consecutiveHealthy, health.isDegraded))
+                    val nextInterval = ResourceAndBatteryMonitor.computeBatteryAwareProbeIntervalMs(
+                        consecutiveHealthyProbes = consecutiveHealthy,
+                        isDegraded = health.isDegraded,
+                        isMeteredNetwork = netAwareness.snapshot.value.isMetered,
+                    )
+                    ResourceAndBatteryMonitor.recordBackgroundProbe(nextInterval)
+                    delay(nextInterval)
                 } else {
                     consecutiveHealthy = 0
                     val droppedCur = VpnStateManager.status.value.activeCfg ?: ""
@@ -1149,6 +1358,7 @@ class BahrainVpnService : VpnService() {
     private fun ConvergedKey(uri: String): String = Converters.cleanUri(uri)
 
     private fun teardownInternal(errorMsg: String?, infoMsg: String?, userInitiated: Boolean = true) {
+        finalizeActiveSessionRow(failureReason = errorMsg ?: "")
         monitorJob?.cancel()
         probeJob?.cancel()
         recoveryJob?.cancel()

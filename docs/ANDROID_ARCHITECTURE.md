@@ -1,0 +1,46 @@
+# Android Client Architecture (`v3.3`)
+
+## 1. High-Level Module & Package Layout
+The Android application (`:app`, `com.bahrain.vpnconfigs`, `minSdk = 29`, `targetSdk = 34`) follows a reactive unidirectional architecture powered by Kotlin Coroutines, `StateFlow`, Jetpack Compose Material 3 (RTL Arabic-first), embedded SQLite (`WAL`), `sing-box`, and `hev-socks5-tunnel`.
+
+```
+com.bahrain.vpnconfigs
+├── MainActivity.kt                 # 6-destination NavigationBar + Lifecycle foreground observer + VPN permission flow
+├── data/
+│   ├── Repo.kt                     # Sole network/CDN boundary (ETag/304 cache, promo sync, bundle fetch)
+│   ├── Prefs.kt                    # Lightweight user settings & flags
+│   └── ClientDatabase.kt           # WAL SQLite v2 (connection_history, favorite_servers, local_server_telemetry, protection_events)
+├── engine/
+│   ├── Converters.kt               # Multi-protocol URI parser, sing-box config builder, stableServerId(), maskedEndpointLabel()
+│   ├── SecurityEvaluator.kt        # Pre-connect TLS/Reality/cipher audit & quarantine gate
+│   ├── ServerRanker.kt             # List sorting modes (DEFAULT, FASTEST_DOWNLOAD, LOWEST_PING, FAVORITES)
+│   ├── SmartServerSelector.kt      # Weighted 7-factor explainable selector + cooldown + confidence + fallback
+│   ├── SingBox.kt & Socks.kt       # Native daemon lifecycle & real HTTP/SOCKS5 delay/throughput probes
+│   └── Tester.kt                   # Bounded-concurrency batch & single-server verifier
+├── vpn/
+│   ├── BahrainVpnService.kt        # Foreground VpnService, TUN builder, parallel failover, session & telemetry recorder
+│   ├── VpnState.kt                 # Immutable VpnStatus StateFlow + 30-sample live traffic history ring + event timeline
+│   ├── AutoReconnectManager.kt     # 2s->5s->10s->20s->40s->cap exponential backoff + jitter + single-flight guard
+│   ├── NetworkAwarenessMonitor.kt  # Modern ConnectivityManager + NetworkCapabilities (Wi-Fi/Cellular/Ethernet/Metered)
+│   ├── KillSwitchController.kt     # Fail-closed TUN hold vs OS VpnService.isLockdownEnabled + system settings intent
+│   ├── LeakProtectionEngine.kt     # Dual-stack ::/0 capture + MapDNS 198.18.0.2 + DoH sanitization
+│   ├── ConnectionSecurityClassifier.kt # 9-state honest security & DNS/IPv6 leak classifier
+│   └── ResourceAndBatteryMonitor.kt    # Real CPU/Heap/PSS telemetry & foreground/background adaptive polling
+├── enterprise/                     # ECDSA P-256 license verification, AES-256-GCM VIP nodes, diagnostics, ABI updater
+└── ui/
+    ├── AppViewModel.kt             # State holder bridging Repo, Tester, ClientDatabase, and SmartServerSelector
+    ├── Screens.kt                  # ConnectHomeScreen, ServersListScreen, AppsSplitScreen, SettingsAndExportScreen
+    ├── ConnectionMonitorCard.kt    # SmartSelectionSummaryCard + RealTimeConnectionMonitorCard (live Canvas chart)
+    ├── FavoritesScreen.kt          # Grouped, custom-named, performance-ranked Favorites UI
+    ├── ServerHistoryScreen.kt      # Paginated, searchable, date-filtered SQLite Session History UI
+    ├── SecurityStatusScreen.kt     # Dedicated 9-state Security, DNS/IPv6 Leak, Kill Switch & Battery UI
+    └── EnterpriseScreens.kt        # Enterprise Hub, Speed Test, PromoPopupDialog, MandatoryLoginGateDialog
+```
+
+## 2. Six Primary Navigation Destinations
+1. **الاتصال (`Home`):** One-tap Connect ring, Smart Server Selection explainability card (primary + fallback + confidence + reasons), Real-Time Connection Monitor (live download/upload Canvas chart, duration, verified exit IP/country, RTT/jitter/loss, event log), and active server quick actions.
+2. **السيرفرات (`Servers`):** Country filter chips, multi-mode sort bar, search, clipboard import, 5-state latency/speed badges, and per-server favorite star.
+3. **المفضّلة (`Favorites`):** Persistent `server_id`-anchored favorites surviving remark updates, custom naming, custom/preset groups (`عام`, `العمل`, `الألعاب`, `البث`), availability dot, local success/speed stats, and 1-tap connect.
+4. **السجل (`History`):** Persistent SQLite session log with text search, `24h`/`7d`/`30d` date filters, performance/latency/duration sorting, pagination, configurable retention (`7`/`30`/`90` days), 1-tap reconnect, and individual/full deletion.
+5. **الأمان (`Security`):** Live 9-state security classification, transport encryption & operator trust disclosure, DNS/IPv6 leak checks, App vs. OS Kill Switch controls, and live CPU/Memory/Battery polling telemetry.
+6. **الإعدادات (`Settings`):** Smart country preference, DNS/DoH, IPv6, Failover mode, batch tester tuning, config exports, plus 1-tap access to **Split Tunneling (`استثناء التطبيقات`)** and **Enterprise Speed & Account Hub (`المركز المؤسسي والسرعة`)**.

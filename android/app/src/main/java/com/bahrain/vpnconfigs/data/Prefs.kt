@@ -108,6 +108,30 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("kill_switch_v32", true)
         set(v) = sp.edit { putBoolean("kill_switch_v32", v) }
 
+    var smartAutoSelect: Boolean
+        get() = sp.getBoolean("smart_auto_select_v33", true)
+        set(v) = sp.edit { putBoolean("smart_auto_select_v33", v) }
+
+    var preferredCountry: String
+        get() = (sp.getString("preferred_country_v33", "ALL") ?: "ALL").trim().uppercase().ifBlank { "ALL" }
+        set(v) = sp.edit { putString("preferred_country_v33", v.trim().uppercase().ifBlank { "ALL" }) }
+
+    var historyRetentionDays: Int
+        get() = sp.getInt("history_retention_days_v33", 90).coerceIn(7, 365)
+        set(v) = sp.edit { putInt("history_retention_days_v33", v.coerceIn(7, 365)) }
+
+    var reconnectCappedSec: Int
+        get() = sp.getInt("reconnect_capped_sec_v33", 60).coerceIn(20, 300)
+        set(v) = sp.edit { putInt("reconnect_capped_sec_v33", v.coerceIn(20, 300)) }
+
+    var smartWeightsJson: String
+        get() = sp.getString("smart_weights_json_v33", "") ?: ""
+        set(v) = sp.edit { putString("smart_weights_json_v33", v) }
+
+    var favoritesMigratedV33: Boolean
+        get() = sp.getBoolean("favorites_migrated_v33", false)
+        set(v) = sp.edit { putBoolean("favorites_migrated_v33", v) }
+
     var wasVpnDesiredActive: Boolean
         get() = sp.getBoolean("vpn_desired_active", false)
         set(v) = sp.edit { putBoolean("vpn_desired_active", v) }

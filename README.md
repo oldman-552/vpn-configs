@@ -89,6 +89,10 @@
 | **`protocols/*.txt`** | قوائم مفصولة حسب البروتوكول (`vless`, `trojan`, `vmess`, `ss`, `hysteria2`, `tuic`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/protocols/vless.txt` |
 | **`alive.json`** | البيانات الكاملة للعُقد الحيّة مع التقييم الأمني متعدد الأبعاد والدولة والاستقرار | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/alive.json` |
 | **`api/v1/statistics.json`** | واجهة الإحصاءات العامة المعماة (`v1`) ومواصفة `api/v1/openapi.json` | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/api/v1/statistics.json` |
+| **`servers-current.json`** | الحالة الحالية لجميع السيرفرات بهويات `server_id` معماة خالية من بيانات الاعتماد (`v3.3`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-current.json` |
+| **`servers-history.json`** | السجل التاريخي للجاهزية (`24h/7d/30d/90d`) بأساس صريح (`OBSERVED/ESTIMATED/UNKNOWN`) وفئات الأعطال | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-history.json` |
+| **`servers-performance.json`** | تحليلات الأداء النافذية (`avg/median/p95` للتأخير، التذبذب، فقدان الحزم، والسرعة) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-performance.json` |
+| **`servers-statistics.json`** | الإحصاءات الشاملة والجاهزية وفئات الأعطال الـ 10 ومشغّلي المصادر المستقلين (`countries-statistics.json` / `sources-statistics.json`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-statistics.json` |
 | **`api/v1/health.json`** | نبضة صحة خط الأنابيب السحابي وحالة الحداثة | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/api/v1/health.json` |
 | **`quarantined.json`** | سجل الحجر الصحي الأمني المعزول (معرّفات معماة وأسباب الرفض دون تسريب روابط) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/quarantined.json` |
 | **`enterprise/bundle.json`** | حزمة التراخيص الموقّعة (`ECDSA P-256` — `v3.2`)، الإعدادات البعيدة، التحديثات، وعُقد `VIP` المشفّرة | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/enterprise/bundle.json` |
@@ -155,6 +159,11 @@ pytest -v
 
 ## 6) التوثيق الهندسي المرجعي الكامل والقيود الأمنية الصريحة
 
+- **توثيق الترقية الشاملة لمنصة الذكاء التاريخي وتطبيق أندرويد (`v3.3`):**
+  - خطة المراجعة المعمارية والترقية: [`docs/ANDROID_AND_DATA_UPGRADE_PLAN.md`](docs/ANDROID_AND_DATA_UPGRADE_PLAN.md) | [`docs/IMPLEMENTATION_REPORT.md`](docs/IMPLEMENTATION_REPORT.md)
+  - معمارية تطبيق أندرويد وتحسين البطارية: [`docs/ANDROID_ARCHITECTURE.md`](docs/ANDROID_ARCHITECTURE.md) | [`docs/ANDROID_BATTERY_OPTIMIZATION.md`](docs/ANDROID_BATTERY_OPTIMIZATION.md)
+  - مخططات قواعد البيانات (السحابية والمحلية) ونموذج الأمان: [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) | [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md)
+  - تقارير الاختبارات ودليل النشر السحابي على GitHub: [`docs/TESTING_REPORT.md`](docs/TESTING_REPORT.md) | [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md)
 - البنية المعمارية الشاملة (`v3.2`): [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md`](docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md)
 - الأمن والخصوصية ونموذج التهديدات: [`SECURITY.md`](SECURITY.md) | [`PRIVACY.md`](PRIVACY.md)
 - توثيق واجهة الإحصاءات العامة (`API v1` + `OpenAPI 3.1.0`): [`API.md`](API.md)

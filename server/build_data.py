@@ -33,6 +33,7 @@ sys.path.insert(0, str(ROOT))
 import collector  # noqa: E402
 import tester  # noqa: E402
 from dedupe import MultiLayerDeduplicator, canonical_protocol, parse_identity  # noqa: E402
+from historical_db import HistoricalServerDB, parse_iso_epoch  # noqa: E402
 from pipeline_security import redact_text  # noqa: E402
 from public_api import export_static_api_v1  # noqa: E402
 from scoring import (  # noqa: E402
@@ -115,11 +116,17 @@ def _preserve_last_known_good(prev_dir: Path, out_dir: Path) -> bool:
         "privacy_aware.txt",
         "countries.json",
         "quarantined.json",
+        "servers-current.json",
+        "servers-history.json",
+        "servers-performance.json",
+        "servers-statistics.json",
+        "countries-statistics.json",
+        "sources-statistics.json",
     ):
         src = prev_dir / fname
         if src.is_file():
             shutil.copy2(src, out_dir / fname)
-    for sub_tree in ("protocols", "api"):
+    for sub_tree in ("protocols", "api", "state"):
         prev_sub = prev_dir / sub_tree
         if prev_sub.is_dir():
             dst_sub = out_dir / sub_tree
@@ -161,16 +168,27 @@ def main(argv: list[str] | None = None) -> int:
     eff_min_alive = args.min_alive if args.min_alive is not None else MIN_ALIVE
     weights = ScoringWeights().normalized()
 
-    # ── 0) استعادة السجل الطولي وسجل الصحّة من اللقطة السابقة ──
+    # ── 0) استعادة السجل الطولي وسجل الصحّة وقاعدة البيانات التاريخية SQLite من اللقطة السابقة ──
     history = NodeHistoryStore()
     registry = SourceHealthRegistry()
+    hist_db_path = out_dir / "state" / "history.sqlite3"
+    hist_db_path.parent.mkdir(parents=True, exist_ok=True)
     if prev_dir and prev_dir.is_dir():
+        prev_sqlite = prev_dir / "state" / "history.sqlite3"
+        if prev_sqlite.is_file() and prev_sqlite.resolve() != hist_db_path.resolve():
+            shutil.copy2(prev_sqlite, hist_db_path)
         history = NodeHistoryStore.load(prev_dir / "state" / "node_history.json")
         if not history.entries:
             seeded = history.bootstrap_from_alive_json(prev_dir / "alive.json", now_iso)
             if seeded:
                 LOG.info("تم تهيئة السجل الطولي من alive.json السابق (%d عقدة)", seeded)
         registry = SourceHealthRegistry.load(prev_dir / "state" / "source_state.json")
+
+    hist_db = HistoricalServerDB(hist_db_path)
+    if prev_dir and (prev_dir / "state" / "node_history.json").is_file():
+        boot_cnt = hist_db.bootstrap_from_node_history_json(prev_dir / "state" / "node_history.json", now_iso=now_iso)
+        if boot_cnt:
+            LOG.info("تم ترحيل %d سجل تاريخي أولي إلى SQLite (history.sqlite3)", boot_cnt)
 
     prior_alive_ids = {
         cid for cid, entry in history.entries.items() if entry.consecutive_alive >= 1
@@ -251,12 +269,27 @@ def main(argv: list[str] | None = None) -> int:
 
     mix = Counter(c.split("://")[0] for c in configs)
     prov_by_id = deduper.provenance_map()
-    corroborated_ids = {cid for cid, p in prov_by_id.items() if p.corroboration_count >= 2}
+    corroborated_ids = {cid for cid, p in prov_by_id.items() if p.independent_source_count >= 2}
 
-    # ── 1b) فحص الأمان الساكن وعزل الكانفيغات الحرجة قبل هدر موارد النوى (Phase 2 Quarantine) ──
+    # تسجيل ظهور جميع السيرفرات الصالحة المكتشفة ومصادرها المستقلة في قاعدة SQLite التاريخية
+    now_epoch = parse_iso_epoch(now_iso)
+    suppressed_ids = hist_db.get_suppressed_ids(now_epoch=now_epoch)
+    sighting_batch = []
+    for u in configs:
+        id_s = parse_identity(u, reject_private_hosts=True)
+        if id_s is None:
+            continue
+        pr_s = prov_by_id.get(id_s.identity_id)
+        src_pairs = [(sn, deduper.source_urls.get(sn, "")) for sn in (pr_s.sources if pr_s else ())]
+        sighting_batch.append((id_s, src_pairs))
+    if sighting_batch:
+        hist_db.record_Sightings_batch(sighting_batch, observed_at=now_iso)
+
+    # ── 1b) فحص الأمان الساكن وعزل الكانفيغات الحرجة واستبعاد الموقوفة مؤقتًا (Phase 2 & Failure Suppression) ──
     quarantine_reg = QuarantineRegistry()
     threat_intel = ThreatIntelIndicators.from_json_file(ROOT / "threat_intel_indicators.json")
     safe_configs: list[str] = []
+    suppressed_deferred: list[str] = []
     for u in configs:
         ident_pre = parse_identity(u, reject_private_hosts=False)
         prov_pre = prov_by_id.get(ident_pre.identity_id) if ident_pre else None
@@ -269,9 +302,13 @@ def main(argv: list[str] | None = None) -> int:
                 timestamp=now_iso,
             )
             continue
+        if ident_pre and ident_pre.identity_id in suppressed_ids:
+            suppressed_deferred.append(u)
+            continue
         safe_configs.append(u)
 
-    configs = safe_configs
+    # إذا كانت كل الكانفيغات مؤجلة، نحتفظ بها للفحص؛ وإلا نضع المؤجلة في ذيل الطابور دون حذف دائم
+    configs = safe_configs + suppressed_deferred
 
     # ── 2) تجهيز النوى والفحص الفعلي (L3–L5) ──
     xray = tester.ensure_xray()
@@ -333,6 +370,14 @@ def main(argv: list[str] | None = None) -> int:
                 ok=False,
                 timestamp=now_iso,
             )
+            hist_db.record_measurement(
+                ident,
+                measured_at=now_iso,
+                ok=False,
+                raw_error=str(r.error or "probe_failed"),
+                packet_loss_pct=100.0,
+                sources=[(sn, deduper.source_urls.get(sn, "")) for sn in (prov.sources if prov else ())],
+            )
             continue
 
         eff_speed = max(r.speed_kbps, speed_by_cfg.get(r.cfg, 0.0))
@@ -360,6 +405,17 @@ def main(argv: list[str] | None = None) -> int:
                 timestamp=now_iso,
             )
             history.record_observation(ident.identity_id, ok=False, timestamp=now_iso)
+            hist_db.record_measurement(
+                ident,
+                measured_at=now_iso,
+                ok=False,
+                raw_error="quarantined_post_probe",
+                packet_loss_pct=100.0,
+                security_assessment=sec_rep.security_assessment,
+                privacy_assessment=sec_rep.privacy_assessment,
+                risk_level=sec_rep.risk_level,
+                sources=[(sn, deduper.source_urls.get(sn, "")) for sn in (prov.sources if prov else ())],
+            )
             continue
 
         alive_per_proto_tested[ident.canonical_proto] += 1
@@ -378,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
                 alive_per_source[src_name] += 1
 
         med_lat = r.median_latency_ms or r.latency_ms
-        corr_cnt = prov.corroboration_count if prov else 1
+        corr_cnt = prov.independent_source_count if prov else 1
         ver_hit = prov.verified_source_hit if prov else False
 
         score, breakdown = compute_composite_score(
@@ -413,6 +469,28 @@ def main(argv: list[str] | None = None) -> int:
         hist_entry.last_performance_score = md.performance_score
         hist_entry.last_reliability_score = md.reliability_score
         hist_entry.last_security_mode = "tls" if sec_rep.tls_enabled else "none"
+
+        hist_db.record_measurement(
+            ident,
+            measured_at=now_iso,
+            ok=True,
+            latency_ms=r.latency_ms,
+            median_latency_ms=med_lat,
+            p95_latency_ms=max(med_lat, r.latency_ms) + (r.jitter_ms * 0.5),
+            jitter_ms=r.jitter_ms,
+            packet_loss_pct=md.packet_loss_pct,
+            download_kbps=eff_speed if eff_speed > 0 else None,
+            exit_country=cc,
+            country_source=cc_src,
+            exit_ip=getattr(r, "exit_ip", "") or "",
+            composite_score=score,
+            performance_score=md.performance_score,
+            reliability_score=md.reliability_score,
+            security_assessment=md.security_assessment,
+            privacy_assessment=md.privacy_assessment,
+            risk_level=md.risk_level,
+            sources=[(sn, deduper.source_urls.get(sn, "")) for sn in (prov.sources if prov else ())],
+        )
 
         scored_nodes.append(
             ScoredNode(
@@ -454,10 +532,24 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
 
+    overlap_map = deduper.source_overlap_metrics()
     for src_name, rec in registry.records.items():
         rec.alive_count = alive_per_source.get(src_name, 0)
+        if src_name in overlap_map:
+            om = overlap_map[src_name]
+            rec.unique_identities = int(om.get("unique_identities", 0))
+            rec.exclusive_identities = int(om.get("exclusive_identities", 0))
+            rec.overlap_ratio = float(om.get("overlap_ratio", 0.0))
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    hist_db.record_pipeline_run_and_sources(
+        run_at=now_iso,
+        tested_count=len(lat),
+        alive_count=len(scored_nodes),
+        degraded_mode=len(scored_nodes) < max(1, eff_min_alive),
+        source_records=[r.to_state_dict() for r in registry.records.values()],
+    )
+    hist_db.apply_retention_and_retirement(now_iso=now_iso)
     history.save(out_dir / "state" / "node_history.json")
     registry.save_state(out_dir / "state" / "source_state.json")
     registry.save_public_report(out_dir / "source_health.json")
@@ -650,11 +742,20 @@ def main(argv: list[str] | None = None) -> int:
             "api_v1_statistics": _file_url("api/v1/statistics.json"),
             "api_v1_servers": _file_url("api/v1/servers.json"),
             "api_v1_openapi": _file_url("api/v1/openapi.json"),
+            "servers_current_json": _file_url("servers-current.json"),
+            "servers_history_json": _file_url("servers-history.json"),
+            "servers_performance_json": _file_url("servers-performance.json"),
+            "servers_statistics_json": _file_url("servers-statistics.json"),
+            "countries_statistics_json": _file_url("countries-statistics.json"),
+            "sources_statistics_json": _file_url("sources-statistics.json"),
             "all_gz": _file_url("all.txt.gz"),
             "protocols": proto_files_meta,
         },
     }
     write_atomic(out_dir / "meta.json", json.dumps(meta, ensure_ascii=False, indent=2) + "\n")
+
+    # تصدير ملفات الاستخبارات التاريخية المعيارية (Part 7 Versioned Public Exports)
+    hist_db.export_public_historical_artifacts(out_dir, generated_at=now_iso)
 
     # ── 6) تصدير واجهة الإحصاءات العامة المقروءة فقط (/api/v1/*) وبيانات الرصد (Phases 8 & 10) ──
     alive_dicts = [

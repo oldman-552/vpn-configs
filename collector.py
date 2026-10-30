@@ -633,6 +633,10 @@ def collect_with_telemetry(
     deduper = MultiLayerDeduplicator(
         verified_sources=set(VERIFIED_TIER_SOURCES),
         reject_private_hosts=True,
+        source_urls={
+            **github_sources,
+            **{f"tg:{u.rsplit('/', 1)[-1]}": f"https://t.me/s/{u.rsplit('/', 1)[-1]}" for u in channel_urls(channels)},
+        },
     )
     raw_pool: list[str] = []
     ch_stats: dict[str, int] = {}

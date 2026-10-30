@@ -15,18 +15,29 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.bahrain.vpnconfigs.data.ClientDatabase
 import com.bahrain.vpnconfigs.data.ConnectionHistoryEntry
+import com.bahrain.vpnconfigs.data.FavoriteServerRecord
+import com.bahrain.vpnconfigs.data.FavoriteSortOrder
+import com.bahrain.vpnconfigs.data.HistorySortOrder
+import com.bahrain.vpnconfigs.data.LocalServerTelemetry
 import com.bahrain.vpnconfigs.data.Prefs
+import com.bahrain.vpnconfigs.data.ProtectionEventRecord
 import com.bahrain.vpnconfigs.data.RemoteMeta
 import com.bahrain.vpnconfigs.data.Repo
 import com.bahrain.vpnconfigs.data.ResolvedPromoBanner
 import com.bahrain.vpnconfigs.data.ResultLine
 import com.bahrain.vpnconfigs.data.ServerHint
+import com.bahrain.vpnconfigs.data.ServerSessionRecord
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.RankableServer
 import com.bahrain.vpnconfigs.engine.SecurityEvaluator
 import com.bahrain.vpnconfigs.engine.ServerRanker
 import com.bahrain.vpnconfigs.engine.ServerSortMode
+import com.bahrain.vpnconfigs.engine.SmartSelectionDecision
+import com.bahrain.vpnconfigs.engine.SmartSelectionWeights
+import com.bahrain.vpnconfigs.engine.SmartServerCandidateInput
+import com.bahrain.vpnconfigs.engine.SmartServerSelector
 import com.bahrain.vpnconfigs.engine.TestProgress
 import com.bahrain.vpnconfigs.engine.TestResult
 import com.bahrain.vpnconfigs.engine.Tester
@@ -44,10 +55,14 @@ import com.bahrain.vpnconfigs.util.AppDiag
 import com.bahrain.vpnconfigs.util.UiMessages
 import com.bahrain.vpnconfigs.vpn.AppEntry
 import com.bahrain.vpnconfigs.vpn.BahrainVpnService
+import com.bahrain.vpnconfigs.vpn.ConnectionSecurityClassifier
 import com.bahrain.vpnconfigs.vpn.InstalledApps
+import com.bahrain.vpnconfigs.vpn.NetworkAwarenessMonitor
+import com.bahrain.vpnconfigs.vpn.SecurityStatusReport
 import com.bahrain.vpnconfigs.vpn.ServerCandidate
 import com.bahrain.vpnconfigs.vpn.VpnPhase
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
+import com.bahrain.vpnconfigs.vpn.VpnStatus
 import com.bahrain.vpnconfigs.work.RefreshWorker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +98,9 @@ data class ServerItem(
     val riskLevel: String = "UNKNOWN",
     val securitySummaryAr: String = "",
 ) {
+    val serverId: String
+        get() = Converters.stableServerId(cfg)
+
     val exportUri: String
         get() = if (isVip) "" else Converters.namedUri(cfg, name)
 }
@@ -134,6 +152,23 @@ data class UiState(
     val appHealth: AppHealthSnapshot = AppHealthSnapshot(20L, 0.0, 0, 0, 0, false, emptyList()),
     val availableUpdate: AppUpdateInfo? = null,
     val updatingApk: Boolean = false,
+    // ── v3.3 الذكاء التاريخي والمفضّلة المتقدمة والاختيار الذكي ──
+    val smartAutoSelect: Boolean = true,
+    val preferredCountry: String = "ALL",
+    val smartDecision: SmartSelectionDecision = SmartSelectionDecision(null, null, emptyList()),
+    val favoritesList: List<FavoriteServerRecord> = emptyList(),
+    val favoriteGroups: List<String> = listOf("عام", "العمل", "الألعاب", "البث"),
+    val favoriteGroupFilter: String = "ALL",
+    val favoriteSortOrder: FavoriteSortOrder = FavoriteSortOrder.RECENT,
+    val sqliteHistory: List<ServerSessionRecord> = emptyList(),
+    val sqliteHistoryTotal: Int = 0,
+    val historySearchQuery: String = "",
+    val historyDateDays: Int = 0,
+    val historySortOrder: HistorySortOrder = HistorySortOrder.RECENT,
+    val historyPageLimit: Int = 30,
+    val historyRetentionDays: Int = 30,
+    val telemetryById: Map<String, LocalServerTelemetry> = emptyMap(),
+    val protectionEvents: List<ProtectionEventRecord> = emptyList(),
 ) {
     val selectedServer: ServerItem?
         get() = servers.firstOrNull { it.cfg == selectedCfg } ?: servers.firstOrNull()
@@ -142,6 +177,12 @@ data class UiState(
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = Prefs(app)
+    private val clientDb = ClientDatabase.getInstance(app).also {
+        runCatching {
+            it.migrateLegacyFavoritesIfNeeded(prefs)
+            it.pruneExpiredHistory(prefs.historyRetentionDays)
+        }
+    }
     private val tester = Tester(app)
     private val licenseGuard = EnterpriseLicenseGuard(app)
     private val diagnosticsEngine = ClientDiagnosticsEngine(app)
@@ -167,6 +208,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             speedHistory = diagnosticsEngine.loadSpeedHistory(),
             latestSpeedRecord = diagnosticsEngine.loadSpeedHistory().firstOrNull(),
             appHealth = AppHealthMonitor.snapshot(app),
+            smartAutoSelect = prefs.smartAutoSelect,
+            preferredCountry = prefs.preferredCountry,
+            favoritesList = clientDb.listFavorites(),
+            favoriteGroups = clientDb.listFavoriteGroups(),
+            sqliteHistory = clientDb.querySessionHistory(limit = 30),
+            sqliteHistoryTotal = clientDb.countSessionHistory(),
+            historyRetentionDays = prefs.historyRetentionDays,
+            telemetryById = clientDb.getAllServerTelemetryMap(),
+            protectionEvents = clientDb.recentProtectionEvents(),
         )
     )
         private set
@@ -206,9 +256,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         results = filteredResults,
                         servers = rebuilt,
                         selectedCfg = sel,
+                        smartDecision = computeSmartDecisionFor(rebuilt),
                     )
+                    refreshPersistenceSnapshotAsync()
                 } else if (latestHistory != state.connectionHistory) {
                     state = state.copy(connectionHistory = latestHistory)
+                    refreshPersistenceSnapshotAsync()
                 }
 
                 if (vpnSt.isTunnelVerified && !promoSyncedWhileConnected) {
@@ -242,6 +295,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 servers = built,
                 availableCountries = countries,
                 selectedCfg = chosen,
+                smartDecision = computeSmartDecisionFor(built),
                 meta = metaObj,
                 lastUpdatedLabel = UiMessages.formatLastUpdated(metaObj.generatedAt, prefs.lastRefreshWallMs),
                 results = savedResults,
@@ -302,6 +356,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val nowMs = System.currentTimeMillis()
         val sortMode = ServerSortMode.fromKey(modeKey)
         val favSet = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
+        val favIdSet = clientDb.favoriteServerIds()
         val customs = prefs.customConfigs.map { Converters.cleanUri(it) }
         val customSet = customs.toHashSet()
         val vipNodes = licenseGuard.getAuthorizedVipNodes()
@@ -360,6 +415,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             val effectiveTestedMs = if (!failed && local != null) local.testedAtMs else 0L
 
+            val sid = Converters.stableServerId(cfg)
+            val isFav = cfg in favSet || sid in favIdSet
             val rankable = RankableServer(
                 cfg = cfg,
                 latencyMs = rankLatency,
@@ -374,14 +431,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 riskLevel = secProfile.riskLevel,
                 locallyTested = local != null,
                 localFailed = failed,
-                isFavorite = cfg in favSet || vipNode != null,
+                isFavorite = isFav || vipNode != null,
                 isCustom = cfg in customSet,
                 lastTestedAtMs = effectiveTestedMs,
             )
             val computedOverall = ServerRanker.computeOverallScore(rankable, nowMs)
+            val customFavName = clientDb.getFavorite(sid)?.customName.orEmpty()
             val item = ServerItem(
                 cfg = cfg,
-                name = vipNode?.label.orEmpty(),
+                name = customFavName.ifBlank { vipNode?.label.orEmpty() },
                 proto = Converters.protocolBadge(cfg),
                 endpoint = if (vipNode != null) "عقدة VIP مشفّرة ومحمية" else Converters.endpointLabel(cfg),
                 latencyMs = displayLatency,
@@ -395,7 +453,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 lastTestedAtMs = effectiveTestedMs,
                 locallyTested = local != null,
                 localFailed = failed,
-                isFavorite = cfg in favSet,
+                isFavorite = isFav,
                 isCustom = cfg in customSet,
                 isVip = vipNode != null,
                 securityAssessment = secProfile.securityAssessment,
@@ -417,10 +475,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             .mapIndexed { idx, pair ->
                 val itm = pair.second
-                val finalName = if (itm.isVip && itm.name.isNotBlank()) {
-                    "bahrain-vpn VIP • ${itm.name}"
-                } else {
-                    "bahrain-vpn #${idx + 1}"
+                val finalName = when {
+                    itm.name.isNotBlank() && !itm.isVip -> itm.name
+                    itm.isVip && itm.name.isNotBlank() -> "bahrain-vpn VIP • ${itm.name}"
+                    else -> "bahrain-vpn #${idx + 1}"
                 }
                 itm.copy(name = finalName)
             }
@@ -471,16 +529,208 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearConnectionHistory() {
         prefs.clearConnectionHistory()
-        state = state.copy(connectionHistory = emptyList(), info = "تم مسح سجل الاتصالات")
+        clientDb.clearAllHistory()
+        state = state.copy(
+            connectionHistory = emptyList(),
+            sqliteHistory = emptyList(),
+            sqliteHistoryTotal = 0,
+            info = "تم مسح سجل الاتصالات",
+        )
     }
 
     fun toggleFavorite(cfg: String) {
+        val clean = Converters.cleanUri(cfg)
+        val sid = Converters.stableServerId(clean)
+        val existingFav = clientDb.isFavorite(sid)
         val next = prefs.favorites.toMutableSet()
-        if (!next.add(cfg)) next.remove(cfg)
+        if (existingFav || clean in next) {
+            next.remove(clean)
+            next.remove(cfg)
+            clientDb.removeFavorite(sid)
+        } else {
+            next.add(clean)
+            val srv = state.servers.firstOrNull { Converters.cleanUri(it.cfg) == clean }
+            clientDb.upsertFavorite(
+                cfgOrServerId = clean,
+                defaultLabel = srv?.name.orEmpty(),
+                protocol = srv?.proto ?: Converters.protocolBadge(clean),
+                maskedEndpoint = Converters.maskedEndpointLabel(clean),
+                country = srv?.country.orEmpty(),
+            )
+        }
         prefs.favorites = next
         val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
         val sel = resolveSelected(state.selectedCfg, rebuilt)
-        state = state.copy(servers = rebuilt, selectedCfg = sel)
+        state = state.copy(
+            servers = rebuilt,
+            selectedCfg = sel,
+            favoritesList = clientDb.listFavorites(state.favoriteGroupFilter, state.favoriteSortOrder),
+            favoriteGroups = clientDb.listFavoriteGroups(),
+        )
+    }
+
+    // ─────────────────── v3.3 الذكاء التاريخي والاختيار الذكي والمفضّلة ───────────────────
+
+    private fun computeSmartDecisionFor(items: List<ServerItem>): SmartSelectionDecision {
+        val telMap = clientDb.getAllServerTelemetryMap()
+        val vpnSt = VpnStateManager.status.value
+        val problematicIds = vpnSt.droppedConfigs.map { Converters.stableServerId(it) }.toHashSet()
+        val weights = SmartSelectionWeights.fromJsonOrDefault(prefs.smartWeightsJson)
+        val inputs = items.map { srv ->
+            val clean = Converters.cleanUri(srv.cfg)
+            SmartServerCandidateInput(
+                cfg = srv.cfg,
+                label = srv.name,
+                country = srv.country,
+                isVip = srv.isVip,
+                available = true,
+                localLatencyMs = srv.latencyMs.coerceAtLeast(0L),
+                localJitterMs = srv.jitterMs,
+                localDownloadKbps = srv.speedKbps,
+                locallyTested = srv.locallyTested,
+                localFailed = srv.localFailed,
+                lastTestedAtMs = srv.lastTestedAtMs,
+                securityAssessment = srv.securityAssessment,
+                riskLevel = srv.riskLevel,
+                cloudHint = serverHints[clean],
+                localTelemetry = telMap[srv.serverId],
+            )
+        }
+        return SmartServerSelector.selectBestAndFallback(
+            candidates = inputs,
+            weights = weights,
+            preferredCountry = prefs.preferredCountry,
+            networkType = vpnSt.underlyingNetwork,
+            isMeteredNetwork = vpnSt.isMeteredNetwork,
+            recentlyProblematicIds = problematicIds,
+        )
+    }
+
+    fun refreshPersistenceSnapshotAsync() {
+        viewModelScope.launch {
+            val sinceMs = if (state.historyDateDays > 0) {
+                System.currentTimeMillis() - state.historyDateDays.toLong() * 86_400_000L
+            } else 0L
+            val hist = withContext(Dispatchers.IO) {
+                clientDb.querySessionHistory(
+                    serverQuery = state.historySearchQuery,
+                    sinceMs = sinceMs,
+                    sort = state.historySortOrder,
+                    limit = state.historyPageLimit,
+                )
+            }
+            val total = withContext(Dispatchers.IO) {
+                clientDb.countSessionHistory(state.historySearchQuery, sinceMs)
+            }
+            val favs = withContext(Dispatchers.IO) {
+                clientDb.listFavorites(state.favoriteGroupFilter, state.favoriteSortOrder)
+            }
+            val groups = withContext(Dispatchers.IO) { clientDb.listFavoriteGroups() }
+            val tel = withContext(Dispatchers.IO) { clientDb.getAllServerTelemetryMap() }
+            val prot = withContext(Dispatchers.IO) { clientDb.recentProtectionEvents() }
+            state = state.copy(
+                sqliteHistory = hist,
+                sqliteHistoryTotal = total,
+                favoritesList = favs,
+                favoriteGroups = groups,
+                telemetryById = tel,
+                protectionEvents = prot,
+                smartDecision = computeSmartDecisionFor(state.servers),
+            )
+        }
+    }
+
+    fun setSmartAutoSelect(enabled: Boolean) {
+        prefs.smartAutoSelect = enabled
+        val decision = computeSmartDecisionFor(state.servers)
+        val sel = if (enabled && !VpnStateManager.status.value.isActive && decision.primary != null) {
+            prefs.selectedCfg = decision.primary.cfg
+            prefs.selectedLabel = decision.primary.label
+            decision.primary.cfg
+        } else {
+            state.selectedCfg
+        }
+        state = state.copy(smartAutoSelect = enabled, smartDecision = decision, selectedCfg = sel)
+    }
+
+    fun setPreferredCountry(countryCode: String) {
+        prefs.preferredCountry = countryCode
+        val decision = computeSmartDecisionFor(state.servers)
+        state = state.copy(preferredCountry = prefs.preferredCountry, smartDecision = decision)
+    }
+
+    fun updateFavoriteDetails(serverId: String, customName: String, groupName: String) {
+        clientDb.upsertFavorite(
+            cfgOrServerId = serverId,
+            customName = customName,
+            groupName = groupName,
+        )
+        val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
+        state = state.copy(
+            servers = rebuilt,
+            favoritesList = clientDb.listFavorites(state.favoriteGroupFilter, state.favoriteSortOrder),
+            favoriteGroups = clientDb.listFavoriteGroups(),
+            info = "تم تحديث السيرفر المفضّل",
+        )
+    }
+
+    fun removeFavoriteById(serverId: String) {
+        clientDb.removeFavorite(serverId)
+        val cleaned = prefs.favorites.filterNot { Converters.stableServerId(it) == serverId }.toSet()
+        prefs.favorites = cleaned
+        val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
+        state = state.copy(
+            servers = rebuilt,
+            favoritesList = clientDb.listFavorites(state.favoriteGroupFilter, state.favoriteSortOrder),
+            favoriteGroups = clientDb.listFavoriteGroups(),
+            info = "تمت إزالة السيرفر من المفضّلة",
+        )
+    }
+
+    fun setFavoriteGroupFilter(group: String) {
+        state = state.copy(
+            favoriteGroupFilter = group,
+            favoritesList = clientDb.listFavorites(group, state.favoriteSortOrder),
+        )
+    }
+
+    fun setFavoriteSortOrder(order: FavoriteSortOrder) {
+        state = state.copy(
+            favoriteSortOrder = order,
+            favoritesList = clientDb.listFavorites(state.favoriteGroupFilter, order),
+        )
+    }
+
+    fun setHistorySearchQuery(query: String) {
+        state = state.copy(historySearchQuery = query, historyPageLimit = 30)
+        refreshPersistenceSnapshotAsync()
+    }
+
+    fun setHistoryDateDays(days: Int) {
+        state = state.copy(historyDateDays = days, historyPageLimit = 30)
+        refreshPersistenceSnapshotAsync()
+    }
+
+    fun setHistorySortOrder(order: HistorySortOrder) {
+        state = state.copy(historySortOrder = order)
+        refreshPersistenceSnapshotAsync()
+    }
+
+    fun setHistoryRetentionDays(days: Int) {
+        prefs.historyRetentionDays = days
+        clientDb.pruneExpiredHistory(prefs.historyRetentionDays)
+        state = state.copy(historyRetentionDays = prefs.historyRetentionDays)
+        refreshPersistenceSnapshotAsync()
+    }
+
+    fun loadMoreHistory() {
+        state = state.copy(historyPageLimit = state.historyPageLimit + 30)
+        refreshPersistenceSnapshotAsync()
+    }
+
+    fun deleteHistoryRecord(id: Long) {
+        clientDb.deleteHistoryEntry(id)
+        refreshPersistenceSnapshotAsync()
     }
 
     fun removeCustomServer(cfg: String) {
@@ -629,6 +879,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 servers = rebuilt,
                 availableCountries = countries,
                 selectedCfg = sel,
+                smartDecision = computeSmartDecisionFor(rebuilt),
                 meta = metaObj,
                 lastUpdatedLabel = updatedLbl,
                 allFile = allFile,
@@ -759,12 +1010,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 detectedDead.forEach { deadCfg ->
                     failedConfigs.add(deadCfg)
                     VpnStateManager.markServerDropped(deadCfg)
+                    runCatching {
+                        clientDb.recordServerProbeOrSessionOutcome(
+                            cfgOrServerId = deadCfg,
+                            ok = false,
+                            failureCategory = "BATCH_TEST_FAIL",
+                        )
+                    }
                 }
                 results.forEach {
                     if (it.ok) {
                         val clean = Converters.cleanUri(it.cfg)
                         failedConfigs.remove(clean)
                         VpnStateManager.markServerHealthy(clean)
+                        runCatching {
+                            clientDb.recordServerProbeOrSessionOutcome(
+                                cfgOrServerId = clean,
+                                ok = true,
+                                latencyMs = it.latencyMs,
+                                downloadKbps = it.speedKbps,
+                            )
+                        }
                     }
                 }
 
@@ -826,6 +1092,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     servers = rebuilt,
                     availableCountries = countries,
                     selectedCfg = autoPicked,
+                    smartDecision = computeSmartDecisionFor(rebuilt),
+                    telemetryById = clientDb.getAllServerTelemetryMap(),
                     progress = null,
                     allFile = allFile ?: state.allFile,
                     bestFile = bestPair?.first ?: state.bestFile,
@@ -1251,6 +1519,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 },
             )
         }
+    }
+
+    fun evaluateSecurityReport(vpnStatus: VpnStatus): SecurityStatusReport {
+        val activeClean = vpnStatus.activeCfg?.let { Converters.cleanUri(it) }
+        val isVip = activeClean != null && licenseGuard.getAuthorizedVipNodes().any {
+            Converters.cleanUri(it.uri) == activeClean
+        }
+        val netSnap = NetworkAwarenessMonitor(getApplication()).readCurrentPhysicalNetwork()
+        val diagLeak = state.netDiagReport?.ipLeakDetected == true
+        return ConnectionSecurityClassifier.classify(
+            vpnStatus = vpnStatus,
+            activeCfg = activeClean,
+            isVipAttested = isVip,
+            networkSnapshot = netSnap,
+            configuredDns = prefs.dnsServer,
+            useDoh = prefs.dnsDoh,
+            enableIpv6 = prefs.enableIpv6,
+            tunCapturesIpv6Route = true,
+            dnsBypassObserved = diagLeak,
+            ipv6BypassObserved = false,
+        )
     }
 
     fun settings() = prefs
