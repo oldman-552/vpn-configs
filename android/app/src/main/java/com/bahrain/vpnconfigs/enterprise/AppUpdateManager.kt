@@ -1,19 +1,17 @@
 // =====================================================================
-// AppUpdateManager.kt — نظام تحديثات APK الموقّعة الذكي حسب معمارية المعالج (v3.1).
-// يختار تلقائيًا حزمة arm64-v8a الرشيقة لهواتف ARM64 (أو x86_64 أو الشاملة)،
-// يميز التحديث الإلزامي عن الاختياري، ويتحقق من بصمة SHA-256 وشهادة التوقيع
-// قبل فتح مثبّت أندرويد الرسمي دون أي تثبيت صامت في الخلفية.
+// AppUpdateManager.kt — نظام إشعارات التحديث الذكي المتوافق مع Play Protect (v3.5).
+// يختار تلقائيًا حزمة المعالج المناسبة (arm64-v8a / x86_64 / universal)،
+// يتحقق من أمان رابط HTTPS الرسمي، ويعرض/ينسخ بصمة SHA-256، ثم يفوّض التحميل
+// لمتصفح النظام الرسمي بدل تنزيل أو تثبيت ملفات APK داخليًا (Zero Dropper Behavior).
 // =====================================================================
 package com.bahrain.vpnconfigs.enterprise
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
-import androidx.core.content.FileProvider
-import com.bahrain.vpnconfigs.data.Repo
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -36,14 +34,14 @@ object AppUpdateManager {
     fun currentVersionCode(ctx: Context): Int = runCatching {
         val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) pi.longVersionCode.toInt() else @Suppress("DEPRECATION") pi.versionCode
-    }.getOrDefault(9)
+    }.getOrDefault(13)
 
     fun currentVersionName(ctx: Context): String = runCatching {
-        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "3.1"
-    }.getOrDefault("3.1")
+        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "3.5"
+    }.getOrDefault("3.5")
 
     /**
-     * يحسم الحزمة الأنسب لمعمارية معالج الهاتف (مثل arm64-v8a لتوفير ~35% من الحجم)
+     * يحسم الحزمة الأنسب لمعمارية معالج الهاتف (مثل arm64-v8a لتوفير ~50% من الحجم)
      * مع التراجع الآمن إلى النسخة الشاملة universal أو الرابط الافتراضي.
      */
     fun resolveBestAbiAsset(
@@ -119,56 +117,62 @@ object AppUpdateManager {
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private fun verifyArchivePackageAndSignature(ctx: Context, apkFile: File, expectedCertSha256: String): Boolean {
-        return runCatching {
-            val flags = PackageManager.GET_SIGNING_CERTIFICATES
-            val archiveInfo = ctx.packageManager.getPackageArchiveInfo(apkFile.absolutePath, flags) ?: return true
-            if (archiveInfo.packageName != ctx.packageName) return false
-            if (expectedCertSha256.isNotBlank()) {
-                val signers = archiveInfo.signingInfo?.apkContentsSigners ?: return false
-                val matches = signers.any { sig ->
-                    val dig = MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
-                        .joinToString("") { "%02x".format(it) }
-                    dig.equals(expectedCertSha256, ignoreCase = true)
-                }
-                if (!matches) return false
-            }
-            true
-        }.getOrDefault(true)
+    /**
+     * يتحقّق بصرامة من أن رابط التحديث يعتمد HTTPS حصريًا وخالٍ من الشبكات الخاصة أو المحلية.
+     */
+    fun validateSafeUpdateHttpsUrl(rawUrl: String): Uri? {
+        val trimmed = rawUrl.trim()
+        if (trimmed.isEmpty() || trimmed.length > 2048) return null
+        val uri = runCatching { Uri.parse(trimmed) }.getOrNull() ?: return null
+        val scheme = uri.scheme?.lowercase() ?: return null
+        if (scheme != "https") return null
+        if (!uri.userInfo.isNullOrEmpty()) return null
+        val host = uri.host?.trim()?.removeSurrounding("[", "]")?.trimEnd('.')?.lowercase() ?: return null
+        if (host.isEmpty() || !host.contains('.')) return null
+        if (host == "localhost" || host == "0.0.0.0" || host == "::1" ||
+            host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".localhost")
+        ) {
+            return null
+        }
+        if (host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.") ||
+            host.startsWith("169.254.") || host.startsWith("0.") || host.startsWith("fe80:")
+        ) {
+            return null
+        }
+        if (host.startsWith("172.")) {
+            val second = host.removePrefix("172.").substringBefore('.').toIntOrNull()
+            if (second != null && second in 16..31) return null
+        }
+        return uri
     }
 
-    suspend fun downloadAndVerifyUpdate(ctx: Context, repo: Repo, info: AppUpdateInfo): Result<File> =
-        withContext(Dispatchers.IO) {
-            val outDir = File(ctx.filesDir, "updates").apply { mkdirs() }
-            val target = File(outDir, "bahrain-vpn-update-${info.versionCode}-${info.selectedAbi}.apk")
-            val ok = repo.downloadExternalApkBounded(info.apkUrl, target)
-            if (!ok || !target.exists() || target.length() < 1024L) {
-                target.delete()
-                return@withContext Result.failure(IllegalStateException("تعذّر تنزيل حزمة التحديث بأمان"))
-            }
+    /**
+     * يبني نيّة فتح المتصفح الآمن الرسمي للنظام (بدون أي نوع MIME لتثبيت الحزم داخليًا،
+     * لضمان عدم مطابقة سلوك المحمّلات/Dropper في Google Play Protect).
+     */
+    fun buildSafeBrowserUpdateIntent(info: AppUpdateInfo): Result<Intent> {
+        val safeUri = validateSafeUpdateHttpsUrl(info.apkUrl)
+            ?: return Result.failure(SecurityException("رابط التحديث غير آمن — يُسمح بروابط HTTPS الرسمية فقط"))
+        val intent = Intent(Intent.ACTION_VIEW, safeUri).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return Result.success(intent)
+    }
+
+    fun openVerifiedUpdateInSystemBrowser(ctx: Context, info: AppUpdateInfo): Result<Uri> {
+        val safeUri = validateSafeUpdateHttpsUrl(info.apkUrl)
+            ?: return Result.failure(SecurityException("رابط التحديث غير آمن — يُسمح بروابط HTTPS الرسمية فقط"))
+        return runCatching {
             if (info.apkSha256.length == 64) {
-                val actualSha = computeFileSha256(target)
-                if (!actualSha.equals(info.apkSha256, ignoreCase = true)) {
-                    target.delete()
-                    return@withContext Result.failure(SecurityException("فشل التحقق من بصمة الأمان SHA-256 لملف التحديث"))
+                runCatching {
+                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                    cm?.setPrimaryClip(ClipData.newPlainText("bahrain-vpn SHA-256", info.apkSha256))
                 }
             }
-            if (!verifyArchivePackageAndSignature(ctx, target, info.signingCertSha256)) {
-                target.delete()
-                return@withContext Result.failure(SecurityException("شهادة توقيع التحديث غير متطابقة مع التطبيق"))
-            }
-            Result.success(target)
-        }
-
-    fun launchOfficialSystemInstaller(ctx: Context, verifiedApk: File): Boolean {
-        return runCatching {
-            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", verifiedApk)
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+            val intent = buildSafeBrowserUpdateIntent(info).getOrThrow()
             ctx.startActivity(intent)
-            true
-        }.getOrDefault(false)
+            safeUri
+        }
     }
 }

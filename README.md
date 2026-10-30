@@ -1,174 +1,176 @@
-# bahrain-vpn — منصة ULTIMATE VPN ENTERPRISE v3.2 المتكاملة (الأمان الذكي، منع التسرب، مفتاح الإيقاف، وواجهة API v1 — 100% على GitHub)
+# bahrain-vpn — منصة ULTIMATE VPN ENTERPRISE `v3.5` المتكاملة
 
-منظومة VPN مؤسسية وسحابية متكاملة تعمل آليًا بالكامل **100% داخل بيئة GitHub دون أي خوادم خارجية (Zero VPS / Zero Third-Party Cloud)** تحت الهوية الموحّدة **`bahrain-vpn`**:
+[![Release](https://img.shields.io/badge/Release-v3.5%20(Latest)-success?style=for-the-badge)](https://github.com/oldman-552/vpn-configs/releases/tag/v3.5)
+[![Architecture](https://img.shields.io/badge/Architecture-Central%20Top%20500%20%2B%20Local%20Top%2050-blue?style=for-the-badge)](docs/ANDROID_ARCHITECTURE.md)
+[![Play Protect](https://img.shields.io/badge/Play%20Protect-Zero%20Dropper%20%2B%20RSA--4096%20v2%2Fv3-brightgreen?style=for-the-badge)](SECURITY.md)
+[![Infrastructure](https://img.shields.io/badge/100%25%20GitHub-Zero%20External%20VPS-24292f?style=for-the-badge)](DEPLOYMENT.md)
+
+منظومة VPN مؤسسية وسحابية متكاملة تعمل آليًا بالكامل **100% داخل بيئة GitHub دون أي خوادم خارجية (`Zero VPS / Zero Third-Party Cloud`)** تحت الهوية الموحّدة **`bahrain-vpn`** والإصدار **`v3.5`**:
 
 ```
-┌───────────────────────────────────────────────────────────────────────────────────────────────┐
-│                         منظومة ULTIMATE VPN ENTERPRISE v3.2 (Pure-GitHub)                     │
-├───────────────────────────────────────────────┬───────────────────────────────────────────────┤
-│ 1) الذكاء الأمني والفحص السحابي (كل 30 د)      │ 2) تطبيق المشترك للأندرويد (User APK v3.2)    │
-│ • 277 قناة تلغرام + 26 تغذية GitHub منتقاة    │ • حجم رشيق عبر R8 (27.63 MB لمعالجات ARM64)   │
-│ • فصل الأمان والخصوصية عن السرعة + حجر صحي    │ • منع تسرب DNS داخل النفق + حجب تسرب IPv6 ::/0│
-│ • 5 ملفات ترتيب ذكية + قوائم privacy_aware    │ • مفتاح إيقاف صارم (Fail-Closed Kill Switch)  │
-│ • عزل تلقائي للمصادر التالفة أو المشبوهة       │ • تبديل استباقي (OFF / SMART / AGGRESSIVE)    │
-│ • واجهة إحصاءات عامة معماة (/api/v1/* + OAS3) │ • 8 حالات نفق موثّقة + فحص تلقائي وترتيب سرعة │
-│   + نشر ذرّي محمي (LKG) وحزمة bundle موقّعة    │   + عقد VIP 💎 مشفّرة + تجربة 48 ساعة محمية   │
-├───────────────────────────────────────────────┼───────────────────────────────────────────────┤
-│ 3) تطبيق المشرف المستقل (Admin APK v3.2)      │ 4) لوحة الإدارة + شاشة المراقبة الحيّة (Web)  │
-│ • حزمة مستقلة رشيقة (2.19 MB فقط عبر R8)      │ • 17 صفحة إدارة مشفّرة (index.html على Pages) │
-│ • توثيق ثنائي TOTP 2FA + خزنة AES-256-GCM     │ • لوحة مراقبة عامة حيّة (monitor.html AR/EN)  │
-│ • إدارة المشتركين والأجهزة وعقد VIP المشفّرة   │ • تشفير متصفح أصيل WebCrypto بدون خادم وسيط   │
-│ • توقيع ECDSA P-256 ومزامنة عبر api.github    │ • مخططات تاريخية وتقارير CSV/Excel وPDF       │
-└───────────────────────────────────────────────┴───────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                          منظومة ULTIMATE VPN ENTERPRISE v3.5 (Pure-GitHub)                       │
+├────────────────────────────────────────────────┬─────────────────────────────────────────────────┤
+│ 1) قاعدة بيانات GitHub المركزية (Top 500)      │ 2) تطبيق المشترك الذكي للأندرويد (User APK v3.5)│
+│ • 277 قناة تلغرام + 26 تغذية GitHub منتقاة     │ • حجم رشيق عبر R8 (~28 MB لمعالجات ARM64)       │
+│ • فحص بنيوي + إزالة تكرار 5 طبقات + حجر صحي    │ • الفاحص التسلسلي للنفق الحقيقي (Concurrency=1) │
+│ • اختيار حتى 500 مرشح مؤهّل فقط بدون أي حشو    │ • اختيار Top 50 + احتياطي محليًا لكل شبكة       │
+│ • نشر top500.{manifest,delta,json,txt} بـ SHA256│ • عزل كامل بين Wi-Fi وبيانات الجوال Mobile Data │
+│ • قاعدة ذكاء تاريخي SQLite (24h/7d/30d/90d)     │ • متوافق مع Play Protect (Zero Dropper + v2/v3) │
+│   + واجهة إحصاءات عامة (/api/v1/* + OAS 3.1)   │   + منع تسرب DNS/IPv6 + Kill Switch + عقد VIP💎 │
+├────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ 3) تطبيق المشرف المستقل (Admin APK v3.5)       │ 4) لوحة الإدارة + شاشة المراقبة الحيّة (Web v3.5)│
+│ • حزمة مستقلة رشيقة (~2.19 MB فقط عبر R8)      │ • 17 صفحة إدارة مشفّرة (index.html على Pages)   │
+│ • موقّعة بشهادة إصدار RSA-4096 APK v2/v3       │ • لوحة مراقبة حيّة عامة (monitor.html AR/EN)    │
+│ • توثيق ثنائي TOTP 2FA + خزنة AES-256-GCM      │ • مؤشر Central Candidate Pool (Top 500) الحي    │
+│ • إدارة المشتركين والأجهزة وعقد VIP المشفّرة    │ • تشفير متصفح أصيل WebCrypto بدون خادم وسيط     │
+│ • توقيع ECDSA P-256 ومزامنة عبر api.github     │ • مخططات تاريخية 24h/7d/30d/90d وتقارير شاملة   │
+└────────────────────────────────────────────────┴─────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 1) التحميل المباشر للإصدار الرسمي `v3.2` (`Latest`) وبصمات `SHA-256`
+## 1) التحميل المباشر للإصدار الرسمي `v3.5` (`Latest`) والتحقق الأمني
 
-جميع الحزم مبنية وموقّعة آليًا عبر مسار `.github/workflows/apk.yml` مع تقليص الحجم عبر **`R8 + Resource Shrinking`** واجتياز اختبارات `Robolectric` والتدقيق الأمني للبايت كود (`Zero Secret / Zero Source Leaks`):
+جميع حزم الإصدار **`v3.5`** مبنية وموقّعة آليًا عبر مسار `.github/workflows/apk.yml` بشهادة إصدار **`RSA-4096` (`APK Signature Scheme v2 + v3` — بدون شهادة `Android Debug`)**، ومحصّنة للتوافق مع **Google Play Protect** (خالٍ تمامًا من صلاحية `REQUEST_INSTALL_PACKAGES` وسلوك `Dropper`)، مع تقليص الحجم عبر **`R8 + Resource Shrinking`** واجتياز جميع اختبارات `Robolectric` والتدقيق الأمني للبايت كود:
 
-- **صفحة الإصدار الرسمي:** [**GitHub Releases — `v3.2` (Latest)**](https://github.com/oldman-552/vpn-configs/releases/tag/v3.2)
+- **صفحة الإصدار الرسمي الموقّع:** [**GitHub Releases — `bahrain-vpn v3.5` (`Latest`)**](https://github.com/oldman-552/vpn-configs/releases/tag/v3.5)
 
-| الحزمة | الاستخدام الموصى به | الحجم | بصمة التحقق `SHA-256` | رابط التحميل المباشر |
-|---|---|---:|---|---|
-| **`app-arm64-v8a-release.apk`** | **تطبيق المشترك** لجميع هواتف أندرويد الحديثة (`ARM64` — `versionCode = 10`) | **`27.63 MB`** | `13dd72d0182de10f5a5b9d75174d3626aae10759f00e79ae89efa8b0da9dfdee` | [تحميل ARM64 v3.2](https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-arm64-v8a-release.apk) |
-| **`app-x86_64-release.apk`** | **تطبيق المشترك** لأجهزة/محاكيات `x86_64` (`versionCode = 10`) | **`29.44 MB`** | `11b8f1828883b1206253ddc619f4c2baa9f85a857591f767e0516a58c7353e5c` | [تحميل x86_64 v3.2](https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-x86_64-release.apk) |
-| **`app-release.apk`** | **تطبيق المشترك الشامل** (`Universal`: يضم كل المعماريات) | **`54.27 MB`** | `ca21059896f59136334e47c42fec34dc1b5105d5db63c03b56062fd57aff9da9` | [تحميل Universal v3.2](https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-release.apk) |
-| **`app-admin-release.apk`** | **تطبيق المشرف المستقل** (`com.bahrain.vpnadmin` — `versionCode = 3`) | **`2.19 MB`** | `f275b145cd1e82626407fe895d68a8cada44cdaea43ec857759a6d6cb8f10a29` | [تحميل Admin v3.2](https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-admin-release.apk) |
-| **`SHA256SUMS.txt`** | ملف البصمات الرقمية المجمّع لجميع الحزم الموقّعة | `443 B` | `f17b9fdc7e8a0a7d23ebb763ac22ba96bfef9ecd08b81847b7ada893803df2c3` | [تحميل SHA256SUMS](https://github.com/oldman-552/vpn-configs/releases/download/v3.2/SHA256SUMS.txt) |
-
----
-
-## 2) أبرز القدرات والتطويرات الهندسية في المنصة (`v2.2` ← `v3.2`)
-
-### أ) تطبيق المشترك للأندرويد (`User APK v3.2` — `com.bahrain.vpnconfigs`)
-1. **منع تسرب `DNS` و`IPv6` وشفافية `WebRTC` (`LeakProtectionEngine` + `SingBox`):**
-   - فصل كامل داخل نواة `sing-box` بين محلّل التمهيد (`bootstrap` لحل اسم نطاق سيرفر البروكسي فقط) ومحلّل النفق المشفّر (`tunnel-dns` مع `"detour": "proxy"`) بحيث تمر 100% من استعلامات DNS الخاصة بالتطبيقات داخل النفق مع تطهير عناوين DNS المحلية/الخاصة (`192.168/10/127`).
-   - التقاط المسار `::/0` (`fc00::1/128`) دائمًا داخل واجهة `tun0` حتى عند إيقاف توجيه IPv6 (مع فرض استراتيجية `ipv4_only`) لمنع أي تسرب لحزم IPv6 عبر شبكات الجيل الخامس والـ Wi-Fi المزدوجة (`Dual-Stack`).
-   - تشخيص صادق لمخاطر `WebRTC` يرصُد استثناء المتصفحات في `Split Tunneling` ويقدّم إرشادات حماية المتصفح دون ادعاءات مضللة.
-2. **مفتاح الإيقاف الصارم (`Fail-Closed Kill Switch` + `BootRestoreReceiver`):**
-   - قفل واجهة `tun0` **قبل** بدء فحص السيرفر لمنع أي نافذة تسرب أثناء الربط، والاحتفاظ بالحجب الفعّال (`PROTECTION_ACTIVE`) عند سقوط جميع السيرفرات مع محاولة استعادة هادئة كل `15s`، واستعادة الحماية بعد إعادة التشغيل (`BOOT_COMPLETED`)، والتنقل السلس بين `Wi-Fi` والجيل الخامس عبر `NetworkCallback` (`RECONNECTING`)، ورصد تفعيل `OS Lockdown` في نظام أندرويد.
-3. **التبديل الاستباقي الذكي ومراقبة التدهور (`SmartFailoverEngine v3.2`):**
-   - ثلاث سياسات قابلة للاختيار: **`OFF`** (يدوي)، **`SMART`** (تبديل عند الانقطاع أو التدهور الشديد)، و**`AGGRESSIVE`** (انتقال استباقي لسيرفر أسرع بفارق جوهري).
-   - رصد التدهور قبل الانقطاع الكامل (`CONNECTION_DEGRADED` من زمن الاستجابة، التذبذب `Jitter`، وفقدان الحزم)، منع التذبذب والحلقات (`Hysteresis 25s` + `Cooldown 120s`)، فحص مسبق للبدائل على المنافذ `20901..20904` دون قطع النفق النشط، وجدولة مراقبة تكيّفية موفّرة للبطارية (`3.5s .. 24s`).
-4. **فصل الأمان والخصوصية عن السرعة (`SecurityEvaluator`) و6 أوضاع ترتيب ذكية (`ServerRanker`):**
-   - تقييم مستقل لأمان النقل (`Verified / Partial / Unknown / Failed`) وخصوصية المشغّل (`Verified` حصريًا لعُقد `VIP 💎` الموثّقة، و`Unverified` للعُقد العامة النظيفة، و`High Risk` لـ `allowInsecure=1`).
-   - فحص تلقائي فوري للسرعة عند كل تحديث وترتيب افتراضي بوضع **«الأسرع في التنزيل» (`FASTEST_DOWNLOAD`)** إلى جانب **الأقل تأخيرًا**، **الأكثر استقرارًا**، **الأفضل إجمالًا**، **الأعلى أمانًا وخصوصية (`PRIVACY_AWARE`)**، و**الأحدث اختبارًا** دون قطع جلسة الـ VPN النشطة.
-   - عرض السرعة الحقيقية المقاسة على الهاتف فقط بـ 5 ألوان دقيقة (**رمادي** غير مفحوص، **أخضر** سريع، **برتقالي** متوسط، **بنفسجي** بطيء، **أحمر** للمنقطع فقط)، وحالات اتصال ثمان موثّقة لا تعلن `CONNECTED` إلا بعد نجاح مرور البيانات فعليًا عبر النفق.
-5. **سيرفرات `VIP 💎` المشفّرة، التراخيص صفرية المعرفة، والتحديث الذكي (`Split ABI`):**
-   - تشفير عُقد `VIP 💎` بمعيار `AES-256-GCM` (`AAD = bahrain-vpn-vip-nodes-v31`) للمشتركين الفعّالين فقط مع منع نسخ روابطها أو تصديرها، وتجربة مجانية `48 ساعة` محمية ضد التلاعب بساعة الجهاز (`EnterpriseClock`)، ومحدّث تلقائي يختار حزمة `arm64-v8a` الرشيقة ويتحقق من بصمة `SHA-256`، ونافذة إعلانات دوّارة من 5 صور (`promo/ads.json`).
+| الحزمة (`v3.5`) | الاستخدام الموصى به | معرّف النسخة | رابط التحميل المباشر (`HTTPS`) |
+|---|---|---|---|
+| **`app-arm64-v8a-release.apk`** | **تطبيق المشترك** لجميع هواتف أندرويد الحديثة (`ARM64`) | `versionCode = 13` (`v3.5`) | [تحميل ARM64 v3.5](https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-arm64-v8a-release.apk) |
+| **`app-x86_64-release.apk`** | **تطبيق المشترك** لأجهزة ومحاكيات `x86_64` | `versionCode = 13` (`v3.5`) | [تحميل x86_64 v3.5](https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-x86_64-release.apk) |
+| **`app-release.apk`** | **تطبيق المشترك الشامل** (`Universal`: يضم كل المعماريات) | `versionCode = 13` (`v3.5`) | [تحميل Universal v3.5](https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-release.apk) |
+| **`app-admin-release.apk`** | **تطبيق المشرف المستقل** (`com.bahrain.vpnadmin`) | `versionCode = 6` (`v3.5`) | [تحميل Admin v3.5](https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-admin-release.apk) |
+| **`SHA256SUMS.txt`** | ملف البصمات التشفيرية المجمّع (`SHA-256`) لجميع الحزم الموقّعة في الإصدار `v3.5` | `v3.5` | [تحميل SHA256SUMS.txt](https://github.com/oldman-552/vpn-configs/releases/download/v3.5/SHA256SUMS.txt) |
 
 ---
 
-### ب) المنصة المؤسسية، لوحة الإدارة (17 صفحة)، شاشة المراقبة الحيّة، وواجهة `API v1` (`Enterprise v3.2`)
-1. **محرك الذكاء الأمني والحجر الصحي السحابي (`security_intelligence.py` + `collector.py`):**
-   - حجر صحي مزدوج (قبل الفحص وبعد الفحص `quarantined.json`) يعزل التشفير المكسور، المنافذ المشبوهة (`22`, `445`, `3389`...)، والتحويلات المشبوهة، مع عزل تلقائي للمصادر التالفة (`source_health.json`) وتتبع تغيّرات المحتوى ببصمة `SHA-256` و`ETag/304`.
-2. **واجهة الإحصاءات العامة القرائية (`public_api.py` — `/api/v1/*` + `OpenAPI 3.1.0`):**
-   - نقاط نهاية ثابتة ومحدّثة كل 30 دقيقة على فرع `@data` (`/api/v1/{health,statistics,servers,countries,protocols,sources,openapi}.json`) + خادم HTTP محلي يدعم الترقيم، الفلترة، `ETag/304`، وتحديد المعدّل (`429 Token Bucket`) مع تعمية كاملة للروابط الخام وعناوين IP.
-3. **لوحة تحكم الويب المعيارية (17 صفحة) + لوحة المراقبة العامة (`web-admin/` على `GitHub Pages`):**
-   - **`index.html`**: 17 صفحة إدارة مشفّرة عبر **WebCrypto** مباشرة مع `api.github.com` لإدارة المشتركين والباقات والأجهزة وعقد `VIP 💎` والتقارير (`CSV/Excel` و`PDF`).
-   - **`monitor.html`**: لوحة مراقبة حيّة عامة ثنائية اللغة (عربي `RTL` / إنجليزي `LTR`) بالوضعين الداكن والفاتح مع تخزين مؤقت `60s` ومخططات اتجاهات تاريخية `SVG` وصفر أسرار.
-4. **قاعدة البيانات المؤسسية من 24 جدولًا وتطبيق المشرف المستقل (`Admin APK v3.2` — `2.19 MB`):**
-   - خزنة SQLite علائقية (`enterprise/migrations/001..003`) بحسابات `Argon2id`، توثيق ثنائي `TOTP 2FA`، سجل تدقيق متسلسل ببصمات `SHA-256`، نسخ احتياطي مشفّر (`AES-256-GCM`)، وتطبيق مشرف مستقل يوقّع وينشر `enterprise/bundle.json` من الهاتف مباشرة.
+## 2) المعمارية الهندسية والأمنية في الإصدار `v3.5`
+
+### أ) الفصل الصارم بين GitHub (`Top 500`) وتطبيق Android (`Personalized Top 50`) — `v3.4 / v3.5`
+1. **مسؤولية GitHub (قاعدة المرشّحات المركزية — `central_top500.py`):**
+   - `Collect → Validate → Normalize → Deduplicate → Assign server_id & config_fingerprint → Preliminary Check → Rank Centrally → Publish up to 500`
+   - ينشر **بحد أقصى 500 سيرفر مؤهّل فقط** في `top500.json` و`top500.txt` و`top500.manifest.json` و`top500.delta.json` دون أي حشو أو اختلاق، ويصرّح رسميًا بـ `"personalized_top50_authority": "ANDROID_LOCAL_ONLY"` و`"trust_posture": "UNTRUSTED_PUBLIC_SERVER"`.
+2. **مسؤولية Android الحصرية (الذكاء المحلي المخصّص — `LocalServerIntelligence.kt` + `ClientDatabase.kt` v3):**
+   - **تزامن محصّن (`Repo.syncTop500Dataset`):** يدعم `ETag / 304 Not Modified`، التحديث التفاضلي `top500.delta.json`، التحقق التشفيري المزدوج `SHA-256`، منع التراجع `Rollback Protection`، والاستعادة التلقائية لآخر نسخة صالحة `top500.last_valid.json`.
+   - **الفحص التسلسلي عبر النفق الحقيقي (`SequentialTunnelScanner`, `concurrency = 1`):** يختبر نفقًا واحدًا فقط في كل لحظة عبر `Mutex` تسلسلي، ويقيس زمن التأسيس `establishMs`، التأخير الفعلي `latencyMs`، التذبذب `jitterMs`، فقدان الحزم `packetLossPct`، سرعة التنزيل `throughputKbps`، والاستقرار `stabilityScore`.
+   - **وضعان ذكيان للفحص:**
+     - **فحص سريع (`Quick Scan`):** يختبر `TOP_50` الناجحة مؤخرًا بالترتيب (`#1, #2...`) ثم الاحتياطي عند الحاجة، ويتوقف مبكرًا فور توفر عدد كافٍ من السيرفرات المؤهّلة توفيرًا للبطارية وبيانات الجوال.
+     - **فحص شامل (`Full Scan`):** يقيّم كامل حزمة الـ `Top 500` بالتسلسل لاكتشاف السيرفرات الأسرع وتحديث `TOP_50` ومجمّع `BACKUP_POOL`.
+   - **عزل تام حسب الشبكة (`WIFI` مقابل `MOBILE_DATA`):** ترتيب `TOP_50` ومجمّع الاحتياطي والسجل التاريخي التراكمي (`Append-Only`) منفصلة كليًا لكل نوع شبكة.
+
+### ب) التوافق الأمني مع Google Play Protect والتوقيع الرسمي (`v3.5`)
+1. **إزالة بصمة المحمّلات (`Zero Dropper Behavior`):**
+   - إزالة صلاحية `android.permission.REQUEST_INSTALL_PACKAGES` من `AndroidManifest.xml` نهائيًا، وإزالة أي تنزيل داخلي لملفات `.apk` أو استدعاء `"application/vnd.android.package-archive"` من البايت كود.
+   - يفوّض `AppUpdateManager` (`v3.5`) تحميل الحزمة المناسبة لمعمارية المعالج (`arm64-v8a` / `x86_64` / `universal`) إلى المتصفح الرسمي للنظام حصريًا عبر روابط `HTTPS` الموثّقة مع نسخ بصمة `SHA-256` للحافظة.
+2. **توقيع الإصدار الرسمي (`RSA-4096 PKCS12` + `APK Signature Scheme v2 / v3`):**
+   - يوقّع `.github/workflows/apk.yml` حزم المشترك والمشرف بشهادة إصدار `RSA-4096` تدعم مخططات التوقيع `v1 + v2 + v3` ويتحقق آليًا عبر `apksigner` من غياب شهادة `CN=Android Debug` ومن غياب `REQUEST_INSTALL_PACKAGES`.
+   - يدعم ربط شهادة إنتاج ثابتة خاصة بك عبر أسرار المستودع (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`) لتراكم سمعة التوقيع عبر الإصدارات المتتالية.
+
+### ج) منع تسرب `DNS/IPv6`، مفتاح الإيقاف الصارم، والذكاء التاريخي (`v3.2` ← `v3.5`)
+- **عزل `DNS` و`IPv6` (`LeakProtectionEngine`):** توجيه `tunnel-dns` إجباريًا داخل النفق (`detour="proxy"`) والتقاط المسار `::/0` دائمًا داخل واجهة `tun0`.
+- **مفتاح الإيقاف من مستويين (`KillSwitchController` + `ConnectionSecurityClassifier`):** فصل صريح وصادق بين حجب `tun0` على مستوى التطبيق (`PROTECTION_ACTIVE`) وبين قفل النظام الكامل (`OS Always-On VPN Lockdown` عبر `VpnService.isLockdownEnabled`) ضمن 9 حالات أمان موثّقة.
+- **قاعدة الذكاء التاريخي السحابية (`historical_db.py` — `state/history.sqlite3`):** تحليلات جاهزية وأداء نافذية (`24h/7d/30d/90d`) بأساس صريح (`OBSERVED / ESTIMATED / UNKNOWN`)، وعزل مشغّلي المصادر المستقلين، و10 فئات لتشخيص الأعطال.
+- **المنصة المؤسسية وعُقد `VIP 💎` المشفّرة (`AES-256-GCM` + `ECDSA P-256`):** 17 صفحة إدارة مشفّرة عبر `WebCrypto` (`web-admin/index.html`) + لوحة رصد حيّة عامة (`web-admin/monitor.html`) + تطبيق مشرف مستقل (`app-admin-release.apk`).
 
 ---
 
-## 3) القوائم السحابية المتخصّصة ونقاط نهاية `API v1` (تتحدّث آليًا كل 30 دقيقة على فرع `@data`)
+## 3) القوائم السحابية المتخصّصة وحزمة `Top 500` ونقاط `API v1` (تتحدّث كل 30 دقيقة على فرع `@data`)
 
-جميع قوائم الاشتراك متوافقة مع تطبيق `bahrain-vpn` وكذلك `v2rayNG` و`Hiddify` و`Streisand` و`Shadowrocket` و`NekoBox` (عُقد `VIP 💎` المشفّرة معزولة داخل `enterprise/bundle.json` ولا تُنشر في القوائم العامة):
-
-| الملف | الوصف | الرابط المباشر (`jsDelivr CDN`) |
+| الملف | الوصف الهندسي | الرابط المباشر (`jsDelivr CDN`) |
 |---|---|---|
+| **`top500.manifest.json`** | بيان الإصدار وبصمات `SHA-256` وحالة التحديث التفاضلي لحزمة المرشّحات المركزية (`v3.4+`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.manifest.json` |
+| **`top500.json`** | حزمة المرشّحات المركزية المؤهّلة (حتى 500 سيرفر بدون حشو — اختيار الـ `Top 50` محلي على أندرويد فقط) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.json` |
+| **`top500.delta.json`** | ملف التحديث التفاضلي بين آخر إصدارين لحزمة `Top 500` لتوفير استهلاك البيانات | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.delta.json` |
+| **`top500.txt`** | الروابط الخام المطبّعة لحزمة المرشّحات المركزية `Top 500` | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.txt` |
 | **`sub.txt`** | اشتراك `Base64` الشامل لجميع العُقد العامة الحيّة بوسم `bahrain-vpn` | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/sub.txt` |
 | **`best100.txt`** | أفضل 100 عقدة مرتّبة بالدرجة المركّبة مع تنويع المضيفين والشبكات الفرعية (`/24`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/best100.txt` |
 | **`privacy_aware.txt`** | الأعلى أمانًا في طبقة النقل (`Verified TLS/Reality` فقط وبدون `allowInsecure`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/privacy_aware.txt` |
 | **`reliable.txt`** / **`reliable_sub.txt`** | الأعلى استقرارًا واعتمادية عبر الجولات المتتالية (نصي + `Base64`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/reliable_sub.txt` |
 | **`low_latency.txt`** | الأقلّ زمن استجابة وتذبذبًا (`Median RTT + Jitter`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/low_latency.txt` |
 | **`high_throughput.txt`** | الأعلى سرعة تنزيل موثّقة عبر النفق الفعلي | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/high_throughput.txt` |
-| **`protocols/*.txt`** | قوائم مفصولة حسب البروتوكول (`vless`, `trojan`, `vmess`, `ss`, `hysteria2`, `tuic`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/protocols/vless.txt` |
 | **`alive.json`** | البيانات الكاملة للعُقد الحيّة مع التقييم الأمني متعدد الأبعاد والدولة والاستقرار | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/alive.json` |
-| **`api/v1/statistics.json`** | واجهة الإحصاءات العامة المعماة (`v1`) ومواصفة `api/v1/openapi.json` | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/api/v1/statistics.json` |
-| **`servers-current.json`** | الحالة الحالية لجميع السيرفرات بهويات `server_id` معماة خالية من بيانات الاعتماد (`v3.3`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-current.json` |
-| **`servers-history.json`** | السجل التاريخي للجاهزية (`24h/7d/30d/90d`) بأساس صريح (`OBSERVED/ESTIMATED/UNKNOWN`) وفئات الأعطال | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-history.json` |
+| **`servers-current.json`** | الحالة الحالية لجميع السيرفرات بهويات `server_id` معماة خالية من بيانات الاعتماد | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-current.json` |
+| **`servers-history.json`** | السجل التاريخي للجاهزية (`24h/7d/30d/90d`) بأساس صريح (`OBSERVED/ESTIMATED/UNKNOWN`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-history.json` |
 | **`servers-performance.json`** | تحليلات الأداء النافذية (`avg/median/p95` للتأخير، التذبذب، فقدان الحزم، والسرعة) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-performance.json` |
-| **`servers-statistics.json`** | الإحصاءات الشاملة والجاهزية وفئات الأعطال الـ 10 ومشغّلي المصادر المستقلين (`countries-statistics.json` / `sources-statistics.json`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-statistics.json` |
-| **`api/v1/health.json`** | نبضة صحة خط الأنابيب السحابي وحالة الحداثة | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/api/v1/health.json` |
-| **`quarantined.json`** | سجل الحجر الصحي الأمني المعزول (معرّفات معماة وأسباب الرفض دون تسريب روابط) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/quarantined.json` |
-| **`enterprise/bundle.json`** | حزمة التراخيص الموقّعة (`ECDSA P-256` — `v3.2`)، الإعدادات البعيدة، التحديثات، وعُقد `VIP` المشفّرة | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/enterprise/bundle.json` |
+| **`servers-statistics.json`** | الإحصاءات الشاملة والجاهزية وفئات الأعطال الـ 10 (`countries-statistics.json` / `sources-statistics.json`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-statistics.json` |
+| **`api/v1/statistics.json`** | واجهة الإحصاءات العامة المعماة (`v1`) ومواصفة `api/v1/openapi.json` | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/api/v1/statistics.json` |
+| **`enterprise/bundle.json`** | حزمة التراخيص الموقّعة (`ECDSA P-256` — `v3.5`)، التحديثات، وعُقد `VIP` المشفّرة | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/enterprise/bundle.json` |
 | **`promo/ads.json`** | توصيف البطاقات الترويجية الخمس الدوّارة والصور المرافقة (`ad1.png..ad5.png`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/promo/ads.json` |
-| **`countries.json`** | توزيع العُقد الحيّة حسب دولة الخروج مع مصدر الثقة (`exit_trace` مقابل `remark_hint`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/countries.json` |
-| **`source_health.json`** | تقرير صحّة المصادر، العزل التلقائي، التداخل، والإضافة الحصرية (خالٍ من الأسرار) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/source_health.json` |
-| **`all.txt.gz`** | المجمّع البنيوي النظيف الكامل مضغوطًا قبل الفحص | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/all.txt.gz` |
-| **`meta.json`** | ملخص الدورة الشامل ومؤشرات الصحّة والأمان (`security_summary`, `risk_summary`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/meta.json` |
+| **`meta.json`** | ملخص الدورة الشامل ومؤشرات الصحّة والأمان (`top500_qualified`, `security_summary`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/meta.json` |
 
 ---
 
-## 4) الهيكل الهندسي للمستودع والملفات الرئيسية
+## 4) الهيكل الهندسي للمستودع والملفات الرئيسية (`v3.5`)
 
 | المسار | الوظيفة الهندسية |
 |---|---|
-| `pipeline_security.py` | حراسة SSRF وفحص التحويلات، منع الشبكات الخاصة وواجهات Metadata، التحقق من بصمات `SHA-256`، فك الضغط الآمن ضد `Zip/Tar-Slip`، وحجب الأسرار من السجلات |
-| `security_intelligence.py` | محرك تقييم الأمان والخصوصية المستقل عن السرعة (`SecurityReport`, `MultiDimensionalScore`) وسجل الحجر الصحي (`QuarantineRegistry`) |
-| `public_api.py` | مصدّر وخادم واجهة الإحصاءات العامة القرائية (`/api/v1/*` + `OpenAPI 3.1.0` + `ETag/304` + `TokenBucketRateLimiter` + `state/pipeline_history.json`) |
-| `dedupe.py` | إزالة التكرار خماسية الطبقات (المطابقة الخام ← الهوية البروتوكولية المعيارية ← تتبّع المصدر ← تجميع `/24` و`/48` ← تنويع المخرجات) |
-| `scoring.py` | التقييم المركّب متعدد الأبعاد و5 ملفات ترتيب (`BALANCED`, `LOW_LATENCY`, `HIGH_SPEED`, `HIGH_RELIABILITY`, `PRIVACY_AWARE`)، سجل `NodeHistoryStore`، وعزل المصادر التالفة |
-| `collector.py` / `tester.py` | الجلب المتوازي المحصّن بـ `ETag/Last-Modified` وبصمة `SHA-256` لـ 277 قناة تلغرام و26 تغذية GitHub + فحص النفق عبر `Xray-core` و`sing-box` |
-| `server/build_data.py` | منسّق دورة البناء السحابية، الحجر الصحي قبل/بعد الفحص، تصدير `/api/v1/*`، وحماية آخر نسخة صالحة (`Last-Known-Good Fallback`) |
-| `enterprise/` | نواة المنصة المؤسسية `v3.2` (`database.py` لـ 24 جدولًا و`migrations/001..003`، `crypto_security.py`، `ai_intelligence.py`، `publisher.py`) |
-| `web-admin/` | لوحة التحكم الويب المعيارية من 17 صفحة (`index.html`, `app.js`, `modules/*.js`) + لوحة المراقبة الحيّة العامة (`monitor.html`, `monitor.js`) |
-| `android/app/` | تطبيق المشترك `v3.2` (`vpn/{BahrainVpnService,LeakProtectionEngine,KillSwitchController,BootRestoreReceiver,SmartFailoverEngine,VpnState}.kt`، `engine/{SingBox,SecurityEvaluator,ServerRanker}.kt`، `enterprise/`، `ui/`) |
-| `android/admin/` | تطبيق المشرف المستقل `v3.2` (`AdminMainActivity.kt`، `AdminGitHubEngine.kt`، وقواعد تقليص `R8`) |
-| `promo/` | نظام البطاقات الإعلانية الدوّارة الخمس (`ads.json` + `ad1.png..ad5.png`) |
-| `.github/workflows/` | مسارات الأتمتة الأربع المثبّتة ببصمات `40-char SHA` وبأقل صلاحيات (`ci.yml`, `data.yml`, `enterprise.yml`, `apk.yml`) |
+| `central_top500.py` | محرك اختيار وتصدير حزمة المرشّحات المركزية (`Top 500` بدون حشو) مع بصمات `SHA-256` وفرق `top500.delta.json` |
+| `historical_db.py` | قاعدة بيانات الذكاء التاريخي `SQLite` (`migrations/history/001..002.sql`) وتحليلات `24h/7d/30d/90d` |
+| `pipeline_security.py` / `security_intelligence.py` | حراسة SSRF، التحقق من بصمات `SHA-256`، تقييم الأمان المستقل عن السرعة، وسجل الحجر الصحي (`QuarantineRegistry`) |
+| `dedupe.py` / `scoring.py` | إزالة التكرار خماسية الطبقات والهوية المعماة `server_id` + التقييم متعدد الأبعاد و5 ملفات ترتيب |
+| `collector.py` / `tester.py` / `server/build_data.py` | الجلب المحصّن بـ `ETag` لـ 277 قناة تلغرام و26 تغذية GitHub + فحص النفق عبر `Xray-core` و`sing-box` + حماية `Last-Known-Good` |
+| `public_api.py` | مصدّر وخادم واجهة الإحصاءات العامة القرائية (`/api/v1/*` + `OpenAPI 3.1.0` + `ETag/304`) |
+| `enterprise/` | نواة المنصة المؤسسية `v3.5` (`database.py`, `crypto_security.py`, `ai_intelligence.py`, `publisher.py`) |
+| `web-admin/` | لوحة التحكم الويب المعيارية من 17 صفحة (`index.html`) + لوحة المراقبة الحيّة العامة (`monitor.html`) بإصدار `v3.5` |
+| `android/app/` | تطبيق المشترك `v3.5` (`versionCode = 13`): `LocalServerIntelligence.kt`، `ClientDatabase.kt` (SQLite WAL v3)، `AppUpdateManager.kt` (Play Protect Safe Browser Updater)، `BahrainVpnService.kt`، `LeakProtectionEngine.kt`، `KillSwitchController.kt`، `ConnectionSecurityClassifier.kt` |
+| `android/admin/` | تطبيق المشرف المستقل `v3.5` (`versionCode = 6`): `AdminMainActivity.kt`، `AdminGitHubEngine.kt`، وتوقيع `RSA-4096 v2/v3` |
+| `.github/workflows/` | مسارات الأتمتة الأربع المثبّتة ببصمات `40-char SHA` (`ci.yml`, `data.yml`, `enterprise.yml`, `apk.yml`) |
 
 ---
 
-## 5) التشغيل اليدوي، النشر المؤسسي، والاختبارات الآلية (CLI)
+## 5) تثبيت مفتاح توقيع دائم خاص بك (`Release Keystore`) لتوثيق Play Protect
+
+يدعم `.github/workflows/apk.yml` تلقائيًا التوقيع بمفتاح إنتاج ثابت خاص بك عبر **GitHub Actions Secrets** لضمان ثبات بصمة الشهادة عبر جميع الإصدارات القادمة وتوثيقها لدى Google Play Protect:
+
+```bash
+# 1. توليد مفتاح توقيع إنتاج دائم مرة واحدة فقط على جهازك الشخصي (احتفظ به في مكان آمن)
+keytool -genkeypair -v -storetype PKCS12 -keystore bahrain-vpn-release.p12 \
+  -alias bahrain_vpn_release -keyalg RSA -keysize 4096 -sigalg SHA256withRSA -validity 9125 \
+  -dname "CN=Bahrain VPN Official, OU=Security, O=Bahrain VPN, L=Manama, C=BH"
+
+# 2. تحويل المفتاح إلى Base64 لإضافته في Settings -> Secrets and variables -> Actions:
+base64 -w0 bahrain-vpn-release.p12
+# أضف الأسرار الأربعة التالية في إعدادات مستودع GitHub:
+#   KEYSTORE_BASE64   = ناتج الأمر أعلاه
+#   KEYSTORE_PASSWORD = كلمة مرور ملف الـ Keystore
+#   KEY_ALIAS         = bahrain_vpn_release
+#   KEY_PASSWORD      = كلمة مرور المفتاح
+```
+
+---
+
+## 6) التشغيل اليدوي والاختبارات الآلية الشاملة (`v3.5`)
 
 ```bash
 pip install -r requirements.txt
 
-# 1. جمع وفحص العُقد السحابية وبناء قوائم dist/ و api/v1/
-python collector.py                              # جمع وتنظيف وتسمية bahrain-vpn ← config.txt
-python collector.py --test                       # جمع + فحص متعدد الجولات + أفضل 100 ← best.txt
-python tester.py -i config.txt --best 100        # فحص ملف محلي وترتيب الأفضل
-TEST_TOP=400 python server/build_data.py         # تشغيل دورة الخادم محليًا ← dist/ + dist/api/v1/
-python public_api.py --dist dist --port 8080     # تشغيل خادم واجهة الإحصاءات العامة v1 محليًا
+# 1. جمع وفحص العُقد السحابية وبناء قوائم dist/ شاملةً top500.* و servers-*.json و api/v1/
+TEST_TOP=400 python server/build_data.py
 
-# 2. توليد حزمة التراخيص الموقّعة (bundle.json v3.2) والنسخ الاحتياطي المشفّر
+# 2. توليد حزمة التراخيص الموقّعة (bundle.json v3.5)
 ENTERPRISE_MASTER_KEY="your-strong-passphrase" python -m enterprise.publisher \
   --vault enterprise/vault/enterprise_vault.enc.json \
   --alive dist/alive.json \
   --bundle-out dist/enterprise/bundle.json \
   --backup-dir dist/enterprise/backups
 
-# 3. التحقق من لوحتَي الويب والمراقبة وتشغيل حزمة الاختبارات الشاملة (42 اختبار pytest)
+# 3. التحقق من لوحتَي الويب والمراقبة وتشغيل حزمة الاختبارات الشاملة (51 اختبار pytest)
 for jsf in web-admin/*.js web-admin/modules/*.js; do node --check "$jsf"; done
 pytest -v
 ```
 
-- **تفعيل لوحتَي الإدارة والمراقبة على GitHub Pages:** ينشر سير عمل `.github/workflows/enterprise.yml` ملفات `web-admin/` تلقائيًا إلى فرع `gh-pages`؛ من إعدادات المستودع (`Settings -> Pages`) اختر الفرع `gh-pages` والمجلد `/ (root)`:
-  - لوحة الإدارة المشفّرة: `https://oldman-552.github.io/vpn-configs/`
-  - لوحة المراقبة الحيّة العامة: `https://oldman-552.github.io/vpn-configs/monitor.html`
-- **الاختبارات الآلية المستمرة:**
-  - **`42/42` اختبار `pytest`** (`tests/test_all.py` + `tests/test_enterprise_platform.py` + `tests/test_security_ranking_and_api.py`) تغطي أمن خط الأنابيب، فصل الأمان عن السرعة، الحجر الصحي، ملفات الترتيب الخمسة، عزل المصادر، التشفير المؤسسي، وواجهة `API v1`.
-  - **`19/19` اختبار `JUnit / Robolectric`** (`:app` + `:admin` شاملةً `AndroidVpnAuditTest`، `EnterpriseAndroidTest`، `LeakKillSwitchAndSecurityTest`، و`AdminAppUnitTest`) تغطي منع تسرب `DNS/IPv6`، مفتاح الإيقاف الصارم، حالات النفق الثمان، التبديل الاستباقي، والتحقق الرقمي `ECDSA P-256`.
+- **تغطية الاختبارات الآلية المستمرة (`CI Green`):**
+  - **`51/51` اختبار `pytest`** (`tests/test_all.py` + `tests/test_enterprise_platform.py` + `tests/test_security_ranking_and_api.py` + `tests/test_historical_intelligence.py` + `tests/test_top500_architecture.py`).
+  - **`28/28` اختبار `JUnit / Robolectric`** (`:app` + `:admin` شاملةً `AndroidVpnAuditTest`، `EnterpriseAndroidTest`، `LeakKillSwitchAndSecurityTest`، `SmartVpnUpgradeTest`، `Top500AndPersonalizedTop50Test`، و`AdminAppUnitTest`).
 
 ---
 
-## 6) التوثيق الهندسي المرجعي الكامل والقيود الأمنية الصريحة
+## 7) التوثيق الهندسي المرجعي الكامل والشفافية الأمنية (`v3.5`)
 
-- **توثيق الترقية الشاملة لمنصة الذكاء التاريخي وتطبيق أندرويد (`v3.3`):**
-  - خطة المراجعة المعمارية والترقية: [`docs/ANDROID_AND_DATA_UPGRADE_PLAN.md`](docs/ANDROID_AND_DATA_UPGRADE_PLAN.md) | [`docs/IMPLEMENTATION_REPORT.md`](docs/IMPLEMENTATION_REPORT.md)
-  - معمارية تطبيق أندرويد وتحسين البطارية: [`docs/ANDROID_ARCHITECTURE.md`](docs/ANDROID_ARCHITECTURE.md) | [`docs/ANDROID_BATTERY_OPTIMIZATION.md`](docs/ANDROID_BATTERY_OPTIMIZATION.md)
-  - مخططات قواعد البيانات (السحابية والمحلية) ونموذج الأمان: [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) | [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md)
-  - تقارير الاختبارات ودليل النشر السحابي على GitHub: [`docs/TESTING_REPORT.md`](docs/TESTING_REPORT.md) | [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md)
-- البنية المعمارية الشاملة (`v3.2`): [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md`](docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md)
-- الأمن والخصوصية ونموذج التهديدات: [`SECURITY.md`](SECURITY.md) | [`PRIVACY.md`](PRIVACY.md)
-- توثيق واجهة الإحصاءات العامة (`API v1` + `OpenAPI 3.1.0`): [`API.md`](API.md)
-- النشر والتشغيل والاختبارات واستكشاف الأخطاء: [`DEPLOYMENT.md`](DEPLOYMENT.md) | [`TESTING.md`](TESTING.md) | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) | [`CHANGELOG.md`](CHANGELOG.md)
-- تقارير المراجعة الهندسية الشاملة (Phase 1 Audit): [`ARCHITECTURE_AUDIT.md`](ARCHITECTURE_AUDIT.md) | [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) | [`PERFORMANCE_AUDIT.md`](PERFORMANCE_AUDIT.md) | [`IMPROVEMENT_ROADMAP.md`](IMPROVEMENT_ROADMAP.md)
-- منهجية اختيار المصادر ونتائج قياس التفرّد والتداخل: [`sources.md`](sources.md) | [`review.md`](review.md)
-- **التزام الخصوصية الصارم:** لا يسجّل التطبيق ولا المنصة أي سجل تصفح، عناوين مواقع يزورها المستخدم، كلمات مرور، رسائل، أو محتوى حزم الشبكة (`Zero Traffic Sniffing`).
-- **الشفافية الأمنية الصارمة:** يفصل المحرك الأمني كليًا بين سرعة السيرفر وأمان تشفيره، ولا يمنح العُقد العامة المجهولة صفة `Privacy: Verified` أبدًا (تُمنح فقط لعُقد `VIP 💎` الخاصة الموثّقة). كما يوضّح التطبيق بصراحة حدود نظام أندرويد (لحظات الإقلاع الأولى قبل تشغيل التطبيق تتطلب تفعيل `Always-On VPN + Lockdown` من إعدادات النظام).
+- **معمارية أندرويد (`v3.5` — Central Top 500 + Local Personalized Top 50 + Play Protect Hardening):** [`docs/ANDROID_ARCHITECTURE.md`](docs/ANDROID_ARCHITECTURE.md) | [`docs/ANDROID_BATTERY_OPTIMIZATION.md`](docs/ANDROID_BATTERY_OPTIMIZATION.md)
+- **مخططات قواعد البيانات ونموذج الأمان والخصوصية:** [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) | [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md) | [`SECURITY.md`](SECURITY.md) | [`PRIVACY.md`](PRIVACY.md)
+- **البنية المعمارية الشاملة والنشر السحابي وسجل الإصدارات:** [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`DEPLOYMENT.md`](DEPLOYMENT.md) | [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) | [`CHANGELOG.md`](CHANGELOG.md)
+- **توثيق واجهة الإحصاءات العامة (`API v1`) وتقارير الاختبار:** [`API.md`](API.md) | [`TESTING.md`](TESTING.md) | [`docs/TESTING_REPORT.md`](docs/TESTING_REPORT.md) | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)
+- **التزام الخصوصية والشفافية الصارمة:** لا يسجّل التطبيق ولا المنصة أي سجل تصفح أو عناوين `SSID` أو كلمات مرور، ولا يرفع سجل الفحص الشخصي لأي خادم خارجي، ويعامل السيرفرات العامة دائمًا كغير موثوقة المشغّل (`UNKNOWN_SERVER_TRUST`) دون مساواة السرعة بالأمان أو الخصوصية.

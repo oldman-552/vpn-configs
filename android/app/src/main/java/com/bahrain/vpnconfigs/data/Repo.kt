@@ -879,58 +879,6 @@ class Repo(
     /** يجلب حزمة التراخيص والإعدادات الموقّعة رقميًا (ECDSA P-256) من الفرع الحي مع كاش ETag. */
     fun fetchEnterpriseBundleRaw(): String? = fetch("enterprise/bundle.json")?.body
 
-    /** تنزيل آمن محدود الحجم لحزمة تحديث APK الموقّعة مع التحقق من ترويسة ملف ZIP/APK. */
-    fun downloadExternalApkBounded(apkUrl: String, target: File, maxBytes: Long = 160L * 1024L * 1024L): Boolean {
-        val clean = sanitizePromoLink(apkUrl)
-        if (clean.isEmpty()) return false
-        var conn: HttpURLConnection? = null
-        val tmp = File(target.parentFile, "${target.name}.part")
-        return try {
-            target.parentFile?.mkdirs()
-            conn = (URL(clean).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15_000
-                readTimeout = 30_000
-                requestMethod = "GET"
-                instanceFollowRedirects = true
-            }
-            if (conn.responseCode !in 200..299) return false
-            if (conn.contentLengthLong > maxBytes) return false
-            var total = 0L
-            conn.inputStream.use { input ->
-                tmp.outputStream().use { out ->
-                    val buf = ByteArray(16 * 1024)
-                    var n: Int
-                    while (input.read(buf).also { n = it } != -1) {
-                        total += n
-                        if (total > maxBytes) return false
-                        out.write(buf, 0, n)
-                    }
-                }
-            }
-            val head = ByteArray(4)
-            val readHead = tmp.inputStream().use { it.read(head) }
-            val isZip = readHead == 4 &&
-                head[0] == 0x50.toByte() &&
-                head[1] == 0x4B.toByte() &&
-                head[2] == 0x03.toByte() &&
-                head[3] == 0x04.toByte()
-            if (!isZip) {
-                tmp.delete()
-                return false
-            }
-            if (!tmp.renameTo(target)) {
-                tmp.copyTo(target, overwrite = true)
-                tmp.delete()
-            }
-            true
-        } catch (_: Exception) {
-            tmp.delete()
-            false
-        } finally {
-            conn?.disconnect()
-        }
-    }
-
     // ─────────────────── Central Top-500 Dataset Delivery (ETag + Checksums + Delta + Rollback Guard) ───────────────────
 
     private val lastValidTop500File: File

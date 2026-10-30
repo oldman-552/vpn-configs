@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — VPN Configs Platform (`bahrain-vpn` v3.2)
+# ARCHITECTURE.md — VPN Configs Platform (`bahrain-vpn` v3.5)
 
 ## 1. Architectural Overview (100% Pure-GitHub)
 `bahrain-vpn` is an automated VPN intelligence, security evaluation, encrypted enterprise licensing, and Android client platform operating **100% within GitHub infrastructure** (`GitHub Actions`, `@data` branch via `jsDelivr`, `GitHub Pages` on `gh-pages`, and `GitHub Releases`).

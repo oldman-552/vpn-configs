@@ -1,4 +1,4 @@
-# 100% GitHub-Native Deployment & Operations Guide (`v3.3`)
+# 100% GitHub-Native Deployment & Operations Guide (`v3.5`)
 
 ## 1. Zero-External-Server Architecture
 Every component of this platform runs **100% inside GitHub** without external VPS, PostgreSQL, Supabase, or Firebase dependencies:

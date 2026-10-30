@@ -262,7 +262,7 @@ class AdminGitHubVaultManager(ctx: Context) {
         val (privB64, pubB64) = AdminCrypto.generateEcdsaKeyPair()
         return JSONObject()
             .put("schema_version", 3)
-            .put("bundle_release", "3.1")
+            .put("bundle_release", "3.5")
             .put("signing_keys", JSONObject().put("privatePkcs8B64", privB64).put("publicSpkiB64", pubB64))
             .put("vip_key_hex", AdminCrypto.randomHex(32))
             .put("vip_servers", JSONArray())
@@ -442,7 +442,7 @@ class AdminGitHubVaultManager(ctx: Context) {
 
         val bundleBody = JSONObject()
             .put("schema_version", 3)
-            .put("bundle_release", "3.1")
+            .put("bundle_release", "3.5")
             .put("generated_at", Instant.now().toString())
             .put("public_key_spki_b64", pubB64)
             .put("remote_config", rcFlat)

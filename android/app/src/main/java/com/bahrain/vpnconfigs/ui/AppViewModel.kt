@@ -1604,18 +1604,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val upd = state.availableUpdate ?: return
         if (state.updatingApk) return
         state = state.copy(updatingApk = true, error = null)
-        viewModelScope.launch {
-            val res = AppUpdateManager.downloadAndVerifyUpdate(getApplication(), buildRepo(), upd)
-            res.fold(
-                onSuccess = { verifiedFile ->
-                    state = state.copy(updatingApk = false, info = "تم التحقق من التوقيع — جارٍ فتح المثبّت الرسمي")
-                    AppUpdateManager.launchOfficialSystemInstaller(getApplication(), verifiedFile)
-                },
-                onFailure = { err ->
-                    state = state.copy(updatingApk = false, error = err.message ?: "فشل التحقق من التحديث")
-                },
-            )
-        }
+        val res = AppUpdateManager.openVerifiedUpdateInSystemBrowser(getApplication(), upd)
+        res.fold(
+            onSuccess = {
+                val shaHint = if (upd.apkSha256.length == 64) " (تم نسخ بصمة SHA-256 للتحقق)" else ""
+                state = state.copy(
+                    updatingApk = false,
+                    info = "تم فتح رابط التحديث الرسمي الآمن لحزمة ${upd.selectedAbi} في المتصفح$shaHint",
+                )
+            },
+            onFailure = { err ->
+                state = state.copy(updatingApk = false, error = err.message ?: "تعذّر فتح رابط التحديث الرسمي")
+            },
+        )
     }
 
     fun evaluateSecurityReport(vpnStatus: VpnStatus): SecurityStatusReport {

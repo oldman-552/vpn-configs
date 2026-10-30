@@ -1,5 +1,17 @@
 # CHANGELOG.md
 
+## [v3.5] — 2026-10-30 — Google Play Protect Anti-Dropper Hardening, RSA-4096 v2/v3 Release Signing & Unified `v3.5` Tagging
+
+### Added & Hardened
+- **Google Play Protect Anti-Dropper Compliance (`AndroidManifest.xml`, `AppUpdateManager.kt`, `Repo.kt`)**:
+  - Removed `<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />` from `:app` so the VPN client never matches Play Protect's `PHA:HostileDownloader / Dropper` heuristic.
+  - Replaced internal `.apk` archive downloading and `"application/vnd.android.package-archive"` execution with `AppUpdateManager.openVerifiedUpdateInSystemBrowser` (strictly validating `https://` public URLs, copying expected `SHA-256` fingerprint to clipboard, and delegating download/install to the user's trusted system browser while preserving Split-ABI `arm64-v8a` / `x86_64` / `universal` selection).
+- **Official Release Signing Pipeline (`.github/workflows/apk.yml`, `android/app/build.gradle.kts`, `android/admin/build.gradle.kts`)**:
+  - Wired `KEYSTORE_BASE64` / `ANDROID_KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, and `KEY_PASSWORD` secrets with `PKCS12 RSA-4096` (`SHA256withRSA`) production certificate generation and full **APK Signature Scheme `v1 + v2 + v3`**, eliminating `CN=Android Debug` signing on release artifacts.
+  - Added automated CI security gates (`apksigner verify --verbose --print-certs`, `aapt2 dump permissions`, and DEX bytecode scanning) blocking `REQUEST_INSTALL_PACKAGES`, `application/vnd.android.package-archive`, and `Android Debug` certificates.
+- **Unified `v3.5` Tagging Across Android, Admin, Enterprise, Web Dashboards & Documentation**:
+  - Bumped User APK (`com.bahrain.vpnconfigs` `versionCode = 13`, `versionName = "3.5"`), Admin APK (`com.bahrain.vpnadmin` `versionCode = 6`, `versionName = "3.5"`), Enterprise `bundle_release = "3.5"`, `web-admin/` (`v3.5`), `README.md`, and architecture/security/deployment documentation.
+
 ## [v3.4] — 2026-10-30 — Mandatory Final Architecture: Central GitHub Top 500 + Local Android Personalized Top 50
 
 ### Added & Upgraded

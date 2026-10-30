@@ -12,8 +12,8 @@ android {
         applicationId = "com.bahrain.vpnconfigs"
         minSdk = 29
         targetSdk = 34
-        versionCode = 12
-        versionName = "3.4"
+        versionCode = 13
+        versionName = "3.5"
     }
 
     // إنتاج APK مستقل خفيف لكل معمارية (arm64-v8a بحجم ~50% أقل) + نسخة شاملة للتوافق الكامل
@@ -34,6 +34,9 @@ android {
                 storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
                 keyAlias = System.getenv("KEY_ALIAS") ?: ""
                 keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }

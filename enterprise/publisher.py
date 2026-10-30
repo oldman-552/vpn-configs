@@ -52,43 +52,43 @@ def run_serverless_cycle(
 
         db = EnterpriseDB(tmp_db_path)
 
-        # Ensure current User & Admin APK v3.2 version metadata (with verified SHA-256 & ABI-aware assets) exists in app_versions
+        # Ensure current User & Admin APK v3.5 version metadata (with ABI-aware HTTPS release assets) exists in app_versions
         abi_assets = {
             "arm64-v8a": {
-                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-arm64-v8a-release.apk",
-                "apk_sha256": "13dd72d0182de10f5a5b9d75174d3626aae10759f00e79ae89efa8b0da9dfdee",
+                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-arm64-v8a-release.apk",
+                "apk_sha256": "",
             },
             "x86_64": {
-                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-x86_64-release.apk",
-                "apk_sha256": "11b8f1828883b1206253ddc619f4c2baa9f85a857591f767e0516a58c7353e5c",
+                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-x86_64-release.apk",
+                "apk_sha256": "",
             },
             "universal": {
-                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-release.apk",
-                "apk_sha256": "ca21059896f59136334e47c42fec34dc1b5105d5db63c03b56062fd57aff9da9",
+                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-release.apk",
+                "apk_sha256": "",
             },
         }
         with db.tx() as conn:
-            conn.execute("UPDATE app_versions SET is_active = 0 WHERE version_name IN ('3.0', '3.1')")
+            conn.execute("UPDATE app_versions SET is_active = 0 WHERE version_name IN ('3.0', '3.1', '3.2', '3.3', '3.4')")
             conn.execute(
                 """INSERT OR REPLACE INTO app_versions
                    (id, target_app, version_code, version_name, release_notes, release_date,
                     mandatory, min_supported_code, apk_url, apk_sha256, signing_cert_sha256, is_active, abi_assets_json)
-                   VALUES ('ver_user_3_2', 'USER', 10, '3.2',
-                           'إصدار ULTIMATE VPN ENTERPRISE v3.2: منع تسرب DNS/IPv6، مفتاح الإيقاف الصارم Kill Switch، التبديل الاستباقي الذكي، وتقييم الأمان المستقل عن السرعة',
-                           ?, 0, 9,
-                           'https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-arm64-v8a-release.apk',
-                           '13dd72d0182de10f5a5b9d75174d3626aae10759f00e79ae89efa8b0da9dfdee', '', 1, ?)""",
+                   VALUES ('ver_user_3_5', 'USER', 13, '3.5',
+                           'إصدار ULTIMATE VPN ENTERPRISE v3.5: معمارية Central Top 500 + Local Personalized Top 50 (Wi-Fi/Mobile)، التوافق الكامل مع Play Protect، والتوقيع الرسمي RSA-4096 v2/v3',
+                           ?, 0, 11,
+                           'https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-arm64-v8a-release.apk',
+                           '', '', 1, ?)""",
                 (fmt_iso_utc(now_dt), json.dumps(abi_assets, ensure_ascii=False)),
             )
             conn.execute(
                 """INSERT OR REPLACE INTO app_versions
                    (id, target_app, version_code, version_name, release_notes, release_date,
                     mandatory, min_supported_code, apk_url, apk_sha256, signing_cert_sha256, is_active, abi_assets_json)
-                   VALUES ('ver_admin_3_2', 'ADMIN', 3, '3.2',
-                           'تطبيق إدارة ULTIMATE VPN ENTERPRISE v3.2 الرشيق مع إدارة سيرفرات VIP المشفّرة وتوقيع الحزم عبر GitHub',
-                           ?, 0, 2,
-                           'https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-admin-release.apk',
-                           'f275b145cd1e82626407fe895d68a8cada44cdaea43ec857759a6d6cb8f10a29', '', 1, '{}')""",
+                   VALUES ('ver_admin_3_5', 'ADMIN', 6, '3.5',
+                           'تطبيق إدارة ULTIMATE VPN ENTERPRISE v3.5 الرشيق الموقّع رسميًا مع إدارة سيرفرات VIP المشفّرة وتوقيع الحزم عبر GitHub',
+                           ?, 0, 4,
+                           'https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-admin-release.apk',
+                           '', '', 1, '{}')""",
                 (fmt_iso_utc(now_dt),),
             )
 

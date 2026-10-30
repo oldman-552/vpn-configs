@@ -151,7 +151,7 @@ fun AppHealthAndFailoverCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.HealthAndSafety, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
-                Text("مفتاح الإيقاف والتبديل الذكي وصحة النفق (v3.2)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("مفتاح الإيقاف والتبديل الذكي وصحة النفق (v3.5)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
 
             Row(
