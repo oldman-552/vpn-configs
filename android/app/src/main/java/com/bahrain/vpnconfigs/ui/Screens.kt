@@ -386,15 +386,28 @@ fun ConnectHomeScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            if (currentServer.locallyTested && currentServer.speedKbps > 0.0) {
+                                Text(
+                                    text = formatPhoneSpeedLabel(currentServer.speedKbps),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = phoneSpeedColor(currentServer.speedKbps),
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
                         }
 
-                        val displayPing = if (vpnStatus.isActive && vpnStatus.livePingMs > 0) {
-                            vpnStatus.livePingMs
+                        if (vpnStatus.isActive && vpnStatus.livePingMs > 0L) {
+                            LatencyBadge(
+                                ms = vpnStatus.livePingMs,
+                                locallyTested = true,
+                                localFailed = false,
+                            )
                         } else {
-                            currentServer.latencyMs
-                        }
-                        if (displayPing > 0) {
-                            LatencyBadge(displayPing)
+                            LatencyBadge(
+                                ms = currentServer.latencyMs,
+                                locallyTested = currentServer.locallyTested,
+                                localFailed = currentServer.localFailed,
+                            )
                         }
                     }
 
@@ -432,7 +445,7 @@ fun ConnectHomeScreen(
                                 Icon(Icons.Filled.NetworkCheck, contentDescription = null, modifier = Modifier.size(18.dp))
                             }
                             Spacer(Modifier.width(4.dp))
-                            Text("بينغ")
+                            Text("فحص السرعة")
                         }
                         IconButton(
                             onClick = {
@@ -983,13 +996,11 @@ private fun ServerCard(
                     }
                 }
 
-                if (item.localFailed || item.latencyMs > 0L) {
-                    LatencyBadge(
-                        ms = item.latencyMs,
-                        locallyTested = item.locallyTested,
-                        localFailed = item.localFailed,
-                    )
-                }
+                LatencyBadge(
+                    ms = item.latencyMs,
+                    locallyTested = item.locallyTested,
+                    localFailed = item.localFailed,
+                )
             }
 
             Row(
@@ -1006,16 +1017,12 @@ private fun ServerCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (item.speedKbps > 0) {
-                        val spdTxt = if (item.speedKbps >= 1024) {
-                            String.format(java.util.Locale.US, "%.2f MB/s", item.speedKbps / 1024.0)
-                        } else {
-                            "${item.speedKbps.toInt()} KB/s"
-                        }
+                    if (item.locallyTested && item.speedKbps > 0.0) {
                         Text(
-                            text = "سرعة التنزيل: $spdTxt",
+                            text = formatPhoneSpeedLabel(item.speedKbps),
                             style = MaterialTheme.typography.labelSmall,
-                            color = VpnConnectedGreen,
+                            color = phoneSpeedColor(item.speedKbps),
+                            fontWeight = FontWeight.Medium,
                         )
                     }
                     val telemetryParts = buildList {
@@ -1493,7 +1500,7 @@ fun SettingsAndExportScreen(
                 Text("حول التطبيق والتراخيص القانونية", style = MaterialTheme.typography.titleMedium)
                 val aboutUpdated = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
                 Text(
-                    "bahrain-vpn v2.3$aboutUpdated",
+                    "bahrain-vpn v2.4$aboutUpdated",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )
@@ -1589,23 +1596,38 @@ private fun ProtoChip(proto: String) {
     }
 }
 
+private fun phoneSpeedColor(speedKbps: Double): Color = when {
+    speedKbps >= 1024.0 -> VpnConnectedGreen
+    speedKbps >= 250.0 -> VpnConnectingAmber
+    else -> VpnWeakPurple
+}
+
+private fun formatPhoneSpeedLabel(speedKbps: Double): String = when {
+    speedKbps >= 1024.0 -> String.format(java.util.Locale.US, "سرعة الاختبار على جهازك: %.2f MB/s", speedKbps / 1024.0)
+    speedKbps >= 250.0 -> "سرعة الاختبار على جهازك: ${speedKbps.toInt()} KB/s"
+    else -> "سرعة الاختبار على جهازك: ${speedKbps.toInt()} KB/s (ضعيف)"
+}
+
 @Composable
 private fun LatencyBadge(
     ms: Long,
     locallyTested: Boolean = false,
     localFailed: Boolean = false,
 ) {
-    val isDead = localFailed || ms < 0L
+    val isDisconnected = localFailed || ms < 0L
+    val isUntested = !isDisconnected && (!locallyTested || ms == 0L)
     val color = when {
-        isDead -> VpnDangerRed
+        isDisconnected -> VpnDangerRed
+        isUntested -> VpnUntestedGray
         ms <= 250L -> VpnConnectedGreen
         ms <= 500L -> VpnConnectingAmber
-        else -> VpnDangerRed
+        else -> VpnWeakPurple
     }
     val label = when {
-        isDead -> "غير مستجيب"
-        locallyTested -> "⚡ $ms ms"
-        else -> "$ms ms"
+        isDisconnected -> "منقطع"
+        isUntested -> "لم يُفحص"
+        ms <= 500L -> "⚡ $ms ms"
+        else -> "⚡ $ms ms • ضعيف"
     }
     Surface(
         color = color.copy(alpha = 0.14f),

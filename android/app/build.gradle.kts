@@ -12,8 +12,8 @@ android {
         applicationId = "com.bahrain.vpnconfigs"
         minSdk = 29
         targetSdk = 34
-        versionCode = 6
-        versionName = "2.3"
+        versionCode = 7
+        versionName = "2.4"
     }
 
     // إنتاج APK مستقل خفيف لكل معمارية (arm64-v8a بحجم ~50% أقل) + نسخة شاملة للتوافق الكامل

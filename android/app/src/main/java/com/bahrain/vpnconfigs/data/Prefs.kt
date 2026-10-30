@@ -208,4 +208,8 @@ class Prefs(ctx: Context) {
     fun clearConnectionHistory() {
         connectionHistory = emptyList()
     }
+
+    var lastPromoRotationIndex: Int
+        get() = sp.getInt("last_promo_rotation_idx", -1)
+        set(v) = sp.edit { putInt("last_promo_rotation_idx", v) }
 }

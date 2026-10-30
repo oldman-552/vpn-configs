@@ -12,6 +12,7 @@ import com.bahrain.vpnconfigs.engine.ServerSortMode
 import com.bahrain.vpnconfigs.engine.SingBox
 import com.bahrain.vpnconfigs.util.AppDiag
 import com.bahrain.vpnconfigs.util.UiMessages
+import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -352,5 +353,152 @@ class AndroidVpnAuditTest {
         assertFalse(redacted.contains("mySecretPass"))
         assertFalse(redacted.contains("privkey"))
         assertTrue(redacted.contains("[REDACTED]"))
+    }
+
+    @Test
+    fun fivePromoAdsRotateEveryOpenSupportEtagUpdatesAndRejectInvalidFiles() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = Prefs(ctx)
+        prefs.lastPromoRotationIndex = -1
+
+        val promoEnabled = AtomicBoolean(true)
+        val ad1Version = AtomicInteger(1)
+        val running = AtomicBoolean(true)
+
+        fun fakePngBytes(tagByte: Int): ByteArray = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            tagByte.toByte(), 0x01, 0x02, 0x03,
+        )
+
+        val serverSocket = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
+        val port = serverSocket.localPort
+
+        fun handleClient(sock: Socket) {
+            sock.use { s ->
+                s.soTimeout = 3000
+                val reader = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.US_ASCII))
+                val reqLine = reader.readLine() ?: return
+                val path = reqLine.split(" ").getOrNull(1).orEmpty()
+                var ifNoneMatch: String? = null
+                while (true) {
+                    val h = reader.readLine() ?: break
+                    if (h.isEmpty()) break
+                    if (h.startsWith("If-None-Match:", ignoreCase = true)) {
+                        ifNoneMatch = h.substringAfter(":").trim()
+                    }
+                }
+                val out = s.getOutputStream()
+                when {
+                    path.endsWith("/promo/ads.json") -> {
+                        val manifest = """
+                            {
+                              "enabled": ${promoEnabled.get()},
+                              "close_delay_sec": 3,
+                              "ads": [
+                                {"id": "ad1", "enabled": true, "image": "ad1.png", "link": "https://example.com/1"},
+                                {"id": "ad2", "enabled": true, "image": "ad2.png", "link": "javascript:alert(1)"},
+                                {"id": "ad3", "enabled": true, "image": "ad3.png", "link": "http://127.0.0.1/bad"},
+                                {"id": "ad4", "enabled": true, "image": "ad4.png", "link": ""},
+                                {"id": "ad5", "enabled": true, "image": "ad5.png", "link": "https://example.com/5", "button_text": "اشترك"}
+                              ]
+                            }
+                        """.trimIndent().toByteArray(Charsets.UTF_8)
+                        val hdr = "HTTP/1.1 200 OK\r\nContent-Length: ${manifest.size}\r\nConnection: close\r\n\r\n"
+                        out.write(hdr.toByteArray(Charsets.US_ASCII))
+                        out.write(manifest)
+                        out.flush()
+                    }
+                    path.contains("/promo/ad") -> {
+                        val idx = path.substringAfterLast("ad").substringBefore(".png").toIntOrNull() ?: 1
+                        val ver = if (idx == 1) ad1Version.get() else 1
+                        val curEtag = "\"img-$idx-v$ver\""
+                        if (ifNoneMatch == curEtag) {
+                            val hdr = "HTTP/1.1 304 Not Modified\r\nETag: $curEtag\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            out.write(hdr.toByteArray(Charsets.US_ASCII))
+                            out.flush()
+                        } else {
+                            val body = fakePngBytes(idx * 10 + ver)
+                            val hdr = "HTTP/1.1 200 OK\r\nETag: $curEtag\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                            out.write(hdr.toByteArray(Charsets.US_ASCII))
+                            out.write(body)
+                            out.flush()
+                        }
+                    }
+                    else -> {
+                        val body = "<!DOCTYPE html>not an image".toByteArray(Charsets.UTF_8)
+                        val hdr = "HTTP/1.1 200 OK\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                        out.write(hdr.toByteArray(Charsets.US_ASCII))
+                        out.write(body)
+                        out.flush()
+                    }
+                }
+            }
+        }
+
+        val acceptor = thread(isDaemon = true) {
+            while (running.get()) {
+                try {
+                    val client = serverSocket.accept()
+                    thread(isDaemon = true) { runCatching { handleClient(client) } }
+                } catch (_: Exception) {
+                    break
+                }
+            }
+        }
+
+        try {
+            val repo = Repo(
+                ctx = ctx,
+                mirrorOverride = { file -> listOf("http://127.0.0.1:$port/$file") },
+                httpTimeoutMs = 3000,
+            )
+
+            // التحقق من دوران الصور الخمس في كل فتح: 1 -> 2 -> 3 -> 4 -> 5 -> 1
+            val seenIds = (1..6).map {
+                val b = repo.selectNextPromoBanner(prefs)
+                assertNotNull(b)
+                assertEquals(3, b!!.closeDelaySec)
+                assertEquals(5, b.totalSlots)
+                b
+            }
+            assertEquals(listOf("ad1", "ad2", "ad3", "ad4", "ad5", "ad1"), seenIds.map { it.id })
+            assertEquals("https://example.com/1", seenIds[0].link)
+            assertEquals("", seenIds[1].link) // javascript: محجوب
+            assertEquals("", seenIds[2].link) // http://127.0.0.1 محجوب
+            assertEquals("اشترك", seenIds[4].buttonText)
+
+            // التحقق من تحديث الصورة تلقائيًا عند استبدالها على السيرفر (تغيّر ETag)
+            val oldBytes = seenIds[5].imageFile.readBytes()
+            ad1Version.set(2)
+            prefs.lastPromoRotationIndex = 4 // الفتحة القادمة ستكون ad1 (index 0)
+            val updatedAd1 = repo.selectNextPromoBanner(prefs)
+            assertNotNull(updatedAd1)
+            assertEquals("ad1", updatedAd1!!.id)
+            val newBytes = updatedAd1.imageFile.readBytes()
+            assertFalse(oldBytes.contentEquals(newBytes))
+
+            // التحقق من رفض الملفات غير الصورية وإمكانية تعطيل الإعلانات عن بعد
+            assertFalse(repo.isValidImageMagic("<!DOCTYPE html>error".toByteArray(Charsets.UTF_8)))
+            promoEnabled.set(false)
+            assertNull(repo.selectNextPromoBanner(prefs))
+        } finally {
+            running.set(false)
+            runCatching { serverSocket.close() }
+            acceptor.join(1000)
+        }
+    }
+
+    @Test
+    fun disconnectedServerTrackingMarksDroppedOnlyAndRecoversOnSuccess() {
+        val deadUri = "vless://11111111-1111-1111-1111-111111111111@198.51.100.88:443?security=tls"
+        VpnStateManager.markServerDropped(deadUri)
+        assertTrue(deadUri in VpnStateManager.status.value.droppedConfigs)
+
+        VpnStateManager.resetDisconnected(errorMsg = "انقطع الاتصال")
+        assertTrue(deadUri in VpnStateManager.status.value.droppedConfigs)
+
+        VpnStateManager.markServerHealthy(deadUri)
+        assertFalse(deadUri in VpnStateManager.status.value.droppedConfigs)
     }
 }

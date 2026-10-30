@@ -319,6 +319,7 @@ class BahrainVpnService : VpnService() {
 
         if (newDaemon == null || initialPing < 0L) {
             singBox.stopDaemon(newDaemon)
+            VpnStateManager.markServerDropped(Converters.cleanUri(chosenCfg))
             if (prefs.autoFailover && pool.size > 1) {
                 VpnStateManager.update { prev ->
                     prev.copy(statusMessage = "$chosenLabel لم يستجب — جارٍ البحث الذكي عن أسرع بديل…")
@@ -356,6 +357,7 @@ class BahrainVpnService : VpnService() {
             proto = chosenProto,
             pingMs = initialPing,
         )
+        VpnStateManager.markServerHealthy(Converters.cleanUri(chosenCfg))
         VpnStateManager.update { prev ->
             prev.copy(
                 phase = VpnPhase.CONNECTED,
@@ -404,6 +406,7 @@ class BahrainVpnService : VpnService() {
             proto = candProto,
             pingMs = verifiedPingMs,
         )
+        VpnStateManager.markServerHealthy(Converters.cleanUri(cand.cfg))
         VpnStateManager.update { prev ->
             prev.copy(
                 phase = VpnPhase.CONNECTED,
@@ -616,30 +619,43 @@ class BahrainVpnService : VpnService() {
 
                 if (probe != null && probe.status in listOf(200, 204)) {
                     consecutiveFails = 0
+                    VpnStateManager.markServerHealthy(Converters.cleanUri(VpnStateManager.status.value.activeCfg ?: ""))
                     VpnStateManager.update { s -> s.copy(livePingMs = probe.elapsedMs) }
                 } else {
                     consecutiveFails++
-                    if ((!aliveProc || consecutiveFails >= 2) && prefs.autoFailover) {
-                        val switched = opLock.withLock {
-                            if (VpnStateManager.status.value.phase != VpnPhase.CONNECTED) {
-                                false
-                            } else {
-                                val pool = ensureServerPool()
-                                val curCfg = VpnStateManager.status.value.activeCfg ?: ""
-                                VpnStateManager.update { s ->
-                                    s.copy(statusMessage = "انقطع السيرفر الحالي — جارٍ التبديل التلقائي…")
-                                }
-                                val alt = findWorkingAlternativeParallel(curCfg, pool)
-                                if (alt != null) {
-                                    singBox.stopDaemon(daemon)
-                                    connectWithVerifiedDaemon(alt.first, alt.second, alt.third, forceRebuildTun = false)
-                                    true
-                                } else {
+                    if (!aliveProc || consecutiveFails >= 2) {
+                        val droppedCur = VpnStateManager.status.value.activeCfg ?: ""
+                        if (droppedCur.isNotBlank()) {
+                            VpnStateManager.markServerDropped(Converters.cleanUri(droppedCur))
+                        }
+                        if (prefs.autoFailover) {
+                            val switched = opLock.withLock {
+                                if (VpnStateManager.status.value.phase != VpnPhase.CONNECTED) {
                                     false
+                                } else {
+                                    val pool = ensureServerPool()
+                                    val curCfg = VpnStateManager.status.value.activeCfg ?: ""
+                                    VpnStateManager.update { s ->
+                                        s.copy(statusMessage = "انقطع السيرفر الحالي — جارٍ التبديل التلقائي…")
+                                    }
+                                    val alt = findWorkingAlternativeParallel(curCfg, pool)
+                                    if (alt != null) {
+                                        singBox.stopDaemon(daemon)
+                                        connectWithVerifiedDaemon(alt.first, alt.second, alt.third, forceRebuildTun = false)
+                                        true
+                                    } else {
+                                        false
+                                    }
                                 }
                             }
+                            if (switched) return@launch
+                        } else {
+                            opLock.withLock {
+                                teardownInternal("انقطع الاتصال بالسيرفر الحالي", null)
+                                stopSelf()
+                            }
+                            return@launch
                         }
-                        if (switched) return@launch
                     }
                 }
                 delay(12_000L)
@@ -678,6 +694,14 @@ class BahrainVpnService : VpnService() {
                         cand to r
                     }
                 }.awaitAll()
+            }
+            tested.forEach { (cand, r) ->
+                val clean = Converters.cleanUri(cand.cfg)
+                if (r.ok && r.latencyMs > 0L) {
+                    VpnStateManager.markServerHealthy(clean)
+                } else {
+                    VpnStateManager.markServerDropped(clean)
+                }
             }
             val winners = tested.filter { it.second.ok }.sortedBy { it.second.latencyMs }
             for ((winner, res) in winners) {

@@ -77,7 +77,7 @@ jobs:
               fails += int(r.attrib.get("failures", 0))
               errs += int(r.attrib.get("errors", 0))
           print(f"::notice::Android JUnit Suite: {total} tests executed, {fails} failures, {errs} errors")
-          assert total >= 6 and fails == 0 and errs == 0
+          assert total >= 9 and fails == 0 and errs == 0
           PY
 
       - name: Collect APKs, compute SHA-256 & audit release APK resources
@@ -176,7 +176,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VER_NAME=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)
-          VER_TAG="v${VER_NAME:-2.3}"
+          VER_TAG="v${VER_NAME:-2.4}"
           NOTES="تطبيق **bahrain-vpn ${VER_TAG}** المتكامل للأندرويد — يتّصل مباشرة بضغطة زر مع قائمة سيرفرات محدّثة تلقائيًا، ونظام ترتيب خماسي موزون (الأسرع في التنزيل، الأقل تأخيرًا، الأكثر استقرارًا، الأفضل إجمالًا، الأحدث اختبارًا). لمعظم الهواتف الحديثة ثبّت النسخة الخفيفة \`app-arm64-v8a-release.apk\` أو النسخة الشاملة \`app-release.apk\`."
 
           publish_release() {
