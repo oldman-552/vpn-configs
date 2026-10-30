@@ -14,6 +14,7 @@ from enterprise.crypto_security import (
     compute_totp_code,
     compute_user_lookup_id,
     create_encrypted_sqlite_backup,
+    decrypt_vip_nodes_payload,
     der_to_p1363_signature,
     generate_ecdsa_p256_keypair,
     generate_totp_secret,
@@ -246,3 +247,59 @@ def test_encrypted_backup_restore_serverless_cycle_and_ai_honesty(tmp_path: Path
     assert (tmp_path / "out_bundle.json").exists()
     assert (tmp_path / "vault.enc.json").exists()
     assert cycle_summary["backup_created"] is not None
+
+
+def test_v31_encrypted_vip_private_nodes_and_abi_updates(tmp_path: Path) -> None:
+    priv_b64, pub_b64 = generate_ecdsa_p256_keypair()
+    db = EnterpriseDB(tmp_path / "v31.sqlite3")
+    t0 = datetime(2026, 10, 30, 18, 0, 0, tzinfo=timezone.utc)
+
+    db.create_user("vip_sara", "SaraStrong#2026", subscription_type="YEARLY", signing_private_key_b64=priv_b64, now=t0)
+    vip1 = db.add_vip_server(
+        label="VIP Frankfurt Reality",
+        config_uri="vless://99887766-5544-3322-1100-aabbccddeeff@vip-de1.example.net:443?security=reality#VIP1",
+        country="DE",
+        priority=200,
+        now=t0,
+    )
+    assert vip1["protocol"] == "VLESS"
+    assert len(db.list_vip_servers(active_only=True)) == 1
+
+    # Add a second VIP node AFTER user creation — existing subscriber envelope must still decrypt!
+    db.add_vip_server(
+        label="VIP Bahrain Edge",
+        config_uri="hysteria2://supersecretpass@vip-bh1.example.net:8443#VIP2",
+        country="BH",
+        priority=250,
+        now=t0,
+    )
+
+    exported = db.export_public_client_bundle(pub_b64, priv_b64, now=t0)
+    raw_dump = str(exported)
+    # Zero plaintext leak of VIP hostnames, UUIDs, or passwords in public bundle!
+    assert "vip-de1.example.net" not in raw_dump
+    assert "99887766-5544-3322" not in raw_dump
+    assert "supersecretpass" not in raw_dump
+
+    bundle = exported["bundle"]
+    assert verify_ecdsa_b64(pub_b64, canonical_json_bytes(bundle), exported["signature_b64"]) is True
+    assert bundle["bundle_release"] == "3.1"
+    assert bundle["vip_nodes_enc_b64"] != ""
+
+    lookup = compute_user_lookup_id("vip_sara")
+    opened = open_user_license_envelope(
+        "vip_sara",
+        "SaraStrong#2026",
+        bundle["licenses"][lookup]["salt_hex"],
+        bundle["licenses"][lookup]["envelope_b64"],
+    )
+    vip_key_hex = opened["certificate"]["vip_access_key_hex"]
+    decrypted_vip = decrypt_vip_nodes_payload(vip_key_hex, bundle["vip_nodes_enc_b64"])
+    assert len(decrypted_vip) == 2
+    assert decrypted_vip[0]["country"] == "BH"  # Higher priority (250) sorted first
+    assert "vip-bh1.example.net" in decrypted_vip[0]["uri"]
+
+    # Wrong key fails AES-GCM authentication
+    with pytest.raises(Exception):
+        decrypt_vip_nodes_payload("00" * 32, bundle["vip_nodes_enc_b64"])
+

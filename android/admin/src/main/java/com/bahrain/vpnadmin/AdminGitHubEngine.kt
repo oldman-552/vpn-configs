@@ -38,6 +38,7 @@ import javax.crypto.spec.SecretKeySpec
 object AdminCrypto {
     private const val PBKDF2_ITER = 120_000
     private val LOOKUP_DOMAIN = "bahrain-vpn-enterprise-v3-user-lookup".toByteArray(Charsets.UTF_8)
+    const val VIP_NODES_AAD = "bahrain-vpn-vip-nodes-v31"
     private const val B32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
     fun randomHex(byteLen: Int = 16): String {
@@ -101,6 +102,30 @@ object AdminCrypto {
         val ct = raw.copyOfRange(12, raw.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, deriveKey(secret, saltHex), GCMParameterSpec(128, iv))
+        if (aad.isNotEmpty()) cipher.updateAAD(aad.toByteArray(Charsets.UTF_8))
+        return String(cipher.doFinal(ct), Charsets.UTF_8)
+    }
+
+    fun encryptRawKeyAesGcm(keyHex: String, plainText: String, aad: String = VIP_NODES_AAD): String {
+        val keyBytes = hexToBytes(keyHex)
+        require(keyBytes.size == 32) { "Expected 32-byte AES-256 key" }
+        val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, iv))
+        if (aad.isNotEmpty()) cipher.updateAAD(aad.toByteArray(Charsets.UTF_8))
+        val ct = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
+        return Base64.encodeToString(iv + ct, Base64.NO_WRAP)
+    }
+
+    fun decryptRawKeyAesGcm(keyHex: String, tokenB64: String, aad: String = VIP_NODES_AAD): String {
+        val keyBytes = hexToBytes(keyHex)
+        require(keyBytes.size == 32) { "Expected 32-byte AES-256 key" }
+        val raw = Base64.decode(tokenB64, Base64.DEFAULT)
+        require(raw.size >= 28) { "Malformed AES-GCM payload" }
+        val iv = raw.copyOfRange(0, 12)
+        val ct = raw.copyOfRange(12, raw.size)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, iv))
         if (aad.isNotEmpty()) cipher.updateAAD(aad.toByteArray(Charsets.UTF_8))
         return String(cipher.doFinal(ct), Charsets.UTF_8)
     }
@@ -237,7 +262,10 @@ class AdminGitHubVaultManager(ctx: Context) {
         val (privB64, pubB64) = AdminCrypto.generateEcdsaKeyPair()
         return JSONObject()
             .put("schema_version", 3)
+            .put("bundle_release", "3.1")
             .put("signing_keys", JSONObject().put("privatePkcs8B64", privB64).put("publicSpkiB64", pubB64))
+            .put("vip_key_hex", AdminCrypto.randomHex(32))
+            .put("vip_servers", JSONArray())
             .put("admin_users", JSONArray())
             .put("users", JSONArray())
             .put("bandwidth_limits", JSONObject())
@@ -251,10 +279,25 @@ class AdminGitHubVaultManager(ctx: Context) {
                 JSONObject()
                     .put("auth_require_account", JSONObject().put("value", false).put("sensitive", true).put("desc", "إلزام تسجيل الدخول قبل تشغيل VPN"))
                     .put("auto_block_on_device_violation", JSONObject().put("value", false).put("sensitive", true).put("desc", "حظر الحساب تلقائيًا عند محاولة جهاز غير مصرح"))
+                    .put("auto_failover_enabled", JSONObject().put("value", true).put("sensitive", false).put("desc", "التبديل الذكي خلال ثانيتين عند سقوط النفق"))
                     .put("trial_duration_hours", JSONObject().put("value", 48).put("sensitive", false).put("desc", "مدة التجربة المجانية بالساعات"))
                     .put("promo_enabled", JSONObject().put("value", true).put("sensitive", false).put("desc", "تفعيل نافذة الإعلانات المتناوبة"))
             )
             .put("admin_audit_logs", JSONArray())
+    }
+
+    fun ensureV31Defaults(db: JSONObject): JSONObject {
+        if (db.optString("vip_key_hex", "").length != 64) {
+            db.put("vip_key_hex", AdminCrypto.randomHex(32))
+        }
+        if (db.optJSONArray("vip_servers") == null) {
+            db.put("vip_servers", JSONArray())
+        }
+        val rc = db.optJSONObject("remote_config") ?: JSONObject().also { db.put("remote_config", it) }
+        if (!rc.has("auto_failover_enabled")) {
+            rc.put("auto_failover_enabled", JSONObject().put("value", true).put("sensitive", false).put("desc", "التبديل الذكي خلال ثانيتين عند سقوط النفق"))
+        }
+        return db
     }
 
     fun appendAuditLog(db: JSONObject, adminUser: String, action: String, targetType: String, targetId: String, afterObj: JSONObject) {
@@ -296,6 +339,7 @@ class AdminGitHubVaultManager(ctx: Context) {
     }
 
     fun sealUserEnvelope(db: JSONObject, userObj: JSONObject, plainPassword: String) {
+        ensureV31Defaults(db)
         val uid = userObj.getString("id")
         val uname = userObj.getString("username").trim().lowercase(Locale.ROOT)
         val bw = db.optJSONObject("bandwidth_limits")?.optJSONObject(uid) ?: JSONObject()
@@ -327,6 +371,7 @@ class AdminGitHubVaultManager(ctx: Context) {
             .put("device_limit", userObj.optInt("device_limit", 1))
             .put("authorized_devices", authDevs)
             .put("session_revoked_at", userObj.optString("session_revoked_at", ""))
+            .put("vip_access_key_hex", db.getString("vip_key_hex"))
             .put("bandwidth", bw)
             .put("issued_at", userObj.optString("updated_at", Instant.now().toString()))
 
@@ -340,6 +385,7 @@ class AdminGitHubVaultManager(ctx: Context) {
     }
 
     fun buildSignedPublicBundle(db: JSONObject): JSONObject {
+        ensureV31Defaults(db)
         val keys = db.getJSONObject("signing_keys")
         val privB64 = keys.getString("privatePkcs8B64")
         val pubB64 = keys.getString("publicSpkiB64")
@@ -362,16 +408,46 @@ class AdminGitHubVaultManager(ctx: Context) {
             )
         }
 
+        val vipRawArr = db.optJSONArray("vip_servers") ?: JSONArray()
+        val activeVipList = ArrayList<JSONObject>()
+        for (i in 0 until vipRawArr.length()) {
+            val v = vipRawArr.getJSONObject(i)
+            if (v.optBoolean("enabled", true)) {
+                activeVipList.add(
+                    JSONObject()
+                        .put("id", v.optString("id"))
+                        .put("label", v.optString("label"))
+                        .put("country", v.optString("country", ""))
+                        .put("protocol", v.optString("protocol", "VLESS"))
+                        .put("uri", v.optString("uri"))
+                        .put("priority", v.optInt("priority", 200))
+                )
+            }
+        }
+        activeVipList.sortByDescending { it.optInt("priority", 200) }
+        val activeVipJsonArr = JSONArray().apply { activeVipList.forEach { put(it) } }
+        val vipEncB64 = if (activeVipJsonArr.length() > 0) {
+            AdminCrypto.encryptRawKeyAesGcm(
+                db.getString("vip_key_hex"),
+                AdminCrypto.canonicalJson(activeVipJsonArr),
+                AdminCrypto.VIP_NODES_AAD,
+            )
+        } else {
+            ""
+        }
+
         val rcFlat = JSONObject()
         val rcObj = db.optJSONObject("remote_config") ?: JSONObject()
         rcObj.keys().forEach { k -> rcFlat.put(k, rcObj.getJSONObject(k).opt("value")) }
 
         val bundleBody = JSONObject()
             .put("schema_version", 3)
+            .put("bundle_release", "3.1")
             .put("generated_at", Instant.now().toString())
             .put("public_key_spki_b64", pubB64)
             .put("remote_config", rcFlat)
             .put("app_updates", db.optJSONArray("app_versions") ?: JSONArray())
+            .put("vip_nodes_enc_b64", vipEncB64)
             .put("licenses", licenses)
 
         val sigB64 = AdminCrypto.signEcdsaDerB64(privB64, AdminCrypto.canonicalJson(bundleBody))

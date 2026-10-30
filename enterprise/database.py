@@ -28,6 +28,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 from enterprise.crypto_security import (
     canonical_json_bytes,
     compute_user_lookup_id,
+    encrypt_vip_nodes_payload,
     hash_password_argon2id,
     seal_user_license_envelope,
     sign_ecdsa_der_b64,
@@ -378,6 +379,77 @@ class EnterpriseDB:
     # ------------------------------------------------------------------
     # Subscriber Management, 8 Subscription Types & 48-Hour Free Trial
     # ------------------------------------------------------------------
+    def _get_or_init_vip_key_hex(self, conn: sqlite3.Connection, now_iso: str) -> str:
+        row = conn.execute("SELECT key_hex FROM vip_key_ring WHERE id = 1").fetchone()
+        if row and len(row["key_hex"]) == 64:
+            return str(row["key_hex"])
+        fresh_hex = os.urandom(32).hex()
+        conn.execute(
+            "INSERT OR REPLACE INTO vip_key_ring (id, key_hex, rotated_at) VALUES (1, ?, ?)",
+            (fresh_hex, now_iso),
+        )
+        return fresh_hex
+
+    def add_vip_server(
+        self,
+        label: str,
+        config_uri: str,
+        country: str = "",
+        priority: int = 100,
+        admin_id: Optional[str] = None,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        clean_uri = (config_uri or "").strip()
+        if "://" not in clean_uri or len(clean_uri) < 12:
+            raise ValueError("INVALID_VIP_SERVER_URI")
+        proto = clean_uri.split("://", 1)[0].upper()
+        clean_label = (label or "VIP Node").strip()
+        clean_cc = (country or "").strip().upper()[:2]
+        ts = fmt_iso_utc(now or datetime.now(timezone.utc))
+        vid = f"vip_{uuid.uuid4().hex[:12]}"
+        with self.tx() as conn:
+            self._get_or_init_vip_key_hex(conn, ts)
+            conn.execute(
+                """INSERT INTO vip_servers
+                   (id, label, country, protocol, config_uri, priority, enabled, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)""",
+                (vid, clean_label, clean_cc, proto, clean_uri, int(priority), ts, ts),
+            )
+            created = dict(conn.execute("SELECT * FROM vip_servers WHERE id = ?", (vid,)).fetchone())
+            self._append_audit(
+                conn,
+                admin_id,
+                "VIP_SERVER_ADD",
+                "vip_servers",
+                vid,
+                {},
+                {"label": clean_label, "country": clean_cc, "protocol": proto, "priority": int(priority)},
+                ts,
+            )
+            return created
+
+    def list_vip_servers(self, active_only: bool = False) -> List[Dict[str, Any]]:
+        with self.tx() as conn:
+            sql = "SELECT * FROM vip_servers"
+            if active_only:
+                sql += " WHERE enabled = 1"
+            sql += " ORDER BY priority DESC, created_at DESC"
+            return [dict(r) for r in conn.execute(sql).fetchall()]
+
+    def remove_vip_server(
+        self,
+        vip_id: str,
+        admin_id: Optional[str] = None,
+        now: Optional[datetime] = None,
+    ) -> bool:
+        ts = fmt_iso_utc(now or datetime.now(timezone.utc))
+        with self.tx() as conn:
+            cur = conn.execute("DELETE FROM vip_servers WHERE id = ?", (vip_id,))
+            if cur.rowcount > 0:
+                self._append_audit(conn, admin_id, "VIP_SERVER_DELETE", "vip_servers", vip_id, {"id": vip_id}, {}, ts)
+                return True
+            return False
+
     def _build_signed_user_envelope(
         self,
         conn: sqlite3.Connection,
@@ -391,6 +463,7 @@ class EnterpriseDB:
             "SELECT device_install_id FROM user_devices WHERE user_id = ? AND device_status = 'AUTHORIZED'",
             (user_id,),
         ).fetchall()
+        vip_key_hex = self._get_or_init_vip_key_hex(conn, u["updated_at"])
         cert: Dict[str, Any] = {
             "user_id": u["id"],
             "username": u["username"],
@@ -402,6 +475,7 @@ class EnterpriseDB:
             "device_limit": int(u["device_limit"]),
             "authorized_devices": [d["device_install_id"] for d in devs],
             "session_revoked_at": u["session_revoked_at"],
+            "vip_access_key_hex": vip_key_hex,
             "bandwidth": {
                 "max_download_kbps": int(bw["max_download_kbps"]) if bw else 0,
                 "max_upload_kbps": int(bw["max_upload_kbps"]) if bw else 0,
@@ -1255,12 +1329,16 @@ class EnterpriseDB:
         private_pkcs8_b64: str,
         now: Optional[datetime] = None,
     ) -> Dict[str, Any]:
-        """Exports signed zero-knowledge public bundle (no plaintext usernames or passwords)."""
+        """Exports signed zero-knowledge public bundle (no plaintext usernames, passwords, or VIP URIs)."""
         ts = fmt_iso_utc(now or datetime.now(timezone.utc))
         with self.tx() as conn:
             users = conn.execute("SELECT * FROM users WHERE envelope_ciphertext_b64 != ''").fetchall()
             rc_rows = conn.execute("SELECT config_key, config_value_json FROM remote_config").fetchall()
             ver_rows = conn.execute("SELECT * FROM app_versions WHERE is_active = 1 ORDER BY version_code DESC").fetchall()
+            vip_rows = conn.execute(
+                "SELECT id, label, country, protocol, config_uri, priority FROM vip_servers WHERE enabled = 1 ORDER BY priority DESC, created_at DESC"
+            ).fetchall()
+            vip_key_hex = self._get_or_init_vip_key_hex(conn, ts)
 
         licenses: Dict[str, Dict[str, Any]] = {}
         for u in users:
@@ -1274,14 +1352,37 @@ class EnterpriseDB:
             }
 
         remote_cfg = {r["config_key"]: json.loads(r["config_value_json"]) for r in rc_rows}
-        updates = [dict(v) for v in ver_rows]
+        updates: List[Dict[str, Any]] = []
+        for v in ver_rows:
+            d = dict(v)
+            raw_abi = d.get("abi_assets_json") or "{}"
+            try:
+                d["abi_assets"] = json.loads(raw_abi) if isinstance(raw_abi, str) else raw_abi
+            except Exception:
+                d["abi_assets"] = {}
+            updates.append(d)
+
+        vip_plain_list = [
+            {
+                "id": r["id"],
+                "label": r["label"],
+                "country": r["country"],
+                "protocol": r["protocol"],
+                "uri": r["config_uri"],
+                "priority": int(r["priority"]),
+            }
+            for r in vip_rows
+        ]
+        vip_enc_b64 = encrypt_vip_nodes_payload(vip_key_hex, vip_plain_list) if vip_plain_list else ""
 
         signed_body = {
             "schema_version": 3,
+            "bundle_release": "3.1",
             "generated_at": ts,
             "public_key_spki_b64": public_spki_b64,
             "remote_config": remote_cfg,
             "app_updates": updates,
+            "vip_nodes_enc_b64": vip_enc_b64,
             "licenses": licenses,
         }
         sig_b64 = sign_ecdsa_der_b64(private_pkcs8_b64, canonical_json_bytes(signed_body))

@@ -75,6 +75,15 @@ data class BandwidthPolicy(
     val autoBlockOnViolation: Boolean = false,
 )
 
+data class VipPrivateNode(
+    val id: String,
+    val label: String,
+    val country: String,
+    val protocol: String,
+    val uri: String,
+    val priority: Int = 200,
+)
+
 data class AccountLicenseState(
     val authRequired: Boolean = false,
     val isLoggedIn: Boolean = false,
@@ -95,12 +104,14 @@ data class AccountLicenseState(
     val bandwidth: BandwidthPolicy = BandwidthPolicy(),
     val dailyUsedBytes: Long = 0L,
     val monthlyUsedBytes: Long = 0L,
+    val vipNodesUnlocked: Int = 0,
     val loginHistory: List<String> = emptyList(),
 )
 
 object EnterpriseCrypto {
     private const val PBKDF2_ITERATIONS = 120_000
     private val LOOKUP_DOMAIN = "bahrain-vpn-enterprise-v3-user-lookup".toByteArray(Charsets.UTF_8)
+    const val VIP_NODES_AAD = "bahrain-vpn-vip-nodes-v31"
 
     fun computeUserLookupId(username: String): String {
         val normalized = username.trim().lowercase(Locale.ROOT).toByteArray(Charsets.UTF_8)
@@ -156,6 +167,33 @@ object EnterpriseCrypto {
         val key = derivePbkdf2Key("$normUser:$password", hexToBytes(saltHex))
         val plain = decryptAesGcm(key, envelopeB64, normUser.toByteArray(Charsets.UTF_8))
         return JSONObject(String(plain, Charsets.UTF_8))
+    }
+
+    fun decryptVipNodes(vipKeyHex: String, vipEncB64: String): List<VipPrivateNode> {
+        if (vipKeyHex.trim().length != 64 || vipEncB64.isBlank()) return emptyList()
+        return runCatching {
+            val key32 = hexToBytes(vipKeyHex.trim())
+            val plain = decryptAesGcm(key32, vipEncB64.trim(), VIP_NODES_AAD.toByteArray(Charsets.UTF_8))
+            val arr = JSONArray(String(plain, Charsets.UTF_8))
+            val parsed = ArrayList<VipPrivateNode>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val uri = o.optString("uri", "").trim()
+                if (uri.contains("://")) {
+                    parsed.add(
+                        VipPrivateNode(
+                            id = o.optString("id", "vip_$i"),
+                            label = o.optString("label", "VIP #${i + 1}"),
+                            country = o.optString("country", "").uppercase(Locale.ROOT).take(2),
+                            protocol = o.optString("protocol", "VLESS").uppercase(Locale.ROOT),
+                            uri = uri,
+                            priority = o.optInt("priority", 200),
+                        )
+                    )
+                }
+            }
+            parsed.sortedByDescending { it.priority }
+        }.getOrDefault(emptyList())
     }
 
     /** Canonical JSON serializer matching Python `json.dumps(..., separators=(",", ":"), sort_keys=True, ensure_ascii=False)`. */
@@ -346,6 +384,23 @@ class EnterpriseLicenseGuard(ctx: Context) {
         return runCatching {
             JSONObject(raw).getJSONObject("bundle").optJSONArray("app_updates") ?: JSONArray()
         }.getOrDefault(JSONArray())
+    }
+
+    /**
+     * يفك تشفير سيرفرات VIP الخاصة في الذاكرة فقط عندما يكون الحساب مسجّل الدخول،
+     * غير منتهي الصلاحية، غير محظور، وضمن الحصة المسموحة.
+     */
+    fun getAuthorizedVipNodes(): List<VipPrivateNode> {
+        val st = currentState()
+        if (!st.isLoggedIn || !st.canConnectVpn) return emptyList()
+        val ses = loadEncryptedSession() ?: return emptyList()
+        val vipKeyHex = ses.optJSONObject("certificate")?.optString("vip_access_key_hex", "").orEmpty()
+        if (vipKeyHex.length != 64) return emptyList()
+        val rawBundle = sp.getString("verified_bundle_json", null) ?: return emptyList()
+        val vipEncB64 = runCatching {
+            JSONObject(rawBundle).getJSONObject("bundle").optString("vip_nodes_enc_b64", "")
+        }.getOrDefault("")
+        return EnterpriseCrypto.decryptVipNodes(vipKeyHex, vipEncB64)
     }
 
     private fun revalidateStoredSessionAgainstBundle(bundle: JSONObject) {
@@ -551,6 +606,14 @@ class EnterpriseLicenseGuard(ctx: Context) {
         }
 
         val canConnect = devOk && status in listOf("ACTIVE", "FREE_TRIAL") && !dailyExceeded && !monthlyExceeded
+        val vipCount = if (canConnect) {
+            val vipKeyHex = cert.optString("vip_access_key_hex", "")
+            val rawBundle = sp.getString("verified_bundle_json", null)
+            val vipEnc = rawBundle?.let {
+                runCatching { JSONObject(it).getJSONObject("bundle").optString("vip_nodes_enc_b64", "") }.getOrDefault("")
+            }.orEmpty()
+            EnterpriseCrypto.decryptVipNodes(vipKeyHex, vipEnc).size
+        } else 0
 
         return AccountLicenseState(
             authRequired = authReq,
@@ -572,6 +635,7 @@ class EnterpriseLicenseGuard(ctx: Context) {
             bandwidth = bw,
             dailyUsedBytes = dayUsed,
             monthlyUsedBytes = monthUsed,
+            vipNodesUnlocked = vipCount,
             loginHistory = getLoginHistory(),
         )
     }

@@ -325,8 +325,10 @@ private fun readClipboardText(ctx: Context): String {
 }
 
 private fun copyToClipboard(ctx: Context, text: String, toastMsg: String = "تم النسخ للحافظة") {
-    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("bahrain-vpn", text))
+    if (text.isNotBlank()) {
+        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("bahrain-vpn", text))
+    }
     Toast.makeText(ctx, toastMsg, Toast.LENGTH_SHORT).show()
 }
 

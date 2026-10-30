@@ -39,6 +39,7 @@ ARGON2_MEMORY_KIB = 65536
 ARGON2_LANES = 2
 PBKDF2_ITERATIONS = 120_000
 USERNAME_LOOKUP_DOMAIN = b"bahrain-vpn-enterprise-v3-user-lookup"
+VIP_NODES_AAD = b"bahrain-vpn-vip-nodes-v31"
 
 
 def utc_now_iso() -> str:
@@ -152,6 +153,28 @@ def open_user_license_envelope(
     key = derive_pbkdf2_key(f"{norm_user}:{password}", salt)
     plain = decrypt_aes_gcm(key, envelope_b64, aad=norm_user.encode("utf-8"))
     return json.loads(plain.decode("utf-8"))
+
+
+def encrypt_vip_nodes_payload(vip_key_hex: str, nodes: list[Dict[str, Any]]) -> str:
+    """Encrypts VIP Private Nodes with 256-bit AES-GCM so URIs never appear in plaintext in bundle.json."""
+    if not nodes:
+        return ""
+    key = bytes.fromhex(vip_key_hex.strip())
+    if len(key) != 32:
+        raise ValueError("VIP content key must be 32 bytes (64 hex chars)")
+    body = json.dumps(nodes, separators=(",", ":"), sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return encrypt_aes_gcm(key, body, aad=VIP_NODES_AAD)
+
+
+def decrypt_vip_nodes_payload(vip_key_hex: str, token_b64: str) -> list[Dict[str, Any]]:
+    if not token_b64 or not vip_key_hex:
+        return []
+    key = bytes.fromhex(vip_key_hex.strip())
+    if len(key) != 32:
+        raise ValueError("VIP content key must be 32 bytes (64 hex chars)")
+    plain = decrypt_aes_gcm(key, token_b64, aad=VIP_NODES_AAD)
+    parsed = json.loads(plain.decode("utf-8"))
+    return parsed if isinstance(parsed, list) else []
 
 
 # ---------------------------------------------------------------------------

@@ -897,7 +897,13 @@ fun ServersListScreen(
                         onConnect = { onConnectServer(srv) },
                         onToggleFav = { vm.toggleFavorite(srv.cfg) },
                         onPing = { vm.pingSingleServer(srv) },
-                        onCopy = { onCopy(srv.exportUri, "نُسخ ${srv.name} للحافظة") },
+                        onCopy = {
+                            if (srv.isVip) {
+                                onCopy("", "عقدة VIP مشفّرة ومحمية — مخصّصة للاتصال المباشر فقط")
+                            } else {
+                                onCopy(srv.exportUri, "نُسخ ${srv.name} للحافظة")
+                            }
+                        },
                         onDeleteCustom = if (srv.isCustom) ({ vm.removeCustomServer(srv.cfg) }) else null,
                     )
                 }
@@ -973,6 +979,20 @@ private fun ServerCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (item.isVip) {
+                        Surface(
+                            color = Color(0xFFFFB300).copy(alpha = 0.22f),
+                            shape = RoundedCornerShape(6.dp),
+                        ) {
+                            Text(
+                                "VIP 💎",
+                                color = Color(0xFFFFA000),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
                     if (item.isCustom) {
                         AssistChip(
                             onClick = onConnect,

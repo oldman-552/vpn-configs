@@ -1,8 +1,8 @@
 // =====================================================================
-// AppUpdateManager.kt — نظام تحديثات APK الموقّعة الرسمي (Phase 10).
-// يتحقق من وجود إصدار أحدث، يميز التحديث الإلزامي عن الاختياري،
-// ويتحقق من بصمة SHA-256 وشهادة التوقيع قبل فتح مثبّت أندرويد الرسمي
-// دون أي تثبيت صامت في الخلفية.
+// AppUpdateManager.kt — نظام تحديثات APK الموقّعة الذكي حسب معمارية المعالج (v3.1).
+// يختار تلقائيًا حزمة arm64-v8a الرشيقة لهواتف ARM64 (أو x86_64 أو الشاملة)،
+// يميز التحديث الإلزامي عن الاختياري، ويتحقق من بصمة SHA-256 وشهادة التوقيع
+// قبل فتح مثبّت أندرويد الرسمي دون أي تثبيت صامت في الخلفية.
 // =====================================================================
 package com.bahrain.vpnconfigs.enterprise
 
@@ -15,6 +15,7 @@ import com.bahrain.vpnconfigs.data.Repo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
 
@@ -27,6 +28,7 @@ data class AppUpdateInfo(
     val apkUrl: String,
     val apkSha256: String,
     val signingCertSha256: String,
+    val selectedAbi: String = "universal",
 )
 
 object AppUpdateManager {
@@ -34,13 +36,51 @@ object AppUpdateManager {
     fun currentVersionCode(ctx: Context): Int = runCatching {
         val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) pi.longVersionCode.toInt() else @Suppress("DEPRECATION") pi.versionCode
-    }.getOrDefault(8)
+    }.getOrDefault(9)
 
     fun currentVersionName(ctx: Context): String = runCatching {
-        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "3.0"
-    }.getOrDefault("3.0")
+        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "3.1"
+    }.getOrDefault("3.1")
 
-    fun evaluateAvailableUpdate(ctx: Context, updatesJson: JSONArray): AppUpdateInfo? {
+    /**
+     * يحسم الحزمة الأنسب لمعمارية معالج الهاتف (مثل arm64-v8a لتوفير ~35% من الحجم)
+     * مع التراجع الآمن إلى النسخة الشاملة universal أو الرابط الافتراضي.
+     */
+    fun resolveBestAbiAsset(
+        updateObj: JSONObject,
+        supportedAbis: Array<String> = Build.SUPPORTED_ABIS,
+    ): Triple<String, String, String> {
+        val abiMap = updateObj.optJSONObject("abi_assets")
+        if (abiMap != null) {
+            for (abi in supportedAbis) {
+                val entry = abiMap.optJSONObject(abi) ?: continue
+                val url = entry.optString("apk_url", "").trim()
+                if (url.isNotEmpty()) {
+                    val sha = entry.optString("apk_sha256", "").trim().lowercase()
+                    return Triple(abi, url, sha)
+                }
+            }
+            val uni = abiMap.optJSONObject("universal")
+            if (uni != null) {
+                val url = uni.optString("apk_url", "").trim()
+                if (url.isNotEmpty()) {
+                    val sha = uni.optString("apk_sha256", "").trim().lowercase()
+                    return Triple("universal", url, sha)
+                }
+            }
+        }
+        return Triple(
+            "universal",
+            updateObj.optString("apk_url", "").trim(),
+            updateObj.optString("apk_sha256", "").trim().lowercase(),
+        )
+    }
+
+    fun evaluateAvailableUpdate(
+        ctx: Context,
+        updatesJson: JSONArray,
+        supportedAbis: Array<String> = Build.SUPPORTED_ABIS,
+    ): AppUpdateInfo? {
         val curCode = currentVersionCode(ctx)
         var newest: AppUpdateInfo? = null
         for (i in 0 until updatesJson.length()) {
@@ -50,15 +90,17 @@ object AppUpdateManager {
             val minSup = o.optInt("min_supported_code", 1)
             val mandatory = o.optBoolean("mandatory", false) || curCode < minSup
             if (code > curCode && (newest == null || code > newest.versionCode)) {
+                val (abiLabel, resolvedUrl, resolvedSha) = resolveBestAbiAsset(o, supportedAbis)
                 newest = AppUpdateInfo(
                     versionCode = code,
                     versionName = o.optString("version_name", ""),
                     releaseNotes = o.optString("release_notes", ""),
                     mandatory = mandatory,
                     minSupportedCode = minSup,
-                    apkUrl = o.optString("apk_url", ""),
-                    apkSha256 = o.optString("apk_sha256", "").lowercase(),
+                    apkUrl = resolvedUrl,
+                    apkSha256 = resolvedSha,
                     signingCertSha256 = o.optString("signing_cert_sha256", "").lowercase(),
+                    selectedAbi = abiLabel,
                 )
             }
         }
@@ -98,7 +140,7 @@ object AppUpdateManager {
     suspend fun downloadAndVerifyUpdate(ctx: Context, repo: Repo, info: AppUpdateInfo): Result<File> =
         withContext(Dispatchers.IO) {
             val outDir = File(ctx.filesDir, "updates").apply { mkdirs() }
-            val target = File(outDir, "bahrain-vpn-update-${info.versionCode}.apk")
+            val target = File(outDir, "bahrain-vpn-update-${info.versionCode}-${info.selectedAbi}.apk")
             val ok = repo.downloadExternalApkBounded(info.apkUrl, target)
             if (!ok || !target.exists() || target.length() < 1024L) {
                 target.delete()

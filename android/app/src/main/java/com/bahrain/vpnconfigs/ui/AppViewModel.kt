@@ -76,9 +76,10 @@ data class ServerItem(
     val localFailed: Boolean = false,
     val isFavorite: Boolean = false,
     val isCustom: Boolean = false,
+    val isVip: Boolean = false,
 ) {
     val exportUri: String
-        get() = Converters.namedUri(cfg, name)
+        get() = if (isVip) "" else Converters.namedUri(cfg, name)
 }
 
 data class UiState(
@@ -294,10 +295,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val favSet = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
         val customs = prefs.customConfigs.map { Converters.cleanUri(it) }
         val customSet = customs.toHashSet()
+        val vipNodes = licenseGuard.getAuthorizedVipNodes()
+        val vipByClean = vipNodes.associateBy { Converters.cleanUri(it.uri) }
         val resultMap = localResults.filter { it.ok && (it.latencyMs > 0L || it.speedKbps > 0.0) }
             .associateBy { Converters.cleanUri(it.cfg) }
 
         val allUnique = LinkedHashSet<String>()
+        vipNodes.forEach {
+            val cleaned = Converters.cleanUri(it.uri)
+            if (Converters.isSupported(cleaned)) allUnique.add(cleaned)
+        }
         favSet.forEach { if (Converters.isSupported(it)) allUnique.add(it) }
         localResults.filter { it.ok }.forEach {
             val cleaned = Converters.cleanUri(it.cfg)
@@ -311,6 +318,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
         val droppedNow = VpnStateManager.status.value.droppedConfigs
         val rankablePairs = allUnique.map { cfg ->
+            val vipNode = vipByClean[cfg]
             val failed = cfg in failedConfigs || cfg in droppedNow
             val local = if (failed) null else resultMap[cfg]
             val hint = serverHints[cfg]
@@ -340,25 +348,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 jitterMs = hint?.jitterMs ?: 0.0,
                 speedKbps = effectiveSpeed,
                 stabilityRuns = hint?.stabilityRuns ?: 0,
-                cloudQualityHint = hint?.score ?: 0.0,
+                cloudQualityHint = if (vipNode != null) 98.0 else (hint?.score ?: 0.0),
                 locallyTested = local != null,
                 localFailed = failed,
-                isFavorite = cfg in favSet,
+                isFavorite = cfg in favSet || vipNode != null,
                 isCustom = cfg in customSet,
                 lastTestedAtMs = effectiveTestedMs,
             )
             val computedOverall = ServerRanker.computeOverallScore(rankable, nowMs)
             val item = ServerItem(
                 cfg = cfg,
-                name = "",
+                name = vipNode?.label.orEmpty(),
                 proto = Converters.protocolBadge(cfg),
-                endpoint = Converters.endpointLabel(cfg),
+                endpoint = if (vipNode != null) "عقدة VIP مشفّرة ومحمية" else Converters.endpointLabel(cfg),
                 latencyMs = displayLatency,
                 jitterMs = hint?.jitterMs ?: 0.0,
                 speedKbps = effectiveSpeed,
                 score = hint?.score ?: 0.0,
                 overallScore = computedOverall,
-                country = hint?.country.orEmpty(),
+                country = vipNode?.country?.takeIf { it.isNotBlank() } ?: hint?.country.orEmpty(),
                 stabilityRuns = hint?.stabilityRuns ?: 0,
                 verifiedAt = hint?.verifiedAt.orEmpty(),
                 lastTestedAtMs = effectiveTestedMs,
@@ -366,20 +374,41 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 localFailed = failed,
                 isFavorite = cfg in favSet,
                 isCustom = cfg in customSet,
+                isVip = vipNode != null,
             )
             rankable to item
         }
 
         val comp = ServerRanker.comparatorFor(sortMode, nowMs)
         val sortedItems = rankablePairs
-            .sortedWith { a, b -> comp.compare(a.first, b.first) }
+            .sortedWith { a, b ->
+                if (a.second.isVip != b.second.isVip && a.second.localFailed == b.second.localFailed) {
+                    if (a.second.isVip) -1 else 1
+                } else {
+                    comp.compare(a.first, b.first)
+                }
+            }
             .mapIndexed { idx, pair ->
-                pair.second.copy(name = "bahrain-vpn #${idx + 1}")
+                val itm = pair.second
+                val finalName = if (itm.isVip && itm.name.isNotBlank()) {
+                    "bahrain-vpn VIP • ${itm.name}"
+                } else {
+                    "bahrain-vpn #${idx + 1}"
+                }
+                itm.copy(name = finalName)
             }
 
         VpnStateManager.serverPool = sortedItems.filterNot { it.localFailed }
             .ifEmpty { sortedItems }
-            .map { ServerCandidate(it.cfg, it.name) }
+            .map {
+                ServerCandidate(
+                    cfg = it.cfg,
+                    label = it.name,
+                    speedKbps = it.speedKbps,
+                    latencyMs = it.latencyMs,
+                    isVip = it.isVip,
+                )
+            }
         return sortedItems
     }
 
@@ -587,7 +616,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun runTestInternal(quickPingOnly: Boolean, autoAfterRefresh: Boolean = false) {
-        val pool = (prefs.customConfigs + state.configs).distinct()
+        val vipUris = licenseGuard.getAuthorizedVipNodes().map { it.uri }
+        val pool = (vipUris + prefs.customConfigs + state.configs).distinct()
         if (pool.isEmpty()) {
             if (!autoAfterRefresh) state = state.copy(error = UiMessages.MSG_NO_SERVERS)
             return
@@ -710,15 +740,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val mergedResults = mergedFresh + untouchedPrev
 
+                val vipProtectedSet = licenseGuard.getAuthorizedVipNodes()
+                    .map { Converters.cleanUri(it.uri) }
+                    .toHashSet()
+                val exportPool = pool.filterNot { Converters.cleanUri(it) in vipProtectedSet }
+                val exportMerged = mergedResults.filterNot { Converters.cleanUri(it.cfg) in vipProtectedSet }
+
                 val r = buildRepo()
                 val allFile = withContext(Dispatchers.IO) {
-                    runCatching { r.writeAll(pool) }.getOrNull()
+                    runCatching { r.writeAll(exportPool) }.getOrNull()
                 }
-                val bestPair = if (mergedResults.isNotEmpty()) {
+                val bestPair = if (exportMerged.isNotEmpty()) {
                     withContext(Dispatchers.IO) {
                         runCatching {
                             r.writeBest(
-                                mergedResults.map { ResultLine(it.cfg, it.latencyMs, it.speedKbps, it.testedAtMs) },
+                                exportMerged.map { ResultLine(it.cfg, it.latencyMs, it.speedKbps, it.testedAtMs) },
                                 prefs.bestN,
                             )
                         }.getOrNull()
@@ -794,11 +830,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     add(res)
                     state.results.forEach { if (Converters.cleanUri(it.cfg) != cleanedCfg) add(it) }
                 }
+                val vipProtectedSet = licenseGuard.getAuthorizedVipNodes()
+                    .map { Converters.cleanUri(it.uri) }
+                    .toHashSet()
+                val exportResults = updatedResults.filterNot { Converters.cleanUri(it.cfg) in vipProtectedSet }
                 val r = buildRepo()
                 val bestPair = withContext(Dispatchers.IO) {
                     runCatching {
                         r.writeBest(
-                            updatedResults.map { ResultLine(it.cfg, it.latencyMs, it.speedKbps, it.testedAtMs) },
+                            exportResults.map { ResultLine(it.cfg, it.latencyMs, it.speedKbps, it.testedAtMs) },
                             prefs.bestN,
                         )
                     }.getOrNull()
@@ -970,9 +1010,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshEnterpriseState() {
         val acct = licenseGuard.currentState()
         val upd = AppUpdateManager.evaluateAvailableUpdate(getApplication(), licenseGuard.getVerifiedAppUpdates())
+        val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
+        val countries = computeCountryCounts(rebuilt)
+        val sel = resolveSelected(state.selectedCfg, rebuilt)
         state = state.copy(
             accountState = acct,
             availableUpdate = upd,
+            servers = rebuilt,
+            availableCountries = countries,
+            selectedCfg = sel,
             appHealth = AppHealthMonitor.snapshot(getApplication()),
         )
         if (!acct.canConnectVpn && VpnStateManager.status.value.isActive) {
@@ -1007,11 +1053,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             result.fold(
                 onSuccess = { acct ->
+                    val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
+                    val countries = computeCountryCounts(rebuilt)
+                    val sel = resolveSelected(state.selectedCfg, rebuilt)
+                    val vipMsg = if (acct.vipNodesUnlocked > 0) " • تم فتح ${acct.vipNodesUnlocked} عقدة VIP خاصة" else ""
                     state = state.copy(
                         authLoading = false,
                         authError = null,
                         accountState = acct,
-                        info = "تم تسجيل الدخول بنجاح (${acct.username})",
+                        servers = rebuilt,
+                        availableCountries = countries,
+                        selectedCfg = sel,
+                        info = "تم تسجيل الدخول بنجاح (${acct.username})$vipMsg",
                     )
                 },
                 onFailure = { err ->
@@ -1027,12 +1080,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun logoutEnterpriseAccount() {
         licenseGuard.logout("USER_LOGOUT")
-        if (VpnStateManager.status.value.isActive && licenseGuard.currentState().authRequired) {
+        val nextAcct = licenseGuard.currentState()
+        if (VpnStateManager.status.value.isActive && (nextAcct.authRequired || state.selectedServer?.isVip == true)) {
             BahrainVpnService.stopVpn(getApplication())
         }
+        val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
+        val countries = computeCountryCounts(rebuilt)
+        val sel = resolveSelected(state.selectedCfg, rebuilt)
         state = state.copy(
-            accountState = licenseGuard.currentState(),
-            info = "تم تسجيل الخروج من الحساب",
+            accountState = nextAcct,
+            servers = rebuilt,
+            availableCountries = countries,
+            selectedCfg = sel,
+            info = "تم تسجيل الخروج وإغلاق عقد VIP الخاصة",
         )
     }
 

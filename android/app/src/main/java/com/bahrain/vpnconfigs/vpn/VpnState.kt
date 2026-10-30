@@ -20,6 +20,9 @@ enum class VpnPhase {
 data class ServerCandidate(
     val cfg: String,
     val label: String,
+    val speedKbps: Double = 0.0,
+    val latencyMs: Long = 0L,
+    val isVip: Boolean = false,
 )
 
 data class VpnStatus(

@@ -78,7 +78,7 @@ jobs:
                   fails += int(r.attrib.get("failures", 0))
                   errs += int(r.attrib.get("errors", 0))
           print(f"::notice::Android JUnit Suite (:app + :admin): {total} tests executed, {fails} failures, {errs} errors")
-          assert total >= 12 and fails == 0 and errs == 0
+          assert total >= 15 and fails == 0 and errs == 0
           PY
 
       - name: Collect User & Admin APKs, compute SHA-256 & run security/resource audits
@@ -198,8 +198,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VER_NAME=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)
-          VER_TAG="v${VER_NAME:-3.0}"
-          NOTES="منصة **ULTIMATE VPN ENTERPRISE (${VER_TAG})** المتكاملة — تشمل تطبيق المشترك المحدّث \`app-arm64-v8a-release.apk\` / \`app-release.apk\` (مع الفحص التلقائي للسرعة عند التحديث، حساب المشترك، التجربة المجانية 48 ساعة، استوديو السرعة الحقيقي، وتشخيص تسرب DNS/IP) بالإضافة إلى تطبيق المشرف المستقل \`app-admin-release.apk\`."
+          VER_TAG="v${VER_NAME:-3.1}"
+          NOTES="منصة **ULTIMATE VPN ENTERPRISE (${VER_TAG})** المتكاملة — تشمل تقليص حجم التطبيقات عبر \`R8 + Resource Shrinking\`، التحديث الذكي التلقائي حسب معمارية المعالج (\`arm64-v8a\` / \`x86_64\`)، دعم **سيرفرات VIP الخاصة المشفّرة (\`AES-256-GCM\`) للمشتركين الفعّالين فقط** مع حمايتها من النسخ، محرك التبديل التلقائي السريع عند الانقطاع (\`Smart Auto-Failover ~2s\`)، الفحص التلقائي للسرعة عند التحديث، وتطبيق المشرف المستقل الرشيق \`app-admin-release.apk\`."
 
           publish_release() {
             local tag="$1"

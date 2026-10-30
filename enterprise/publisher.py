@@ -52,28 +52,43 @@ def run_serverless_cycle(
 
         db = EnterpriseDB(tmp_db_path)
 
-        # Ensure current User & Admin APK version metadata exists in app_versions
+        # Ensure current User & Admin APK v3.1 version metadata (with ABI-aware assets) exists in app_versions
+        abi_assets = {
+            "arm64-v8a": {
+                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/latest/download/app-arm64-v8a-release.apk",
+                "apk_sha256": "",
+            },
+            "x86_64": {
+                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/latest/download/app-x86_64-release.apk",
+                "apk_sha256": "",
+            },
+            "universal": {
+                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/latest/download/app-release.apk",
+                "apk_sha256": "",
+            },
+        }
         with db.tx() as conn:
+            conn.execute("UPDATE app_versions SET is_active = 0 WHERE version_name = '3.0'")
             conn.execute(
-                """INSERT OR IGNORE INTO app_versions
+                """INSERT OR REPLACE INTO app_versions
                    (id, target_app, version_code, version_name, release_notes, release_date,
-                    mandatory, min_supported_code, apk_url, apk_sha256, signing_cert_sha256, is_active)
-                   VALUES ('ver_user_3_0', 'USER', 8, '3.0',
-                           'إصدار ULTIMATE VPN ENTERPRISE v3.0 مع فحص السرعة والتشخيص الذكي ونظام الحسابات',
-                           ?, 0, 7,
+                    mandatory, min_supported_code, apk_url, apk_sha256, signing_cert_sha256, is_active, abi_assets_json)
+                   VALUES ('ver_user_3_1', 'USER', 9, '3.1',
+                           'إصدار ULTIMATE VPN ENTERPRISE v3.1: تقليص حجم التطبيق، التحديث الذكي حسب معمارية المعالج، سيرفرات VIP المشفّرة للمشتركين، والتبديل التلقائي السريع عند الانقطاع',
+                           ?, 0, 8,
                            'https://github.com/oldman-552/vpn-configs/releases/latest/download/app-arm64-v8a-release.apk',
-                           '', '', 1)""",
-                (fmt_iso_utc(now_dt),),
+                           '', '', 1, ?)""",
+                (fmt_iso_utc(now_dt), json.dumps(abi_assets, ensure_ascii=False)),
             )
             conn.execute(
-                """INSERT OR IGNORE INTO app_versions
+                """INSERT OR REPLACE INTO app_versions
                    (id, target_app, version_code, version_name, release_notes, release_date,
-                    mandatory, min_supported_code, apk_url, apk_sha256, signing_cert_sha256, is_active)
-                   VALUES ('ver_admin_3_0', 'ADMIN', 1, '3.0',
-                           'تطبيق إدارة ULTIMATE VPN ENTERPRISE مع المصادقة الثنائية TOTP والتحكم الكامل عبر GitHub',
+                    mandatory, min_supported_code, apk_url, apk_sha256, signing_cert_sha256, is_active, abi_assets_json)
+                   VALUES ('ver_admin_3_1', 'ADMIN', 2, '3.1',
+                           'تطبيق إدارة ULTIMATE VPN ENTERPRISE v3.1 الرشيق مع إدارة سيرفرات VIP المشفّرة والتحكم الكامل عبر GitHub',
                            ?, 0, 1,
                            'https://github.com/oldman-552/vpn-configs/releases/latest/download/app-admin-release.apk',
-                           '', '', 1)""",
+                           '', '', 1, '{}')""",
                 (fmt_iso_utc(now_dt),),
             )
 
