@@ -29,6 +29,16 @@ import com.bahrain.vpnconfigs.engine.ServerSortMode
 import com.bahrain.vpnconfigs.engine.TestProgress
 import com.bahrain.vpnconfigs.engine.TestResult
 import com.bahrain.vpnconfigs.engine.Tester
+import com.bahrain.vpnconfigs.enterprise.AccountLicenseState
+import com.bahrain.vpnconfigs.enterprise.AppHealthMonitor
+import com.bahrain.vpnconfigs.enterprise.AppHealthSnapshot
+import com.bahrain.vpnconfigs.enterprise.AppUpdateInfo
+import com.bahrain.vpnconfigs.enterprise.AppUpdateManager
+import com.bahrain.vpnconfigs.enterprise.ClientDiagnosticsEngine
+import com.bahrain.vpnconfigs.enterprise.EnterpriseLicenseGuard
+import com.bahrain.vpnconfigs.enterprise.ExplicitUrlProbeResult
+import com.bahrain.vpnconfigs.enterprise.NetworkDiagnosticReport
+import com.bahrain.vpnconfigs.enterprise.SpeedTestRecord
 import com.bahrain.vpnconfigs.util.AppDiag
 import com.bahrain.vpnconfigs.util.UiMessages
 import com.bahrain.vpnconfigs.vpn.AppEntry
@@ -100,6 +110,22 @@ data class UiState(
     val splitIncludeOnly: Boolean = false,
     val tunnelNeedsReload: Boolean = false,
     val activePromo: ResolvedPromoBanner? = null,
+    // ── مؤشرات ULTIMATE VPN ENTERPRISE (حساب، تجربة 48 ساعة، سرعة، تشخيص، تحديثات) ──
+    val accountState: AccountLicenseState = AccountLicenseState(),
+    val authLoading: Boolean = false,
+    val authError: String? = null,
+    val speedTestRunning: Boolean = false,
+    val speedTestStage: String = "",
+    val liveSpeedGaugeMbps: Double = 0.0,
+    val liveSpeedCurve: List<Double> = emptyList(),
+    val latestSpeedRecord: SpeedTestRecord? = null,
+    val speedHistory: List<SpeedTestRecord> = emptyList(),
+    val netDiagRunning: Boolean = false,
+    val netDiagReport: NetworkDiagnosticReport? = null,
+    val urlProbeResult: ExplicitUrlProbeResult? = null,
+    val appHealth: AppHealthSnapshot = AppHealthSnapshot(20L, 0.0, 0, 0, 0, false, emptyList()),
+    val availableUpdate: AppUpdateInfo? = null,
+    val updatingApk: Boolean = false,
 ) {
     val selectedServer: ServerItem?
         get() = servers.firstOrNull { it.cfg == selectedCfg } ?: servers.firstOrNull()
@@ -109,6 +135,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = Prefs(app)
     private val tester = Tester(app)
+    private val licenseGuard = EnterpriseLicenseGuard(app)
+    private val diagnosticsEngine = ClientDiagnosticsEngine(app)
 
     private var serverLatencies: Map<String, Long> = emptyMap()
     private var serverHints: Map<String, ServerHint> = emptyMap()
@@ -125,6 +153,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             autoFailover = prefs.autoFailover,
             splitApps = prefs.splitApps,
             splitIncludeOnly = prefs.splitIncludeOnly,
+            accountState = licenseGuard.currentState(),
+            speedHistory = diagnosticsEngine.loadSpeedHistory(),
+            latestSpeedRecord = diagnosticsEngine.loadSpeedHistory().firstOrNull(),
+            appHealth = AppHealthMonitor.snapshot(app),
         )
     )
         private set
@@ -136,6 +168,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         AppDiag.init(app)
+        AppHealthMonitor.install(app)
+        syncEnterpriseBundle()
 
         // تحميل الإعلان المتناوب عند فتح التطبيق وتحديث بقية الصور الخمس في الخلفية
         triggerNextPromoBanner()
@@ -495,7 +529,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 state.allFile
             }
-            val rebuilt = buildServerList(newConfigs, state.results, state.sortMode)
+            val shouldAutoTest = tester.engineAvailable && newConfigs.isNotEmpty() && (
+                refreshSucceededLive ||
+                    !silent ||
+                    state.results.none { it.speedKbps > 0.0 }
+                )
+
+            val targetSortMode = if (shouldAutoTest) {
+                prefs.sortMode = ServerSortMode.FASTEST_DOWNLOAD.key
+                prefs.rankBySpeed = true
+                ServerSortMode.FASTEST_DOWNLOAD.key
+            } else {
+                state.sortMode
+            }
+
+            val rebuilt = buildServerList(newConfigs, state.results, targetSortMode)
             val countries = computeCountryCounts(rebuilt)
             val sel = resolveSelected(state.selectedCfg, rebuilt)
             val metaObj = if (res.meta.generatedAt != "—") res.meta else state.meta
@@ -503,6 +551,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
             state = state.copy(
                 loading = false,
+                sortMode = targetSortMode,
                 configs = newConfigs,
                 servers = rebuilt,
                 availableCountries = countries,
@@ -515,40 +564,68 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else null,
                 info = if (!silent) {
                     if (refreshSucceededLive) {
-                        "تم تحديث قائمة السيرفرات (${rebuilt.size} سيرفر متاح)"
+                        "تم تحديث القائمة (${rebuilt.size} سيرفر) — جارٍ فحص الاتصال والترتيب حسب السرعة…"
                     } else null
                 } else state.info,
             )
+
+            // بعد كل تحديث للقائمة: اختبار الاتصال مباشرةً وترتيب السيرفرات حسب السرعة الأعلى على الهاتف
+            if (shouldAutoTest) {
+                runTestInternal(quickPingOnly = false, autoAfterRefresh = true)
+            }
         }
     }
 
     // ── فحص سريع للتأخير فقط ──
     fun startQuickPingTest() {
-        runTestInternal(quickPingOnly = true)
+        runTestInternal(quickPingOnly = true, autoAfterRefresh = false)
     }
 
     // ── فحص شامل (قياس فعلي لسرعة التنزيل عبر النفق + التأخير) ──
     fun startTest() {
-        runTestInternal(quickPingOnly = false)
+        runTestInternal(quickPingOnly = false, autoAfterRefresh = false)
     }
 
-    private fun runTestInternal(quickPingOnly: Boolean) {
+    private fun runTestInternal(quickPingOnly: Boolean, autoAfterRefresh: Boolean = false) {
         val pool = (prefs.customConfigs + state.configs).distinct()
         if (pool.isEmpty()) {
-            state = state.copy(error = UiMessages.MSG_NO_SERVERS)
+            if (!autoAfterRefresh) state = state.copy(error = UiMessages.MSG_NO_SERVERS)
             return
         }
         if (!tester.engineAvailable) {
-            state = state.copy(error = UiMessages.MSG_ENGINE_UNAVAILABLE)
+            if (!autoAfterRefresh) state = state.copy(error = UiMessages.MSG_ENGINE_UNAVAILABLE)
             return
         }
         testJob?.cancel()
-        state = state.copy(testing = true, error = null, info = null, progress = null)
+        if (autoAfterRefresh) {
+            prefs.sortMode = ServerSortMode.FASTEST_DOWNLOAD.key
+            prefs.rankBySpeed = true
+        }
+        val activeSortAtStart = if (autoAfterRefresh) ServerSortMode.FASTEST_DOWNLOAD.key else state.sortMode
+        state = state.copy(
+            testing = true,
+            sortMode = activeSortAtStart,
+            error = if (autoAfterRefresh) state.error else null,
+            info = if (autoAfterRefresh && state.info != null) state.info else null,
+            progress = null,
+        )
         testJob = viewModelScope.launch {
             try {
-                val topLimit = if (quickPingOnly) minOf(prefs.testTop, 250) else prefs.testTop
-                val spdLimit = if (quickPingOnly) 0 else maxOf(prefs.speedTop, 20)
-                val useSpeedRank = !quickPingOnly && ServerSortMode.fromKey(prefs.sortMode) == ServerSortMode.FASTEST_DOWNLOAD
+                val basePrevResults = state.results
+                val prevByCfg = basePrevResults.associateBy { Converters.cleanUri(it.cfg) }
+                val topLimit = when {
+                    quickPingOnly -> minOf(prefs.testTop, 250)
+                    autoAfterRefresh -> minOf(prefs.testTop, 120)
+                    else -> prefs.testTop
+                }
+                val spdLimit = when {
+                    quickPingOnly -> 0
+                    autoAfterRefresh -> minOf(maxOf(prefs.speedTop, 20), 30)
+                    else -> maxOf(prefs.speedTop, 20)
+                }
+                val useSpeedRank = !quickPingOnly && (
+                    autoAfterRefresh || ServerSortMode.fromKey(prefs.sortMode) == ServerSortMode.FASTEST_DOWNLOAD
+                )
                 var detectedDead: Set<String> = emptySet()
                 val results = tester.run(
                     configs = pool,
@@ -567,6 +644,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     onDeadDetected = { dead ->
                         detectedDead = dead
                     },
+                    onPartialResults = { aliveSoFar, deadSoFar ->
+                        withContext(Dispatchers.Main.immediate) {
+                            deadSoFar.forEach { deadCfg ->
+                                failedConfigs.add(deadCfg)
+                            }
+                            aliveSoFar.forEach { okRes ->
+                                failedConfigs.remove(Converters.cleanUri(okRes.cfg))
+                            }
+                            val aliveCleanSet = aliveSoFar.map { Converters.cleanUri(it.cfg) }.toHashSet()
+                            val partialFresh = aliveSoFar.map { r ->
+                                val prevSpd = prevByCfg[Converters.cleanUri(r.cfg)]?.speedKbps ?: 0.0
+                                if (r.speedKbps <= 0.0 && prevSpd > 0.0) r.copy(speedKbps = prevSpd) else r
+                            }
+                            val untouched = basePrevResults.filter { old ->
+                                val c = Converters.cleanUri(old.cfg)
+                                c !in aliveCleanSet && c !in deadSoFar
+                            }
+                            val liveMerged = partialFresh + untouched
+                            val liveMode = if (autoAfterRefresh) ServerSortMode.FASTEST_DOWNLOAD.key else prefs.sortMode
+                            val liveBuilt = buildServerList(state.configs, liveMerged, liveMode)
+                            val liveSel = if (!VpnStateManager.status.value.isActive && partialFresh.any { it.speedKbps > 0.0 }) {
+                                liveBuilt.first().also {
+                                    prefs.selectedCfg = it.cfg
+                                    prefs.selectedLabel = it.name
+                                }.cfg
+                            } else {
+                                resolveSelected(state.selectedCfg, liveBuilt)
+                            }
+                            state = state.copy(
+                                sortMode = liveMode,
+                                results = liveMerged,
+                                servers = liveBuilt,
+                                selectedCfg = liveSel,
+                            )
+                        }
+                    },
                 )
 
                 detectedDead.forEach { deadCfg ->
@@ -582,7 +695,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 // دمج سرعة التنزيل المقاسة سابقًا إن كان الفحص الحالي للتأخير فقط دون اختلاق درجات، مع الاحتفاظ بالسيرفرات غير الداخلة في العينة والناجحة سابقًا
-                val prevByCfg = state.results.associateBy { Converters.cleanUri(it.cfg) }
                 val freshAliveSet = results.map { Converters.cleanUri(it.cfg) }.toHashSet()
                 val mergedFresh = if (quickPingOnly) {
                     results.map { r ->
@@ -592,7 +704,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     results
                 }
-                val untouchedPrev = state.results.filter { old ->
+                val untouchedPrev = basePrevResults.filter { old ->
                     val c = Converters.cleanUri(old.cfg)
                     c !in freshAliveSet && c !in detectedDead
                 }
@@ -613,7 +725,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 } else null
 
-                val activeMode = prefs.sortMode
+                val activeMode = if (autoAfterRefresh) ServerSortMode.FASTEST_DOWNLOAD.key else prefs.sortMode
                 val rebuilt = buildServerList(state.configs, mergedResults, activeMode)
                 val countries = computeCountryCounts(rebuilt)
                 // عدم تغيير السيرفر المتصل به حاليًا عند انتهاء الفحص
@@ -852,6 +964,176 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissPromo() {
         state = state.copy(activePromo = null)
+    }
+
+    // ── وظائف ULTIMATE VPN ENTERPRISE (حساب، سرعة، تشخيص، صحة، تحديثات) ──
+    fun refreshEnterpriseState() {
+        val acct = licenseGuard.currentState()
+        val upd = AppUpdateManager.evaluateAvailableUpdate(getApplication(), licenseGuard.getVerifiedAppUpdates())
+        state = state.copy(
+            accountState = acct,
+            availableUpdate = upd,
+            appHealth = AppHealthMonitor.snapshot(getApplication()),
+        )
+        if (!acct.canConnectVpn && VpnStateManager.status.value.isActive) {
+            BahrainVpnService.stopVpn(getApplication())
+        }
+    }
+
+    fun syncEnterpriseBundle() {
+        viewModelScope.launch {
+            val raw = withContext(Dispatchers.IO) {
+                runCatching { buildRepo().fetchEnterpriseBundleRaw() }.getOrNull()
+            }
+            if (!raw.isNullOrBlank()) {
+                withContext(Dispatchers.IO) { licenseGuard.applySignedBundleRaw(raw) }
+            }
+            refreshEnterpriseState()
+        }
+    }
+
+    fun loginEnterpriseAccount(username: String, password: String, rememberMe: Boolean) {
+        if (state.authLoading) return
+        state = state.copy(authLoading = true, authError = null)
+        viewModelScope.launch {
+            val raw = withContext(Dispatchers.IO) {
+                runCatching { buildRepo().fetchEnterpriseBundleRaw() }.getOrNull()
+            }
+            if (!raw.isNullOrBlank()) {
+                withContext(Dispatchers.IO) { licenseGuard.applySignedBundleRaw(raw) }
+            }
+            val result = withContext(Dispatchers.IO) {
+                licenseGuard.loginWithBundle(username, password, rememberMe)
+            }
+            result.fold(
+                onSuccess = { acct ->
+                    state = state.copy(
+                        authLoading = false,
+                        authError = null,
+                        accountState = acct,
+                        info = "تم تسجيل الدخول بنجاح (${acct.username})",
+                    )
+                },
+                onFailure = { err ->
+                    state = state.copy(
+                        authLoading = false,
+                        authError = err.message ?: "تعذّر تسجيل الدخول",
+                        accountState = licenseGuard.currentState(),
+                    )
+                },
+            )
+        }
+    }
+
+    fun logoutEnterpriseAccount() {
+        licenseGuard.logout("USER_LOGOUT")
+        if (VpnStateManager.status.value.isActive && licenseGuard.currentState().authRequired) {
+            BahrainVpnService.stopVpn(getApplication())
+        }
+        state = state.copy(
+            accountState = licenseGuard.currentState(),
+            info = "تم تسجيل الخروج من الحساب",
+        )
+    }
+
+    fun runFullClientSpeedTest() {
+        if (state.speedTestRunning) return
+        val vpnSt = VpnStateManager.status.value
+        val viaVpn = vpnSt.phase == VpnPhase.CONNECTED
+        val label = if (viaVpn) vpnSt.activeLabel else "الشبكة المباشرة"
+        val bw = state.accountState.bandwidth
+        state = state.copy(
+            speedTestRunning = true,
+            speedTestStage = "جارٍ تهيئة القياس…",
+            liveSpeedGaugeMbps = 0.0,
+            liveSpeedCurve = emptyList(),
+        )
+        viewModelScope.launch {
+            val rec = diagnosticsEngine.runRealSpeedTest(
+                viaVpnTunnel = viaVpn,
+                serverLabel = label,
+                bandwidthPolicy = bw,
+                onStageUpdate = { stg, liveMbps, samples ->
+                    withContext(Dispatchers.Main.immediate) {
+                        state = state.copy(
+                            speedTestStage = stg,
+                            liveSpeedGaugeMbps = liveMbps,
+                            liveSpeedCurve = samples,
+                        )
+                    }
+                },
+            )
+            state = state.copy(
+                speedTestRunning = false,
+                speedTestStage = "",
+                latestSpeedRecord = rec,
+                speedHistory = diagnosticsEngine.loadSpeedHistory(),
+                info = String.format(Locale.US, "اكتمل القياس: ↓ %.2f Mbps • ↑ %.2f Mbps", rec.downloadMbps, rec.uploadMbps),
+            )
+        }
+    }
+
+    fun runNetworkDiagnosticsSuite() {
+        if (state.netDiagRunning) return
+        val viaVpn = VpnStateManager.status.value.phase == VpnPhase.CONNECTED
+        state = state.copy(netDiagRunning = true)
+        viewModelScope.launch {
+            val report = diagnosticsEngine.runNetworkDiagnostics(viaVpn, prefs.dnsServer)
+            state = state.copy(
+                netDiagRunning = false,
+                netDiagReport = report,
+                appHealth = AppHealthMonitor.snapshot(getApplication()),
+            )
+        }
+    }
+
+    fun probeExplicitTestUrl(url: String) {
+        val viaVpn = VpnStateManager.status.value.phase == VpnPhase.CONNECTED
+        viewModelScope.launch {
+            val res = diagnosticsEngine.probeExplicitUrl(url, viaVpn)
+            state = state.copy(urlProbeResult = res)
+        }
+    }
+
+    fun setDiagnosticConsent(enabled: Boolean) {
+        AppHealthMonitor.setDiagnosticConsent(getApplication(), enabled)
+        state = state.copy(appHealth = AppHealthMonitor.snapshot(getApplication()))
+    }
+
+    fun buildRedactedDiagnosticReportJson(): String {
+        val h = AppHealthMonitor.snapshot(getApplication())
+        val o = org.json.JSONObject()
+            .put("app_version", AppUpdateManager.currentVersionName(getApplication()))
+            .put("startup_ms", h.startupTimeMs)
+            .put("memory_mb", h.memoryUsedMb)
+            .put("crash_count", h.crashCount)
+            .put("tunnel_errors", h.tunnelErrorCount)
+            .put("dns_errors", h.dnsErrorCount)
+            .put("device_install_id", state.accountState.deviceInstallId)
+        state.latestSpeedRecord?.let { spd ->
+            o.put("last_dl_mbps", spd.downloadMbps)
+                .put("last_ul_mbps", spd.uploadMbps)
+                .put("last_ping_ms", spd.pingMs)
+        }
+        return o.toString(2)
+    }
+
+    fun downloadAndInstallSignedUpdate() {
+        val upd = state.availableUpdate ?: return
+        if (state.updatingApk) return
+        state = state.copy(updatingApk = true, error = null)
+        viewModelScope.launch {
+            val res = AppUpdateManager.downloadAndVerifyUpdate(getApplication(), buildRepo(), upd)
+            res.fold(
+                onSuccess = { verifiedFile ->
+                    state = state.copy(updatingApk = false, info = "تم التحقق من التوقيع — جارٍ فتح المثبّت الرسمي")
+                    AppUpdateManager.launchOfficialSystemInstaller(getApplication(), verifiedFile)
+                },
+                onFailure = { err ->
+                    state = state.copy(updatingApk = false, error = err.message ?: "فشل التحقق من التحديث")
+                },
+            )
+        }
     }
 
     fun settings() = prefs

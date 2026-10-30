@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -61,6 +62,8 @@ import com.bahrain.vpnconfigs.ui.AppTheme
 import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.AppsSplitScreen
 import com.bahrain.vpnconfigs.ui.ConnectHomeScreen
+import com.bahrain.vpnconfigs.ui.EnterpriseHubScreen
+import com.bahrain.vpnconfigs.ui.MandatoryLoginGateDialog
 import com.bahrain.vpnconfigs.ui.PromoPopupDialog
 import com.bahrain.vpnconfigs.ui.ServerItem
 import com.bahrain.vpnconfigs.ui.ServersListScreen
@@ -164,6 +167,13 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
     }
 
     fun requestConnect(server: ServerItem?) {
+        vm.refreshEnterpriseState()
+        val acct = vm.state.accountState
+        if (!acct.canConnectVpn) {
+            Toast.makeText(ctx, acct.statusDetailAr.ifBlank { "يلزم حساب فعّال لبدء الاتصال" }, Toast.LENGTH_LONG).show()
+            tab = 2
+            return
+        }
         if (server == null) {
             Toast.makeText(ctx, "لا توجد سيرفرات متاحة حاليًا — جارٍ تحديث القائمة", Toast.LENGTH_SHORT).show()
             vm.refresh()
@@ -208,6 +218,15 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                     selected = tab == 2,
                     onClick = {
                         tab = 2
+                        vm.refreshEnterpriseState()
+                    },
+                    icon = { Icon(Icons.Filled.Speed, contentDescription = null) },
+                    label = { Text("السرعة والحساب") },
+                )
+                NavigationBarItem(
+                    selected = tab == 3,
+                    onClick = {
+                        tab = 3
                         vm.ensureAppsLoaded()
                     },
                     icon = {
@@ -224,8 +243,8 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                     label = { Text("التطبيقات") },
                 )
                 NavigationBarItem(
-                    selected = tab == 3,
-                    onClick = { tab = 3 },
+                    selected = tab == 4,
+                    onClick = { tab = 4 },
                     icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                     label = { Text("الإعدادات") },
                 )
@@ -259,7 +278,14 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                 onReadClipboard = { readClipboardText(ctx) },
                 onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
             )
-            2 -> AppsSplitScreen(
+            2 -> EnterpriseHubScreen(
+                state = state,
+                vpnStatus = vpnStatus,
+                vm = vm,
+                modifier = m,
+                onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
+            )
+            3 -> AppsSplitScreen(
                 state = state,
                 vm = vm,
                 modifier = m,
@@ -273,6 +299,14 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                 onShareFile = { file -> shareFile(ctx, file) },
             )
         }
+    }
+
+    if (state.accountState.authRequired && !state.accountState.isLoggedIn) {
+        MandatoryLoginGateDialog(
+            vm = vm,
+            state = state,
+            onCopyDeviceId = { id -> copyToClipboard(ctx, id, "تم نسخ رمز الجهاز") },
+        )
     }
 
     state.activePromo?.let { promo ->

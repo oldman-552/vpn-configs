@@ -111,6 +111,7 @@ class Tester(private val ctx: Context) {
         useDoh: Boolean = false,
         onProgress: suspend (TestProgress) -> Unit = {},
         onDeadDetected: (Set<String>) -> Unit = {},
+        onPartialResults: suspend (aliveSoFar: List<TestResult>, deadSoFar: Set<String>) -> Unit = { _, _ -> },
     ): List<TestResult> = withContext(Dispatchers.IO) {
         if (!engine.isAvailable) return@withContext emptyList()
 
@@ -124,6 +125,8 @@ class Tester(private val ctx: Context) {
         // ── المرحلة 1: فحص الاتصال ──
         var done = 0
         var alive = 0
+        val liveAlive = ArrayList<TestResult>()
+        val liveDead = LinkedHashSet<String>()
         onProgress(TestProgress("فحص الاتصال", 0, candidates.size, 0))
 
         val firstStage = coroutineScope {
@@ -140,14 +143,24 @@ class Tester(private val ctx: Context) {
                         ports.trySend(port)
                     }
                     var snap: TestProgress? = null
+                    var partialSnap: Pair<List<TestResult>, Set<String>>? = null
                     synchronized(this@Tester) {
                         done++
-                        if (r.ok) alive++
+                        if (r.ok && r.latencyMs > 0L) {
+                            alive++
+                            liveAlive.add(r)
+                        } else {
+                            liveDead.add(Converters.cleanUri(r.cfg))
+                        }
                         if (done % 4 == 0 || done == candidates.size) {
-                            snap = TestProgress("قياس Real Delay", done, candidates.size, alive)
+                            snap = TestProgress("قياس الاستجابة", done, candidates.size, alive)
+                        }
+                        if (done % 10 == 0 || done == candidates.size) {
+                            partialSnap = liveAlive.toList() to liveDead.toSet()
                         }
                     }
                     snap?.let { onProgress(it) }
+                    partialSnap?.let { (a, d) -> onPartialResults(a, d) }
                     r
                 }
             }.awaitAll()
@@ -165,15 +178,16 @@ class Tester(private val ctx: Context) {
         val okList = firstStage.filter { it.ok && it.latencyMs > 0L }.sortedBy { it.latencyMs }
         if (okList.isEmpty()) return@withContext emptyList()
 
-        // ── المرحلة 2: قياس السرعة الفعلي (توازي مضبوط ≤ 3 لمنع تشبّع الشبكة وتضخم التأخير) ──
+        // ── المرحلة 2: قياس السرعة الفعلي وترتيب الأسرع أولًا بأول (توازي مضبوط ≤ 3) ──
         val speedPool = okList.take(maxOf(speedTop, 0))
         val speedMap = HashMap<String, Double>()
+        val speedTsMap = HashMap<String, Long>()
 
         if (speedPool.isNotEmpty()) {
             val speedConc = minOf(conc, 3)
             val speedPorts = allocatePortPool(speedConc, basePort = 21600)
             var sdone = 0
-            onProgress(TestProgress("قياس السرعة", 0, speedPool.size, 0))
+            onProgress(TestProgress("قياس السرعة وترتيب الأسرع", 0, speedPool.size, 0))
             try {
                 coroutineScope {
                     speedPool.map { res ->
@@ -195,12 +209,24 @@ class Tester(private val ctx: Context) {
                                 speedPorts.trySend(port)
                             }
                             var snap: TestProgress? = null
+                            var partialSpeedSnap: List<TestResult>? = null
                             synchronized(this@Tester) {
-                                if (kbps > 0.0) speedMap[res.cfg] = kbps
+                                if (kbps > 0.0) {
+                                    speedMap[res.cfg] = kbps
+                                    speedTsMap[res.cfg] = System.currentTimeMillis()
+                                }
                                 sdone++
-                                snap = TestProgress("قياس السرعة", sdone, speedPool.size, speedMap.size)
+                                snap = TestProgress("قياس السرعة وترتيب الأسرع", sdone, speedPool.size, speedMap.size)
+                                if (sdone % 2 == 0 || sdone == speedPool.size) {
+                                    partialSpeedSnap = okList.map { item ->
+                                        val sp = speedMap[item.cfg] ?: 0.0
+                                        val ts = speedTsMap[item.cfg] ?: item.testedAtMs
+                                        if (sp > 0.0) item.copy(speedKbps = sp, testedAtMs = ts) else item
+                                    }
+                                }
                             }
                             snap?.let { onProgress(it) }
+                            partialSpeedSnap?.let { partial -> onPartialResults(partial, deadSet) }
                         }
                     }.awaitAll()
                 }
@@ -212,9 +238,10 @@ class Tester(private val ctx: Context) {
         val nowCompletedMs = System.currentTimeMillis()
         val merged = okList.map { r ->
             val spd = speedMap[r.cfg] ?: 0.0
+            val ts = speedTsMap[r.cfg] ?: nowCompletedMs
             r.copy(
                 speedKbps = spd,
-                testedAtMs = if (spd > 0.0) nowCompletedMs else r.testedAtMs,
+                testedAtMs = if (spd > 0.0) ts else r.testedAtMs,
             )
         }
         if (rankBySpeed) {

@@ -1,6 +1,6 @@
 name: apk
 
-# يبني APK عند كل تعديل على مجلد android/ أو في طلبات الدمج أو يدويًا
+# يبني ويختبر ويوقّع كلاً من تطبيق المشترك (User APK) وتطبيق المشرف المستقل (Admin APK)
 on:
   workflow_dispatch:
   pull_request:
@@ -23,7 +23,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     permissions:
       contents: write
 
@@ -58,11 +58,11 @@ jobs:
         working-directory: android
         run: bash scripts/fetch-engines.sh --all
 
-      - name: Run Android unit tests & build debug + signed release APKs
+      - name: Run Android unit tests (:app + :admin) & build signed release APKs
         working-directory: android
         run: |
           set -o pipefail
-          gradle --no-daemon testReleaseUnitTest assembleDebug assembleRelease 2>&1 | tee gradle.log || {
+          gradle --no-daemon :app:testReleaseUnitTest :admin:testReleaseUnitTest :app:assembleRelease :admin:assembleRelease 2>&1 | tee gradle.log || {
             grep -vE '^> Task ' gradle.log | grep -E '(^e: |FAILURE:|What went wrong:|FAILED|AssertionError|Exception)' | head -n 8 | while IFS= read -r line; do
               echo "::error::$line"
             done
@@ -71,31 +71,41 @@ jobs:
           python3 - <<'PY'
           import glob, xml.etree.ElementTree as ET
           total = fails = errs = 0
-          for p in glob.glob("app/build/test-results/testReleaseUnitTest/*.xml"):
-              r = ET.parse(p).getroot()
-              total += int(r.attrib.get("tests", 0))
-              fails += int(r.attrib.get("failures", 0))
-              errs += int(r.attrib.get("errors", 0))
-          print(f"::notice::Android JUnit Suite: {total} tests executed, {fails} failures, {errs} errors")
-          assert total >= 9 and fails == 0 and errs == 0
+          for pattern in ("app/build/test-results/testReleaseUnitTest/*.xml", "admin/build/test-results/testReleaseUnitTest/*.xml"):
+              for p in glob.glob(pattern):
+                  r = ET.parse(p).getroot()
+                  total += int(r.attrib.get("tests", 0))
+                  fails += int(r.attrib.get("failures", 0))
+                  errs += int(r.attrib.get("errors", 0))
+          print(f"::notice::Android JUnit Suite (:app + :admin): {total} tests executed, {fails} failures, {errs} errors")
+          assert total >= 12 and fails == 0 and errs == 0
           PY
 
-      - name: Collect APKs, compute SHA-256 & audit release APK resources
+      - name: Collect User & Admin APKs, compute SHA-256 & run security/resource audits
         run: |
           mkdir -p out
-          find android/app/build/outputs/apk -name "*.apk" -exec cp {} out/ \;
+          find android/app/build/outputs/apk/release -name "*.apk" -exec cp {} out/ \;
           if [ -f out/app-universal-release.apk ] && [ ! -f out/app-release.apk ]; then
             cp out/app-universal-release.apk out/app-release.apk
           fi
+          ADMIN_SRC=$(find android/admin/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$ADMIN_SRC" ] || [ ! -f "$ADMIN_SRC" ]; then
+            echo "::error::Missing compiled Admin Release APK!"
+            exit 1
+          fi
+          cp "$ADMIN_SRC" out/app-admin-release.apk
           (cd out && sha256sum *.apk > SHA256SUMS.txt)
+
           AAPT2=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort -V | tail -n 1)
-          BADGING=$("$AAPT2" dump badging out/app-arm64-v8a-release.apk | head -n 1)
+          USER_BADGING=$("$AAPT2" dump badging out/app-arm64-v8a-release.apk | head -n 1)
+          ADMIN_BADGING=$("$AAPT2" dump badging out/app-admin-release.apk | head -n 1)
+
           if "$AAPT2" dump strings out/app-arm64-v8a-release.apk | grep -iE "oldman-552|vpn-configs|githubusercontent|jsdelivr"; then
-            echo "::error::Repository details leaked into compiled Android resources.arsc!"
+            echo "::error::Repository details leaked into User APK resources.arsc!"
             exit 1
           fi
           if "$AAPT2" dump xmltree out/app-arm64-v8a-release.apk --file AndroidManifest.xml | grep -iE "oldman-552|vpn-configs|githubusercontent|jsdelivr"; then
-            echo "::error::Repository details leaked into compiled AndroidManifest.xml!"
+            echo "::error::Repository details leaked into User APK AndroidManifest.xml!"
             exit 1
           fi
           python3 - <<'PY'
@@ -103,6 +113,7 @@ jobs:
           try:
               apk = "out/app-arm64-v8a-release.apk"
               leak_re = re.compile(rb"(oldman-552|vpn-configs|githubusercontent\.com|jsdelivr\.net)", re.I)
+              secret_re = re.compile(rb"(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|ENTERPRISE_MASTER_KEY)", re.I)
               non_dex_leaks = []
               dex_hits = 0
               with zipfile.ZipFile(apk) as zf:
@@ -111,6 +122,8 @@ jobs:
                       if name.startswith("lib/"):
                           continue
                       data = zf.read(name)
+                      if secret_re.search(data):
+                          raise RuntimeError(f"Embedded secret detected inside {name}!")
                       if name.endswith(".dex"):
                           if leak_re.search(data):
                               dex_hits += 1
@@ -142,20 +155,29 @@ jobs:
                       "com/bahrain/vpnconfigs/MainActivity",
                       "com/bahrain/vpnconfigs/vpn/",
                       "com/bahrain/vpnconfigs/data/Prefs",
+                      "com/bahrain/vpnconfigs/enterprise/",
                   )):
                       m = str_leak_re.search(out)
                       if m:
                           ui_class_leaks.append(f"{rel}->{m.group(0)}")
               if ui_class_leaks:
-                  raise RuntimeError("UI bytecode leak: " + ", ".join(ui_class_leaks[:5]))
+                  raise RuntimeError("UI/Enterprise bytecode leak: " + ", ".join(ui_class_leaks[:5]))
               if not (repo_saw_owner and repo_saw_cdn and dex_hits >= 1):
                   raise RuntimeError(f"Operational Repo endpoints check: owner={repo_saw_owner} cdn={repo_saw_cdn} dex_hits={dex_hits}")
-              print(f"::notice::Release APK Audit PASS | apk_entries={len(entries)} app_classes={len(class_files)} non_dex_leaks=0 ui_bytecode_leaks=0 repo_endpoints_intact=True dex_with_network_consts={dex_hits}")
+
+              # Also audit Admin APK for zero hardcoded tokens/passphrases
+              with zipfile.ZipFile("out/app-admin-release.apk") as azf:
+                  for name in azf.namelist():
+                      if secret_re.search(azf.read(name)):
+                          raise RuntimeError(f"Hardcoded secret found in Admin APK {name}!")
+
+              print(f"::notice::Release APK Audit PASS | user_entries={len(entries)} app_classes={len(class_files)} non_dex_leaks=0 ui_bytecode_leaks=0 admin_apk_verified=True dex_with_network_consts={dex_hits}")
           except Exception as exc:
               print(f"::error::APK Audit failed: {exc}")
               sys.exit(1)
           PY
-          echo "::notice::APK Badging: $BADGING"
+          echo "::notice::User APK Badging: $USER_BADGING"
+          echo "::notice::Admin APK Badging: $ADMIN_BADGING"
           SHA_SUMMARY=$(tr '\n' ';' < out/SHA256SUMS.txt)
           echo "::notice::SHA256: $SHA_SUMMARY"
           ls -lh out/
@@ -170,14 +192,14 @@ jobs:
             out/SHA256SUMS.txt
           retention-days: 30
 
-      - name: Publish APK to GitHub Releases
+      - name: Publish User & Admin APKs to GitHub Releases
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VER_NAME=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)
-          VER_TAG="v${VER_NAME:-2.4}"
-          NOTES="تطبيق **bahrain-vpn ${VER_TAG}** المتكامل للأندرويد — يتّصل مباشرة بضغطة زر مع قائمة سيرفرات محدّثة تلقائيًا، ونظام ترتيب خماسي موزون (الأسرع في التنزيل، الأقل تأخيرًا، الأكثر استقرارًا، الأفضل إجمالًا، الأحدث اختبارًا). لمعظم الهواتف الحديثة ثبّت النسخة الخفيفة \`app-arm64-v8a-release.apk\` أو النسخة الشاملة \`app-release.apk\`."
+          VER_TAG="v${VER_NAME:-3.0}"
+          NOTES="منصة **ULTIMATE VPN ENTERPRISE (${VER_TAG})** المتكاملة — تشمل تطبيق المشترك المحدّث \`app-arm64-v8a-release.apk\` / \`app-release.apk\` (مع الفحص التلقائي للسرعة عند التحديث، حساب المشترك، التجربة المجانية 48 ساعة، استوديو السرعة الحقيقي، وتشخيص تسرب DNS/IP) بالإضافة إلى تطبيق المشرف المستقل \`app-admin-release.apk\`."
 
           publish_release() {
             local tag="$1"
