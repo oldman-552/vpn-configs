@@ -15,6 +15,7 @@ on:
       - "pipeline_security.py"
       - "security_intelligence.py"
       - "historical_db.py"
+      - "central_top500.py"
       - "migrations/**"
       - "public_api.py"
       - "channels.txt"
@@ -115,6 +116,7 @@ jobs:
           dist = Path("dist")
           for req in (
               "alive.txt", "best100.txt", "sub.txt", "alive.json",
+              "top500.json", "top500.txt", "top500.manifest.json",
               "meta.json", "source_health.json", "quarantined.json",
               "servers-current.json", "servers-history.json",
               "servers-performance.json", "servers-statistics.json",
@@ -124,6 +126,9 @@ jobs:
           ):
               p = dist / req
               assert p.is_file() and p.stat().st_size > 0, f"Missing or empty artifact: {req}"
+          t500 = json.loads((dist / "top500.json").read_text(encoding="utf-8"))
+          assert 0 <= t500.get("qualified_count", -1) <= 500, "Invalid top500 qualified_count!"
+          assert t500.get("personalized_top50_authority") == "ANDROID_LOCAL_ONLY", "Authority boundary violated!"
           meta = json.loads((dist / "meta.json").read_text(encoding="utf-8"))
           if not meta.get("degraded_mode", False):
               gz = dist / "all.txt.gz"
@@ -170,6 +175,9 @@ jobs:
 
           | الملف | الوصف | الرابط المباشر |
           |---|---|---|
+          | \`top500.json\` | حزمة المرشّحات المركزية المؤهّلة (حتى 500 سيرفر بدون حشو — الترتيب الشخصي Top 50 محلي على أندرويد فقط) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.json |
+          | \`top500.manifest.json\` | بيان الإصدار وبصمات SHA-256 وحالة التحديث التفاضلي لحزمة الـ Top 500 | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.manifest.json |
+          | \`top500.txt\` | الروابط الخام لحزمة الـ Top 500 المركزية | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.txt |
           | \`alive.txt\` | جميع العُقد الحيّة مرتّبة حسب الدرجة المركّبة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/alive.txt |
           | \`best100.txt\` | أفضل 100 عقدة متنوّعة المضيفين والشبكات الفرعية | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/best100.txt |
           | \`sub.txt\` | اشتراك Base64 جاهز لجميع تطبيقات العميل | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/sub.txt |
@@ -198,7 +206,7 @@ jobs:
       - name: Purge jsDelivr cache
         if: success() && (github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         run: |
-          for f in alive.txt alive.json sub.txt best100.txt reliable.txt reliable_sub.txt low_latency.txt high_throughput.txt countries.json source_health.json meta.json enterprise/bundle.json; do
+          for f in top500.manifest.json top500.delta.json top500.json top500.txt alive.txt alive.json sub.txt best100.txt reliable.txt reliable_sub.txt low_latency.txt high_throughput.txt countries.json source_health.json meta.json enterprise/bundle.json; do
             curl -s -m 20 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/$f" > /dev/null || true
           done
           echo "تم إرسال طلبات تحديث الكاش."
