@@ -33,6 +33,13 @@ data class ServerHint(
     val jitterMs: Double = 0.0,
     val speedKbps: Double = 0.0,
     val score: Double = 0.0,
+    val performanceScore: Double = 0.0,
+    val reliabilityScore: Double = 0.0,
+    val securityAssessment: String = "",
+    val privacyAssessment: String = "",
+    val riskLevel: String = "",
+    val packetLossPct: Double = 0.0,
+    val uptimePct: Double = 100.0,
     val country: String = "",
     val stabilityRuns: Int = 0,
     val verifiedAt: String = "",
@@ -248,6 +255,13 @@ class Repo(
                         jitterMs = item.optDouble("jitter_ms", 0.0).let { if (it.isNaN()) 0.0 else it },
                         speedKbps = item.optDouble("speed_kbps", 0.0).let { if (it.isNaN()) 0.0 else it },
                         score = item.optDouble("score", 0.0).let { if (it.isNaN()) 0.0 else it },
+                        performanceScore = item.optDouble("performance_score", item.optDouble("score", 0.0)).let { if (it.isNaN()) 0.0 else it },
+                        reliabilityScore = item.optDouble("reliability_score", item.optDouble("score", 0.0)).let { if (it.isNaN()) 0.0 else it },
+                        securityAssessment = item.optString("security_assessment", ""),
+                        privacyAssessment = item.optString("privacy_assessment", ""),
+                        riskLevel = item.optString("risk_level", ""),
+                        packetLossPct = item.optDouble("packet_loss_pct", 0.0).let { if (it.isNaN()) 0.0 else it },
+                        uptimePct = item.optDouble("uptime_pct", 100.0).let { if (it.isNaN()) 100.0 else it },
                         country = cc,
                         stabilityRuns = item.optInt("stability_runs", item.optInt("consecutive_alive", 0)),
                         verifiedAt = item.optString("verified_at", ""),
@@ -346,6 +360,7 @@ class Repo(
         "reliable" -> "reliable.txt"
         "low_latency" -> "low_latency.txt"
         "high_throughput" -> "high_throughput.txt"
+        "privacy_aware" -> "privacy_aware.txt"
         else -> "alive.json"
     }
 

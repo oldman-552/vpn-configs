@@ -17,6 +17,7 @@ import argparse
 import base64
 import binascii
 import collections
+import hashlib
 import html as html_lib
 import json
 import logging
@@ -50,6 +51,7 @@ from pipeline_security import (
     safe_fetch_text,
 )
 from scoring import SourceHealthRecord, SourceHealthRegistry
+from security_intelligence import assess_configuration_security
 
 try:
     import jdatetime
@@ -664,6 +666,8 @@ def collect_with_telemetry(
                     timeout=max(timeout, 25),
                     max_bytes=MAX_FEED_BYTES,
                     require_https=True,
+                    etag=rec.etag,
+                    last_modified=rec.last_modified,
                 )
                 gh_futs[fut] = (name, rec)
 
@@ -678,7 +682,7 @@ def collect_with_telemetry(
                 fut = pool.submit(fetch_channel, sess, ch, timeout)
                 ch_futs[fut] = (ch, rec)
 
-            gh_meta: dict[str, tuple[SourceHealthRecord, object, list[str]]] = {}
+            gh_meta: dict[str, tuple[SourceHealthRecord, object, list[str], str]] = {}
             for fut in as_completed(gh_futs):
                 name, rec = gh_futs[fut]
                 res = fut.result()
@@ -692,11 +696,24 @@ def collect_with_telemetry(
                     LOG.warning("[github:%s] فشل: %s (state=%s)", name, res.error, rec.state)
                     gh_results[name] = []
                     continue
+                if res.not_modified:
+                    rec.update_from_fetch(
+                        fetch_ok=True,
+                        status_code=res.status_code,
+                        not_modified=True,
+                        etag=res.etag,
+                        last_modified=res.last_modified,
+                        timestamp=now_iso,
+                    )
+                    gh_ok += 1
+                    gh_results[name] = []
+                    continue
+                body_hash = hashlib.sha256(res.text.encode("utf-8", "ignore")).hexdigest()
                 uris = [_sanitize_raw_uri(u) for u in parse_subscription(res.text)]
                 gh_results[name] = uris
-                gh_meta[name] = (rec, res, uris)
+                gh_meta[name] = (rec, res, uris, body_hash)
 
-            ch_meta: dict[str, tuple[SourceHealthRecord, list[str]]] = {}
+            ch_meta: dict[str, tuple[SourceHealthRecord, list[str], str]] = {}
             for fut in as_completed(ch_futs):
                 ch, rec = ch_futs[fut]
                 _h, raw_u, err = fut.result()
@@ -707,48 +724,94 @@ def collect_with_telemetry(
                     ch_results[ch] = []
                 else:
                     uris = [_sanitize_raw_uri(u) for u in raw_u]
+                    body_hash = hashlib.sha256("\n".join(uris).encode("utf-8", "ignore")).hexdigest()
                     ch_stats[ch] = len(uris)
                     ch_ok += 1
                     ch_results[ch] = uris
-                    ch_meta[ch] = (rec, uris)
+                    ch_meta[ch] = (rec, uris, body_hash)
+
+    def _audit_source_batch(uris: list[str]) -> tuple[int, int]:
+        """Count invalid and suspicious/quarantinable URIs in a source batch."""
+        invalid_c = 0
+        suspicious_c = 0
+        for u in uris:
+            ident = parse_identity(u, reject_private_hosts=True)
+            if ident is None:
+                invalid_c += 1
+                suspicious_c += 1
+                continue
+            rep = assess_configuration_security(u)
+            if rep.quarantined or rep.risk_level in ("HIGH", "CRITICAL"):
+                suspicious_c += 1
+        return invalid_c, suspicious_c
 
     # Ingest in deterministic priority order: Tier-ordered GitHub sources first, then Telegram channels
     for name in github_sources:
         uris = gh_results.get(name, [])
-        if uris:
-            raw_pool.extend(uris)
-            per_source_uris[name] = uris
-        valid_cnt, _ = deduper.ingest_source(name, uris)
         if name in gh_meta:
-            rec, res, _ = gh_meta[name]
+            rec, res, _, body_hash = gh_meta[name]
+            inv_cnt, susp_cnt = _audit_source_batch(uris)
+            valid_est = max(0, len(uris) - inv_cnt)
             rec.update_from_fetch(
                 fetch_ok=True,
                 status_code=res.status_code,
                 etag=res.etag,
                 last_modified=res.last_modified,
                 raw_count=len(uris),
-                valid_count=valid_cnt,
+                valid_count=valid_est,
+                invalid_configs=inv_cnt,
+                suspicious_configs=susp_cnt,
+                content_sha256=body_hash,
                 timestamp=now_iso,
             )
+            if rec.state == "quarantined":
+                LOG.warning("[github:%s] QUARANTINED source skipped (%s)", name, rec.quarantine_reason)
+                continue
+            valid_cnt, new_cnt = deduper.ingest_source(name, uris)
+            rec.valid_count = valid_cnt
+            rec.new_configs = new_cnt
+            rec.duplicate_configs = max(0, valid_cnt - new_cnt)
+            if uris:
+                raw_pool.extend(uris)
+                per_source_uris[name] = uris
             if valid_cnt > 0:
                 gh_ok += 1
+        elif uris:
+            raw_pool.extend(uris)
+            per_source_uris[name] = uris
+            deduper.ingest_source(name, uris)
 
     for ch in clean_handles:
         uris = ch_results.get(ch, [])
         key = f"tg:{ch}"
-        if uris:
-            raw_pool.extend(uris)
-            per_source_uris[key] = uris
-        valid_cnt, _ = deduper.ingest_source(key, uris)
         if ch in ch_meta:
-            rec, _ = ch_meta[ch]
+            rec, _, body_hash = ch_meta[ch]
+            inv_cnt, susp_cnt = _audit_source_batch(uris)
+            valid_est = max(0, len(uris) - inv_cnt)
             rec.update_from_fetch(
                 fetch_ok=True,
                 status_code=200,
                 raw_count=len(uris),
-                valid_count=valid_cnt,
+                valid_count=valid_est,
+                invalid_configs=inv_cnt,
+                suspicious_configs=susp_cnt,
+                content_sha256=body_hash,
                 timestamp=now_iso,
             )
+            if rec.state == "quarantined":
+                LOG.warning("[telegram:%s] QUARANTINED channel skipped (%s)", ch, rec.quarantine_reason)
+                continue
+            valid_cnt, new_cnt = deduper.ingest_source(key, uris)
+            rec.valid_count = valid_cnt
+            rec.new_configs = new_cnt
+            rec.duplicate_configs = max(0, valid_cnt - new_cnt)
+            if uris:
+                raw_pool.extend(uris)
+                per_source_uris[key] = uris
+        elif uris:
+            raw_pool.extend(uris)
+            per_source_uris[key] = uris
+            deduper.ingest_source(key, uris)
 
     overlap_map = deduper.source_overlap_metrics()
     for src_name, metrics in overlap_map.items():

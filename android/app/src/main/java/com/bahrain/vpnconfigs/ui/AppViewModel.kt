@@ -24,6 +24,7 @@ import com.bahrain.vpnconfigs.data.ResultLine
 import com.bahrain.vpnconfigs.data.ServerHint
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.RankableServer
+import com.bahrain.vpnconfigs.engine.SecurityEvaluator
 import com.bahrain.vpnconfigs.engine.ServerRanker
 import com.bahrain.vpnconfigs.engine.ServerSortMode
 import com.bahrain.vpnconfigs.engine.TestProgress
@@ -77,6 +78,10 @@ data class ServerItem(
     val isFavorite: Boolean = false,
     val isCustom: Boolean = false,
     val isVip: Boolean = false,
+    val securityAssessment: String = "Unknown",
+    val privacyAssessment: String = "Unknown",
+    val riskLevel: String = "UNKNOWN",
+    val securitySummaryAr: String = "",
 ) {
     val exportUri: String
         get() = if (isVip) "" else Converters.namedUri(cfg, name)
@@ -105,6 +110,8 @@ data class UiState(
     val allFile: File? = null,
     val engineReady: Boolean = false,
     val autoFailover: Boolean = true,
+    val failoverMode: String = "SMART",
+    val killSwitch: Boolean = true,
     val appsLoading: Boolean = false,
     val installedApps: List<AppEntry> = emptyList(),
     val splitApps: Set<String> = emptySet(),
@@ -152,6 +159,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             connectionHistory = prefs.connectionHistory,
             selectedCfg = prefs.selectedCfg,
             autoFailover = prefs.autoFailover,
+            failoverMode = prefs.failoverMode,
+            killSwitch = prefs.killSwitch,
             splitApps = prefs.splitApps,
             splitIncludeOnly = prefs.splitIncludeOnly,
             accountState = licenseGuard.currentState(),
@@ -202,7 +211,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     state = state.copy(connectionHistory = latestHistory)
                 }
 
-                if (vpnSt.phase == VpnPhase.CONNECTED && !promoSyncedWhileConnected) {
+                if (vpnSt.isTunnelVerified && !promoSyncedWhileConnected) {
                     promoSyncedWhileConnected = true
                     viewModelScope.launch(Dispatchers.IO) {
                         runCatching { buildRepo().syncAllPromoAssets() }
@@ -317,11 +326,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         val droppedNow = VpnStateManager.status.value.droppedConfigs
-        val rankablePairs = allUnique.map { cfg ->
+        val rankablePairs = allUnique.mapNotNull { cfg ->
             val vipNode = vipByClean[cfg]
+            val hint = serverHints[cfg]
+            val secProfile = SecurityEvaluator.evaluate(
+                rawCfg = cfg,
+                isVipAttested = vipNode != null,
+                hintSecurity = hint?.securityAssessment.orEmpty(),
+                hintPrivacy = hint?.privacyAssessment.orEmpty(),
+                hintRisk = hint?.riskLevel.orEmpty(),
+            )
+            if (secProfile.quarantined) return@mapNotNull null
+
             val failed = cfg in failedConfigs || cfg in droppedNow
             val local = if (failed) null else resultMap[cfg]
-            val hint = serverHints[cfg]
             val hintMs = hint?.latencyMs?.takeIf { it > 0L } ?: (serverLatencies[cfg] ?: 0L)
             val rankLatency = when {
                 failed -> -1L
@@ -347,8 +365,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 latencyMs = rankLatency,
                 jitterMs = hint?.jitterMs ?: 0.0,
                 speedKbps = effectiveSpeed,
+                packetLossPct = hint?.packetLossPct ?: 0.0,
+                uptimePct = hint?.uptimePct ?: 100.0,
                 stabilityRuns = hint?.stabilityRuns ?: 0,
                 cloudQualityHint = if (vipNode != null) 98.0 else (hint?.score ?: 0.0),
+                securityAssessment = secProfile.securityAssessment,
+                privacyAssessment = secProfile.privacyAssessment,
+                riskLevel = secProfile.riskLevel,
                 locallyTested = local != null,
                 localFailed = failed,
                 isFavorite = cfg in favSet || vipNode != null,
@@ -375,6 +398,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 isFavorite = cfg in favSet,
                 isCustom = cfg in customSet,
                 isVip = vipNode != null,
+                securityAssessment = secProfile.securityAssessment,
+                privacyAssessment = secProfile.privacyAssessment,
+                riskLevel = secProfile.riskLevel,
+                securitySummaryAr = secProfile.summaryAr,
             )
             rankable to item
         }
@@ -407,6 +434,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     speedKbps = it.speedKbps,
                     latencyMs = it.latencyMs,
                     isVip = it.isVip,
+                    securityAssessment = it.securityAssessment,
+                    riskLevel = it.riskLevel,
                 )
             }
         return sortedItems
@@ -523,7 +552,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setAutoFailover(enabled: Boolean) {
         prefs.autoFailover = enabled
-        state = state.copy(autoFailover = enabled)
+        val mode = prefs.failoverMode
+        state = state.copy(autoFailover = enabled, failoverMode = mode)
+        VpnStateManager.update { it.copy(failoverMode = mode) }
+    }
+
+    fun setFailoverMode(modeKey: String) {
+        prefs.failoverMode = modeKey
+        val norm = prefs.failoverMode
+        state = state.copy(failoverMode = norm, autoFailover = norm != "OFF")
+        VpnStateManager.update { it.copy(failoverMode = norm) }
+    }
+
+    fun setKillSwitch(enabled: Boolean) {
+        prefs.killSwitch = enabled
+        state = state.copy(killSwitch = enabled)
+        VpnStateManager.update { it.copy(killSwitchActive = enabled) }
     }
 
     // ── تحديث قائمة السيرفرات برسائل عامة بدون تسريب المصدر أو عرض نجاح مضلل ──
@@ -938,6 +982,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         timeoutSec: Int,
         defaultSortMode: String,
         autoRefresh: Boolean,
+        killSwitch: Boolean = prefs.killSwitch,
+        failoverMode: String = prefs.failoverMode,
     ) {
         val dnsOrTunChanged =
             prefs.dnsServer != dnsServer ||
@@ -950,7 +996,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.dnsDoh = dnsDoh
         prefs.enableIpv6 = enableIpv6
         prefs.udpInTcp = udpInTcp
-        prefs.autoFailover = autoFailover
+        prefs.killSwitch = killSwitch
+        prefs.failoverMode = if (!autoFailover) "OFF" else if (failoverMode == "OFF") "SMART" else failoverMode
         prefs.testTop = testTop
         prefs.speedTop = speedTop
         prefs.bestN = bestN
@@ -980,7 +1027,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             sortMode = normalizedSort.key,
             servers = rebuilt,
             selectedCfg = sel,
-            autoFailover = autoFailover,
+            autoFailover = prefs.autoFailover,
+            failoverMode = prefs.failoverMode,
+            killSwitch = prefs.killSwitch,
         )
     }
 
@@ -1099,7 +1148,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun runFullClientSpeedTest() {
         if (state.speedTestRunning) return
         val vpnSt = VpnStateManager.status.value
-        val viaVpn = vpnSt.phase == VpnPhase.CONNECTED
+        val viaVpn = vpnSt.isTunnelVerified
         val label = if (viaVpn) vpnSt.activeLabel else "الشبكة المباشرة"
         val bw = state.accountState.bandwidth
         state = state.copy(
@@ -1135,10 +1184,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun runNetworkDiagnosticsSuite() {
         if (state.netDiagRunning) return
-        val viaVpn = VpnStateManager.status.value.phase == VpnPhase.CONNECTED
+        val vpnSt = VpnStateManager.status.value
+        val viaVpn = vpnSt.isTunnelVerified
         state = state.copy(netDiagRunning = true)
         viewModelScope.launch {
-            val report = diagnosticsEngine.runNetworkDiagnostics(viaVpn, prefs.dnsServer)
+            val report = diagnosticsEngine.runNetworkDiagnostics(
+                viaVpnTunnel = viaVpn,
+                configuredDns = prefs.dnsServer,
+                killSwitchEnabled = prefs.killSwitch,
+                osLockdownActive = vpnSt.osLockdownActive,
+                splitIncludeOnly = prefs.splitIncludeOnly,
+                splitApps = prefs.splitApps,
+            )
             state = state.copy(
                 netDiagRunning = false,
                 netDiagReport = report,
@@ -1148,7 +1205,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun probeExplicitTestUrl(url: String) {
-        val viaVpn = VpnStateManager.status.value.phase == VpnPhase.CONNECTED
+        val viaVpn = VpnStateManager.status.value.isTunnelVerified
         viewModelScope.launch {
             val res = diagnosticsEngine.probeExplicitUrl(url, viaVpn)
             state = state.copy(urlProbeResult = res)

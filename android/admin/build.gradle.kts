@@ -12,8 +12,8 @@ android {
         applicationId = "com.bahrain.vpnadmin"
         minSdk = 29
         targetSdk = 34
-        versionCode = 2
-        versionName = "3.1"
+        versionCode = 3
+        versionName = "3.2"
     }
 
     signingConfigs {

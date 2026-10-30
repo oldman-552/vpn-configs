@@ -4,6 +4,7 @@
 // =====================================================================
 package com.bahrain.vpnconfigs.ui.enterprise
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.UiState
+import com.bahrain.vpnconfigs.vpn.FailoverMode
+import com.bahrain.vpnconfigs.vpn.KillSwitchController
+import com.bahrain.vpnconfigs.vpn.VpnStateManager
 
 @Composable
 fun NetworkDiagnosticsCard(
@@ -87,7 +94,18 @@ fun NetworkDiagnosticsCard(
                     style = MaterialTheme.typography.labelSmall,
                 )
                 Text(
-                    "تسرب IP: ${if (rep.ipLeakDetected) "مكتشف!" else "محمي"} • تسرب DNS: ${if (rep.dnsLeakDetected) "مكتشف!" else "محمي"} • الخروج: ${rep.exitCountry.ifBlank { "—" }}",
+                    "تسرب IP: ${if (rep.ipLeakDetected) "مكتشف!" else "محمي"} • تسرب DNS: ${if (rep.dnsLeakDetected) "مكتشف!" else "محمي"} • حماية IPv6: ${if (rep.ipv6LeakProtected) "محكم (::/0)" else "غير نشط"} • الخروج: ${rep.exitCountry.ifBlank { "—" }}",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                if (rep.webRtcSummaryAr.isNotBlank()) {
+                    Text(
+                        "حالة WebRTC: ${rep.webRtcSummaryAr}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                Text(
+                    "مفتاح الإيقاف: ${if (rep.killSwitchEnabled) "مفعّل بالتطبيق" else "معطّل"} • قفل أندرويد الدائم (OS Lockdown): ${if (rep.osLockdownActive) "مفعّل" else "غير مفعّل"}",
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -124,6 +142,7 @@ fun AppHealthAndFailoverCard(
     onCopy: (String, String) -> Unit,
 ) {
     val health = state.appHealth
+    val vpnSt by VpnStateManager.status.collectAsState()
     Card(
         shape = RoundedCornerShape(18.dp),
         modifier = Modifier.fillMaxWidth(),
@@ -132,7 +151,7 @@ fun AppHealthAndFailoverCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.HealthAndSafety, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
-                Text("الاستمرارية الذكية وصحة التطبيق (v3.1)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("مفتاح الإيقاف والتبديل الذكي وصحة النفق (v3.2)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
 
             Row(
@@ -141,14 +160,50 @@ fun AppHealthAndFailoverCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("التبديل التلقائي السريع عند الانقطاع (Auto-Failover ~2s)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                    Text("ينتقل تلقائيًا إلى ثاني أسرع سيرفر شغّال دون هدم واجهة TUN", style = MaterialTheme.typography.labelSmall)
+                    Text("مفتاح الإيقاف الصارم (Fail-Closed Kill Switch)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                    Text("يقفل واجهة TUN قبل الربط ويمنع تسرب البيانات عند سقوط جميع السيرفرات", style = MaterialTheme.typography.labelSmall)
                 }
                 Switch(
-                    checked = state.autoFailover,
-                    onCheckedChange = { vm.setAutoFailover(it) },
+                    checked = state.killSwitch,
+                    onCheckedChange = { vm.setKillSwitch(it) },
                 )
             }
+            Text(
+                KillSwitchController.OS_LIMITATION_NOTE_AR,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary,
+            )
+
+            HorizontalDivider()
+            Text("سياسة التبديل التلقائي ومقاومة التدهور (Failover Policy):", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                FailoverMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = FailoverMode.fromKey(state.failoverMode) == mode,
+                        onClick = { vm.setFailoverMode(mode.key) },
+                        label = { Text(mode.titleAr) },
+                    )
+                }
+            }
+
+            // ── لوحة مؤشرات التبديل الحيّة (Phase 6.5 Failover Telemetry) ──
+            val lastSwitchLbl = if (vpnSt.lastSuccessfulSwitchAtMs > 0L) {
+                val secAgo = ((System.currentTimeMillis() - vpnSt.lastSuccessfulSwitchAtMs) / 1000L).coerceAtLeast(0L)
+                if (secAgo < 60L) "منذ ${secAgo} ث" else "منذ ${secAgo / 60L} د"
+            } else "—"
+            Text(
+                "السيرفر الحالي: ${vpnSt.activeLabel} • السابق: ${vpnSt.previousServerLabel.ifBlank { "—" }} • البديل المرشّح: ${vpnSt.targetServerLabel.ifBlank { "—" }}",
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Text(
+                "جودة الاتصال: ${vpnSt.connectionQuality} • التأخير: ${if (vpnSt.livePingMs > 0L) "${vpnSt.livePingMs} ms" else "—"} • فقدان الحزم: ${vpnSt.packetLossPct}% • الحالة: ${vpnSt.switchingStatus} • آخر تبديل ناجح: $lastSwitchLbl",
+                style = MaterialTheme.typography.labelSmall,
+            )
 
             HorizontalDivider()
             Text(

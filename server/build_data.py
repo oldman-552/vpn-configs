@@ -34,6 +34,7 @@ import collector  # noqa: E402
 import tester  # noqa: E402
 from dedupe import MultiLayerDeduplicator, canonical_protocol, parse_identity  # noqa: E402
 from pipeline_security import redact_text  # noqa: E402
+from public_api import export_static_api_v1  # noqa: E402
 from scoring import (  # noqa: E402
     NodeHistoryStore,
     ScoredNode,
@@ -45,6 +46,13 @@ from scoring import (  # noqa: E402
     diversify_scored_nodes,
     infer_country_hint,
     is_cdn_endpoint,
+    rank_nodes_by_profile,
+)
+from security_intelligence import (  # noqa: E402
+    QuarantineRegistry,
+    ThreatIntelIndicators,
+    assess_configuration_security,
+    compute_multidimensional_scores,
 )
 
 DIST = ROOT / "dist"
@@ -104,17 +112,20 @@ def _preserve_last_known_good(prev_dir: Path, out_dir: Path) -> bool:
         "reliable_sub.txt",
         "low_latency.txt",
         "high_throughput.txt",
+        "privacy_aware.txt",
         "countries.json",
+        "quarantined.json",
     ):
         src = prev_dir / fname
         if src.is_file():
             shutil.copy2(src, out_dir / fname)
-    prev_protos = prev_dir / "protocols"
-    if prev_protos.is_dir():
-        dst_protos = out_dir / "protocols"
-        if dst_protos.exists():
-            shutil.rmtree(dst_protos)
-        shutil.copytree(prev_protos, dst_protos)
+    for sub_tree in ("protocols", "api"):
+        prev_sub = prev_dir / sub_tree
+        if prev_sub.is_dir():
+            dst_sub = out_dir / sub_tree
+            if dst_sub.exists():
+                shutil.rmtree(dst_sub)
+            shutil.copytree(prev_sub, dst_sub)
     return True
 
 
@@ -242,6 +253,26 @@ def main(argv: list[str] | None = None) -> int:
     prov_by_id = deduper.provenance_map()
     corroborated_ids = {cid for cid, p in prov_by_id.items() if p.corroboration_count >= 2}
 
+    # ── 1b) فحص الأمان الساكن وعزل الكانفيغات الحرجة قبل هدر موارد النوى (Phase 2 Quarantine) ──
+    quarantine_reg = QuarantineRegistry()
+    threat_intel = ThreatIntelIndicators.from_json_file(ROOT / "threat_intel_indicators.json")
+    safe_configs: list[str] = []
+    for u in configs:
+        ident_pre = parse_identity(u, reject_private_hosts=False)
+        prov_pre = prov_by_id.get(ident_pre.identity_id) if ident_pre else None
+        pre_rep = assess_configuration_security(u, threat_intel=threat_intel)
+        if pre_rep.quarantined:
+            quarantine_reg.record(
+                u,
+                pre_rep,
+                sources=(prov_pre.sources if prov_pre else ()),
+                timestamp=now_iso,
+            )
+            continue
+        safe_configs.append(u)
+
+    configs = safe_configs
+
     # ── 2) تجهيز النوى والفحص الفعلي (L3–L5) ──
     xray = tester.ensure_xray()
     sbox = tester.ensure_singbox()
@@ -268,8 +299,10 @@ def main(argv: list[str] | None = None) -> int:
     alive_raw = [r for r in lat if r.ok]
     LOG.info("[3/5] فحص: %d مرشّح → %d حيّة (%d متخطّى)", len(lat), len(alive_raw), skipped)
 
-    # ── 3) تحديث السجل الطولي (L6) وصحّة المصادر وحساب الدرجات المركّبة ──
+    # ── 3) تحديث السجل الطولي (L6) وصحّة المصادر وحساب الدرجات متعدّدة الأبعاد (Phases 2 & 5) ──
     alive_per_source: Counter[str] = Counter()
+    tested_per_proto: Counter[str] = Counter()
+    alive_per_proto_tested: Counter[str] = Counter()
     speed_by_cfg = {r.cfg: r.speed_kbps for r in ranked}
     scored_nodes: list[ScoredNode] = []
 
@@ -277,30 +310,72 @@ def main(argv: list[str] | None = None) -> int:
         ident = parse_identity(r.cfg, reject_private_hosts=True)
         if ident is None:
             continue
-        eff_speed = max(r.speed_kbps, speed_by_cfg.get(r.cfg, 0.0)) if r.ok else 0.0
-        hist_entry = history.record_observation(
-            ident.identity_id,
-            ok=r.ok,
-            latency_ms=r.median_latency_ms or r.latency_ms,
-            speed_kbps=eff_speed,
-            exit_country=r.exit_country,
-            country_source=r.country_source,
-            timestamp=now_iso,
-        )
+        tested_per_proto[ident.canonical_proto] += 1
+        prov = prov_by_id.get(ident.identity_id)
+        prior_entry = history.entries.get(ident.identity_id)
+        prior_exit_cc = prior_entry.exit_country if prior_entry else ""
+        prior_sec_mode = prior_entry.last_security_mode if prior_entry else ""
+        prior_perf = prior_entry.last_performance_score if prior_entry else 0.0
+
         if not r.ok:
+            if r.error in ("http_301", "http_302", "http_303", "http_307", "http_308"):
+                redir_rep = assess_configuration_security(
+                    r.cfg, probe_error=r.error, threat_intel=threat_intel
+                )
+                quarantine_reg.record(
+                    r.cfg,
+                    redir_rep,
+                    sources=(prov.sources if prov else ()),
+                    timestamp=now_iso,
+                )
+            history.record_observation(
+                ident.identity_id,
+                ok=False,
+                timestamp=now_iso,
+            )
             continue
 
-        prov = prov_by_id.get(ident.identity_id)
+        eff_speed = max(r.speed_kbps, speed_by_cfg.get(r.cfg, 0.0))
+        if r.exit_country and r.exit_country != "XX" and r.country_source == "exit_trace":
+            cc, cc_src = r.exit_country, "exit_trace"
+        elif prior_entry and prior_entry.exit_country != "XX" and prior_entry.country_source == "exit_trace":
+            cc, cc_src = prior_entry.exit_country, "exit_trace"
+        else:
+            cc, cc_src = infer_country_hint(r.cfg, ident.host)
+
+        sec_rep = assess_configuration_security(
+            r.cfg,
+            tls_probe_verified=True,
+            dns_consistent=True,
+            prior_exit_country=(prior_exit_cc if (prior_entry and prior_entry.country_source == "exit_trace") else ""),
+            current_exit_country=(cc if cc_src == "exit_trace" else ""),
+            prior_security_mode=prior_sec_mode,
+            threat_intel=threat_intel,
+        )
+        if sec_rep.quarantined:
+            quarantine_reg.record(
+                r.cfg,
+                sec_rep,
+                sources=(prov.sources if prov else ()),
+                timestamp=now_iso,
+            )
+            history.record_observation(ident.identity_id, ok=False, timestamp=now_iso)
+            continue
+
+        alive_per_proto_tested[ident.canonical_proto] += 1
+        hist_entry = history.record_observation(
+            ident.identity_id,
+            ok=True,
+            latency_ms=r.median_latency_ms or r.latency_ms,
+            speed_kbps=eff_speed,
+            exit_country=cc,
+            country_source=cc_src,
+            timestamp=now_iso,
+        )
+
         if prov:
             for src_name in prov.sources:
                 alive_per_source[src_name] += 1
-
-        if r.exit_country and r.exit_country != "XX" and r.country_source == "exit_trace":
-            cc, cc_src = r.exit_country, "exit_trace"
-        elif hist_entry.exit_country != "XX" and hist_entry.country_source == "exit_trace":
-            cc, cc_src = hist_entry.exit_country, "exit_trace"
-        else:
-            cc, cc_src = infer_country_hint(r.cfg, ident.host)
 
         med_lat = r.median_latency_ms or r.latency_ms
         corr_cnt = prov.corroboration_count if prov else 1
@@ -319,6 +394,25 @@ def main(argv: list[str] | None = None) -> int:
             verified_source_hit=ver_hit,
             weights=weights,
         )
+
+        md = compute_multidimensional_scores(
+            median_latency_ms=med_lat,
+            jitter_ms=r.jitter_ms,
+            probe_pass_rate=r.probe_pass_rate or 1.0,
+            speed_kbps=eff_speed,
+            runs_seen=hist_entry.runs_seen,
+            runs_alive=hist_entry.runs_alive,
+            consecutive_alive=hist_entry.consecutive_alive,
+            ema_reliability=hist_entry.ema_reliability,
+            recent_failures=hist_entry.consecutive_failures,
+            verified_at=now_iso,
+            now_iso=now_iso,
+            prior_performance_score=prior_perf,
+            security_report=sec_rep,
+        )
+        hist_entry.last_performance_score = md.performance_score
+        hist_entry.last_reliability_score = md.reliability_score
+        hist_entry.last_security_mode = "tls" if sec_rep.tls_enabled else "none"
 
         scored_nodes.append(
             ScoredNode(
@@ -348,6 +442,15 @@ def main(argv: list[str] | None = None) -> int:
                 score=score,
                 score_breakdown=breakdown,
                 verified_at=now_iso,
+                performance_score=md.performance_score,
+                reliability_score=md.reliability_score,
+                security_assessment=md.security_assessment,
+                privacy_assessment=md.privacy_assessment,
+                risk_level=md.risk_level,
+                packet_loss_pct=md.packet_loss_pct,
+                uptime_pct=md.uptime_pct,
+                score_delta=md.score_delta,
+                recent_failures=hist_entry.consecutive_failures,
             )
         )
 
@@ -358,6 +461,7 @@ def main(argv: list[str] | None = None) -> int:
     history.save(out_dir / "state" / "node_history.json")
     registry.save_state(out_dir / "state" / "source_state.json")
     registry.save_public_report(out_dir / "source_health.json")
+    quarantine_reg.save_public_report(out_dir / "quarantined.json")
 
     if len(scored_nodes) < max(1, eff_min_alive):
         if prev_dir and _preserve_last_known_good(prev_dir, out_dir):
@@ -446,6 +550,15 @@ def main(argv: list[str] | None = None) -> int:
     write_atomic(out_dir / "low_latency.txt", "\n".join(low_lat_lines) + ("\n" if low_lat_lines else ""))
     write_atomic(out_dir / "high_throughput.txt", "\n".join(high_tp_lines) + ("\n" if high_tp_lines else ""))
 
+    priv_ranked = diversify_scored_nodes(
+        rank_nodes_by_profile(scored_nodes, "PRIVACY_AWARE", now_iso=now_iso),
+        max_per_host=MAX_PER_HOST,
+        max_per_subnet=6,
+        limit=BEST_N,
+    )
+    priv_lines = [_format_node_remark(i, n) for i, n in enumerate(priv_ranked, 1)]
+    write_atomic(out_dir / "privacy_aware.txt", "\n".join(priv_lines) + ("\n" if priv_lines else ""))
+
     # قوائم مفصولة حسب البروتوكول المعياري
     proto_dir = out_dir / "protocols"
     proto_dir.mkdir(parents=True, exist_ok=True)
@@ -500,10 +613,13 @@ def main(argv: list[str] | None = None) -> int:
         "unique_clean": len(configs),
         "tested": len(lat),
         "alive": len(scored_nodes),
+        "quarantined": len(quarantine_reg.entries),
         "skipped_unsupported": skipped,
         "alive_by_protocol": dict(Counter(n.canonical_protocol for n in scored_nodes)),
         "collected_by_protocol": dict(mix),
         "best100_by_protocol": dict(Counter(n.canonical_protocol for n in best)),
+        "security_summary": dict(Counter(n.security_assessment for n in scored_nodes)),
+        "risk_summary": dict(Counter(n.risk_level for n in scored_nodes)),
         "deduplication": deduper.summary.to_dict(),
         "validation_funnel": {
             "l0_raw_collected": len(raw),
@@ -526,14 +642,45 @@ def main(argv: list[str] | None = None) -> int:
             "reliable_sub": _file_url("reliable_sub.txt"),
             "low_latency": _file_url("low_latency.txt"),
             "high_throughput": _file_url("high_throughput.txt"),
+            "privacy_aware": _file_url("privacy_aware.txt"),
             "alive_json": _file_url("alive.json"),
             "countries_json": _file_url("countries.json"),
             "source_health_json": _file_url("source_health.json"),
+            "quarantined_json": _file_url("quarantined.json"),
+            "api_v1_statistics": _file_url("api/v1/statistics.json"),
+            "api_v1_servers": _file_url("api/v1/servers.json"),
+            "api_v1_openapi": _file_url("api/v1/openapi.json"),
             "all_gz": _file_url("all.txt.gz"),
             "protocols": proto_files_meta,
         },
     }
     write_atomic(out_dir / "meta.json", json.dumps(meta, ensure_ascii=False, indent=2) + "\n")
+
+    # ── 6) تصدير واجهة الإحصاءات العامة المقروءة فقط (/api/v1/*) وبيانات الرصد (Phases 8 & 10) ──
+    alive_dicts = [
+        n.to_alive_json_dict(index=i, labeled_uri=labeled)
+        for i, (n, labeled) in enumerate(zip(scored_nodes, alive_named), 1)
+    ]
+    tested_proto_pairs = {
+        p: (tested_per_proto[p], alive_per_proto_tested.get(p, 0))
+        for p in set(tested_per_proto.keys()) | set(alive_per_proto_tested.keys())
+    }
+    src_pub_report = {}
+    if (out_dir / "source_health.json").is_file():
+        try:
+            src_pub_report = json.loads((out_dir / "source_health.json").read_text(encoding="utf-8"))
+        except Exception:
+            src_pub_report = {}
+    export_static_api_v1(
+        out_dir,
+        prev_dir=prev_dir,
+        meta=meta,
+        alive_servers_dicts=alive_dicts,
+        tested_by_proto=tested_proto_pairs,
+        quarantined_total=len(quarantine_reg.entries),
+        quarantined_reasons=quarantine_reg.summary_by_reason(),
+        source_report=src_pub_report,
+    )
 
     LOG.info(
         "[5/5] انتهى في %.1f ثانية | حيّة: %d | أفضل %d: %d | مستقر متعدّد الدورات: %d",

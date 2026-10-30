@@ -124,7 +124,7 @@ fun ConnectHomeScreen(
     var elapsedSec by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(vpnStatus.phase, vpnStatus.connectedSinceMs) {
-        if (vpnStatus.phase == VpnPhase.CONNECTED && vpnStatus.connectedSinceMs > 0L) {
+        if (vpnStatus.isTunnelVerified && vpnStatus.connectedSinceMs > 0L) {
             while (true) {
                 elapsedSec = ((System.currentTimeMillis() - vpnStatus.connectedSinceMs) / 1000L)
                     .coerceAtLeast(0L)
@@ -135,14 +135,17 @@ fun ConnectHomeScreen(
         }
     }
 
-    val isConnected = vpnStatus.phase == VpnPhase.CONNECTED
-    val isBusy = vpnStatus.phase == VpnPhase.CONNECTING || vpnStatus.phase == VpnPhase.SWITCHING
+    val isConnected = vpnStatus.isTunnelVerified
+    val isBusy = vpnStatus.isTransitioning
+    val isProtectedLock = vpnStatus.phase == VpnPhase.PROTECTION_ACTIVE
 
     val ringColor by animateColorAsState(
         targetValue = when {
-            isConnected -> VpnConnectedGreen
+            vpnStatus.phase == VpnPhase.CONNECTED -> VpnConnectedGreen
+            vpnStatus.phase == VpnPhase.CONNECTION_DEGRADED -> VpnConnectingAmber
             isBusy -> VpnConnectingAmber
-            vpnStatus.phase == VpnPhase.ERROR -> VpnDangerRed
+            isProtectedLock -> VpnConnectingAmber
+            vpnStatus.phase == VpnPhase.CONNECTION_FAILED -> VpnDangerRed
             else -> MaterialTheme.colorScheme.primary
         },
         label = "vpnRingColor",
@@ -263,7 +266,9 @@ fun ConnectHomeScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = when {
+                            vpnStatus.phase == VpnPhase.CONNECTION_DEGRADED -> "متّصل (بطيء)"
                             isConnected -> "متّصل"
+                            isProtectedLock -> "حجب التسرب نشط"
                             isBusy -> "جارٍ الربط…"
                             else -> "اضغط للاتصال"
                         },
@@ -1046,6 +1051,10 @@ private fun ServerCard(
                         )
                     }
                     val telemetryParts = buildList {
+                        if (item.securityAssessment == "Verified") add("🔒 تشفير موثّق")
+                        else if (item.securityAssessment == "Failed") add("⚠ تحذير تشفير")
+                        if (item.privacyAssessment == "Verified") add("🛡 خصوصية موثّقة")
+                        else if (item.privacyAssessment == "Unverified") add("مشغّل عام غير موثّق")
                         if (item.locallyTested) add("✓ فُحص على شبكتك")
                         if (item.overallScore > 0.0) add("الإجمالي ${item.overallScore.toInt()}%")
                         if (item.stabilityRuns >= 2) add("مستقر ×${item.stabilityRuns}")
@@ -1314,6 +1323,8 @@ fun SettingsAndExportScreen(
     var enableIpv6 by remember { mutableStateOf(p.enableIpv6) }
     var udpInTcp by remember { mutableStateOf(p.udpInTcp) }
     var autoFailover by remember { mutableStateOf(p.autoFailover) }
+    var killSwitch by remember { mutableStateOf(p.killSwitch) }
+    var failoverMode by remember { mutableStateOf(p.failoverMode) }
     var testTop by remember { mutableStateOf(p.testTop.toString()) }
     var speedTop by remember { mutableStateOf(p.speedTop.toString()) }
     var bestN by remember { mutableStateOf(p.bestN.toString()) }
@@ -1400,10 +1411,19 @@ fun SettingsAndExportScreen(
                     onCheckedChange = { dnsDoh = it },
                 )
                 SettingToggleRow(
+                    title = "مفتاح الإيقاف الصارم (Kill Switch)",
+                    subtitle = "يحجب مرور بيانات التطبيقات خارج النفق أثناء الربط أو عند انقطاع السيرفر",
+                    checked = killSwitch,
+                    onCheckedChange = { killSwitch = it },
+                )
+                SettingToggleRow(
                     title = "التبديل التلقائي عند انقطاع السيرفر",
                     subtitle = "ينتقل تلقائيًا لأفضل سيرفر بديل دون قطع نفق الـ VPN",
                     checked = autoFailover,
-                    onCheckedChange = { autoFailover = it },
+                    onCheckedChange = {
+                        autoFailover = it
+                        failoverMode = if (!it) "OFF" else if (failoverMode == "OFF") "SMART" else failoverMode
+                    },
                 )
                 SettingToggleRow(
                     title = "تمرير UDP عبر TCP (UDP-in-TCP)",
@@ -1466,6 +1486,7 @@ fun SettingsAndExportScreen(
                         "reliable" to "الأكثر استقرارًا",
                         "low_latency" to "الأقل تأخيرًا",
                         "high_throughput" to "الأعلى سرعة",
+                        "privacy_aware" to "الأعلى أمانًا",
                     ).forEach { (key, title) ->
                         FilterChip(
                             selected = state.feedProfile == key,
@@ -1492,6 +1513,8 @@ fun SettingsAndExportScreen(
                     timeoutSec = timeout.toIntOrNull() ?: 5,
                     defaultSortMode = defaultSort,
                     autoRefresh = autoRef,
+                    killSwitch = killSwitch,
+                    failoverMode = failoverMode,
                 )
             },
             modifier = Modifier.fillMaxWidth(),
@@ -1520,7 +1543,7 @@ fun SettingsAndExportScreen(
                 Text("حول التطبيق والتراخيص القانونية", style = MaterialTheme.typography.titleMedium)
                 val aboutUpdated = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
                 Text(
-                    "bahrain-vpn v2.4$aboutUpdated",
+                    "bahrain-vpn v3.2$aboutUpdated",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )
@@ -1542,9 +1565,12 @@ fun SettingsAndExportScreen(
 private fun StatusPill(phase: VpnPhase) {
     val (bg, fg, label) = when (phase) {
         VpnPhase.CONNECTED -> Triple(VpnConnectedGreen.copy(alpha = 0.16f), VpnConnectedGreen, "● متّصل ومحمي")
+        VpnPhase.CONNECTION_DEGRADED -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, "● متّصل (تذبذب)")
         VpnPhase.CONNECTING -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, "● جارٍ الاتصال…")
-        VpnPhase.SWITCHING -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, "● جارٍ التبديل…")
-        VpnPhase.ERROR -> Triple(VpnDangerRed.copy(alpha = 0.16f), VpnDangerRed, "● تعذّر الاتصال")
+        VpnPhase.RECONNECTING -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, "● استعادة المسار…")
+        VpnPhase.SWITCHING_SERVER -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, "● جارٍ التبديل…")
+        VpnPhase.PROTECTION_ACTIVE -> Triple(VpnConnectingAmber.copy(alpha = 0.18f), VpnConnectingAmber, "🛡 Kill Switch نشط")
+        VpnPhase.CONNECTION_FAILED -> Triple(VpnDangerRed.copy(alpha = 0.16f), VpnDangerRed, "● تعذّر الاتصال")
         VpnPhase.DISCONNECTED -> Triple(
             MaterialTheme.colorScheme.surfaceVariant,
             MaterialTheme.colorScheme.secondary,

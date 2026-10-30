@@ -59,40 +59,57 @@ class SingBox(private val ctx: Context) {
         return ipv4LiteralRe.matches(h) || h.contains(':')
     }
 
-    /** بناء ملف إعداد كامل متوافق مع sing-box 1.14.4 لكانفيغ واحد على منفذ محلي محدّد. */
+    /**
+     * بناء ملف إعداد كامل متوافق مع sing-box 1.14.4 مع حماية صارمة من تسرب DNS و IPv6:
+     *   • خادم `bootstrap` (1.1.1.1 مباشر) يُستخدم حصريًا لحل اسم نطاق سيرفر البروكسي نفسه.
+     *   • خادم `tunnel-dns` يحمل `"detour": "proxy"` ويُعيّن كـ `dns.final` و`default_domain_resolver`
+     *     بحيث تمرّ 100% من استعلامات DNS الخاصة بالتطبيقات داخل النفق المشفّر ولا تتسرب لمزوّد الإنترنت.
+     */
     fun buildConfig(
         cfg: String,
         port: Int,
         dnsServer: String = "1.1.1.1",
         useDoh: Boolean = false,
+        enableIpv6: Boolean = false,
     ): String? {
         val out = Converters.toOutbound(cfg) ?: return null
-        val safeDns = dnsServer.trim().removePrefix("https://").substringBefore("/").ifBlank { "1.1.1.1" }
+        val safeDns = com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.sanitizeDnsServer(dnsServer)
+        val domainStrategy = if (enableIpv6) "prefer_ipv4" else "ipv4_only"
+
         val dnsServers = JSONArray()
-        val dnsEntry = JSONObject()
+        // 1. محلّل التمهيد المباشر لحل عنوان سيرفر الـ VPN نفسه دون حلقة توجيه (Routing Loop)
+        dnsServers.put(
+            JSONObject()
+                .put("type", "udp")
+                .put("tag", "bootstrap")
+                .put("server", "1.1.1.1")
+        )
+
+        // 2. محلّل النفق المشفّر لجميع طلبات التطبيقات والمستخدم (يمرّ إجباريًا داخل proxy)
+        val tunnelDns = JSONObject()
             .put("type", if (useDoh) "https" else "udp")
-            .put("tag", "bootstrap")
+            .put("tag", "tunnel-dns")
             .put("server", safeDns)
+            .put("detour", "proxy")
 
         if (!isIpLiteral(safeDns)) {
-            // إذا أدخل المستخدم اسم نطاق مثل dns.google أو cloudflare-dns.com نضيف محلّل IP احتياطي
-            dnsServers.put(
-                JSONObject()
-                    .put("type", "udp")
-                    .put("tag", "ip-fallback")
-                    .put("server", "1.1.1.1")
-            )
-            dnsEntry.put("domain_resolver", "ip-fallback")
+            tunnelDns.put("domain_resolver", "bootstrap")
         }
-        dnsServers.put(dnsEntry)
+        dnsServers.put(tunnelDns)
 
         out.put("tag", "proxy")
         out.put("domain_resolver", "bootstrap")
 
         val conf = JSONObject()
             .put("log", JSONObject().put("level", "error").put("timestamp", false))
-            .put("dns", JSONObject().put("servers", dnsServers).put("final", "bootstrap"))
-            .put("route", JSONObject().put("default_domain_resolver", "bootstrap"))
+            .put(
+                "dns",
+                JSONObject()
+                    .put("servers", dnsServers)
+                    .put("final", "tunnel-dns")
+                    .put("strategy", domainStrategy)
+            )
+            .put("route", JSONObject().put("default_domain_resolver", "tunnel-dns"))
             .put(
                 "inbounds",
                 JSONArray().put(
@@ -117,9 +134,10 @@ class SingBox(private val ctx: Context) {
         useDoh: Boolean = false,
         tag: String = "vpn",
         waitMs: Long = 3500L,
+        enableIpv6: Boolean = false,
     ): RunningDaemon? {
         if (!isAvailable) return null
-        val json = buildConfig(cfg, port, dnsServer, useDoh) ?: return null
+        val json = buildConfig(cfg, port, dnsServer, useDoh, enableIpv6) ?: return null
         val confFile = File(tmpDir, "cfg-$tag-$port.json")
         confFile.writeText(json, Charsets.UTF_8)
 
