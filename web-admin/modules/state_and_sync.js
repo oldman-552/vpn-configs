@@ -1,6 +1,6 @@
 /**
  * modules/state_and_sync.js — Core State, i18n, Audit Chain, Encrypted Vault Sync,
- * Encrypted VIP Private Nodes Sealing, and ECDSA Bundle Publisher (v3.1).
+ * Encrypted VIP Private Nodes Sealing, and ECDSA Bundle Publisher (v3.2).
  */
 
 const SUBSCRIPTION_HOURS = {
@@ -55,7 +55,7 @@ function createEmptyDb() {
   const now = new Date().toISOString();
   return {
     schema_version: 3,
-    bundle_release: "3.1",
+    bundle_release: "3.2",
     signing_keys: null,
     vip_key_hex: EnterpriseWebCrypto.randomHex(32),
     vip_servers: [],
@@ -79,44 +79,44 @@ function createEmptyDb() {
     connection_logs: [],
     app_versions: [
       {
-        id: "ver_user_3_1",
+        id: "ver_user_3_2",
         target_app: "USER",
-        version_code: 9,
-        version_name: "3.1",
-        release_notes: "ULTIMATE VPN ENTERPRISE v3.1 — R8 Shrunk + ABI Auto-Updater + Encrypted VIP Nodes + 2s Auto-Failover",
+        version_code: 10,
+        version_name: "3.2",
+        release_notes: "ULTIMATE VPN ENTERPRISE v3.2 — Zero-Leak DNS/IPv6 + Fail-Closed Kill Switch + Proactive Failover + Security Intelligence",
         release_date: now,
         mandatory: false,
-        min_supported_code: 8,
-        apk_url: "https://github.com/oldman-552/vpn-configs/releases/latest/download/app-arm64-v8a-release.apk",
-        apk_sha256: "",
+        min_supported_code: 9,
+        apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-arm64-v8a-release.apk",
+        apk_sha256: "13dd72d0182de10f5a5b9d75174d3626aae10759f00e79ae89efa8b0da9dfdee",
         signing_cert_sha256: "",
         abi_assets: {
           "arm64-v8a": {
-            apk_url: "https://github.com/oldman-552/vpn-configs/releases/latest/download/app-arm64-v8a-release.apk",
-            apk_sha256: "",
+            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-arm64-v8a-release.apk",
+            apk_sha256: "13dd72d0182de10f5a5b9d75174d3626aae10759f00e79ae89efa8b0da9dfdee",
           },
           x86_64: {
-            apk_url: "https://github.com/oldman-552/vpn-configs/releases/latest/download/app-x86_64-release.apk",
-            apk_sha256: "",
+            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-x86_64-release.apk",
+            apk_sha256: "11b8f1828883b1206253ddc619f4c2baa9f85a857591f767e0516a58c7353e5c",
           },
           universal: {
-            apk_url: "https://github.com/oldman-552/vpn-configs/releases/latest/download/app-release.apk",
-            apk_sha256: "",
+            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-release.apk",
+            apk_sha256: "ca21059896f59136334e47c42fec34dc1b5105d5db63c03b56062fd57aff9da9",
           },
         },
         is_active: true,
       },
       {
-        id: "ver_admin_3_1",
+        id: "ver_admin_3_2",
         target_app: "ADMIN",
-        version_code: 2,
-        version_name: "3.1",
-        release_notes: "ULTIMATE VPN ADMIN v3.1 — Encrypted VIP Private Nodes + Slim R8 Build",
+        version_code: 3,
+        version_name: "3.2",
+        release_notes: "ULTIMATE VPN ADMIN v3.2 - Encrypted VIP Private Nodes + Slim R8 Build",
         release_date: now,
         mandatory: false,
-        min_supported_code: 1,
-        apk_url: "https://github.com/oldman-552/vpn-configs/releases/latest/download/app-admin-release.apk",
-        apk_sha256: "",
+        min_supported_code: 2,
+        apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v3.2/app-admin-release.apk",
+        apk_sha256: "f275b145cd1e82626407fe895d68a8cada44cdaea43ec857759a6d6cb8f10a29",
         signing_cert_sha256: "",
         abi_assets: {},
         is_active: true,
@@ -139,6 +139,7 @@ function createEmptyDb() {
 
 function ensureVaultV31Defaults(db) {
   if (!db) return createEmptyDb();
+  db.bundle_release = "3.2";
   if (!db.vip_key_hex || db.vip_key_hex.length !== 64) {
     db.vip_key_hex = EnterpriseWebCrypto.randomHex(32);
   }
@@ -148,8 +149,13 @@ function ensureVaultV31Defaults(db) {
     db.remote_config.auto_failover_enabled = {
       value: true,
       sensitive: false,
-      desc: "Smart 2s Auto-Failover to fastest verified backup server",
+      desc: "Proactive Smart Auto-Failover v3.2 to fastest verified backup server",
     };
+  }
+  if (Array.isArray(db.app_versions) && !db.app_versions.some((v) => v.version_name === "3.2")) {
+    const defaults = createEmptyDb().app_versions;
+    db.app_versions.forEach((v) => { v.is_active = false; });
+    db.app_versions.unshift(...defaults);
   }
   return db;
 }
@@ -250,7 +256,7 @@ async function syncFromGitHub() {
     if (!AppState.db.signing_keys) {
       AppState.db.signing_keys = await EnterpriseWebCrypto.generateEcdsaP256KeyPair();
     }
-    if (statusEl) statusEl.textContent = t("متصل بـ GitHub (v3.1) ✓", "Synced with GitHub (v3.1) ✓");
+    if (statusEl) statusEl.textContent = t("متصل بـ GitHub (v3.2) ✓", "Synced with GitHub (v3.2) ✓");
     renderAll();
   } catch (err) {
     alert(t("خطأ في فك تشفير الخزنة أو اتصال GitHub: ", "Vault/GitHub error: ") + err.message);
@@ -336,7 +342,7 @@ async function saveAndPublishToGitHub(commitReason = "Update enterprise state") 
 
     const bundleBody = {
       schema_version: 3,
-      bundle_release: "3.1",
+      bundle_release: "3.2",
       generated_at: new Date().toISOString(),
       public_key_spki_b64: AppState.db.signing_keys.publicSpkiB64,
       remote_config: rcFlat,
@@ -358,11 +364,11 @@ async function saveAndPublishToGitHub(commitReason = "Update enterprise state") 
       "enterprise/bundle.json",
       signedBundle,
       AppState.bundleSha,
-      `chore(bundle): sign & publish v3.1 client bundle`
+      `chore(bundle): sign & publish v3.2 client bundle`
     );
     AppState.bundleSha = bundlePut.content?.sha || AppState.bundleSha;
 
-    if (statusEl) statusEl.textContent = t("تم الحفظ والتوقيع على GitHub (v3.1) ✓", "Encrypted & Signed on GitHub (v3.1) ✓");
+    if (statusEl) statusEl.textContent = t("تم الحفظ والتوقيع على GitHub (v3.2) ✓", "Encrypted & Signed on GitHub (v3.2) ✓");
     renderAll();
   } catch (err) {
     alert(t("تعذّر النشر على GitHub: ", "Publish failed: ") + err.message);
