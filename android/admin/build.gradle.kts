@@ -12,8 +12,8 @@ android {
         applicationId = "com.bahrain.vpnadmin"
         minSdk = 29
         targetSdk = 34
-        versionCode = 1
-        versionName = "3.0"
+        versionCode = 2
+        versionName = "3.1"
     }
 
     signingConfigs {
@@ -30,7 +30,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

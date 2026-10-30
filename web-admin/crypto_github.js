@@ -9,6 +9,7 @@ const EnterpriseWebCrypto = (() => {
   const dec = new TextDecoder();
   const PBKDF2_ITER = 120000;
   const LOOKUP_DOMAIN = "bahrain-vpn-enterprise-v3-user-lookup";
+  const VIP_NODES_AAD = "bahrain-vpn-vip-nodes-v31";
 
   function bytesToB64(bytes) {
     let bin = "";
@@ -129,6 +130,45 @@ const EnterpriseWebCrypto = (() => {
     return encryptAesGcm(`${norm}:${password}`, saltHex, jsonStr, norm);
   }
 
+  async function encryptRawKeyAesGcm(keyHex, plainText, aadStr = VIP_NODES_AAD) {
+    const rawKey = hexToBytes(keyHex);
+    const key = await crypto.subtle.importKey(
+      "raw",
+      rawKey,
+      { name: "AES-GCM" },
+      false,
+      ["encrypt"]
+    );
+    const iv = new Uint8Array(12);
+    crypto.getRandomValues(iv);
+    const params = { name: "AES-GCM", iv };
+    if (aadStr) params.additionalData = enc.encode(aadStr);
+    const ct = new Uint8Array(
+      await crypto.subtle.encrypt(params, key, enc.encode(plainText))
+    );
+    const merged = new Uint8Array(12 + ct.length);
+    merged.set(iv, 0);
+    merged.set(ct, 12);
+    return bytesToB64(merged);
+  }
+
+  async function decryptRawKeyAesGcm(keyHex, tokenB64, aadStr = VIP_NODES_AAD) {
+    const raw = b64ToBytes(tokenB64);
+    const iv = raw.slice(0, 12);
+    const ct = raw.slice(12);
+    const key = await crypto.subtle.importKey(
+      "raw",
+      hexToBytes(keyHex),
+      { name: "AES-GCM" },
+      false,
+      ["decrypt"]
+    );
+    const params = { name: "AES-GCM", iv };
+    if (aadStr) params.additionalData = enc.encode(aadStr);
+    const plain = await crypto.subtle.decrypt(params, key, ct);
+    return dec.decode(plain);
+  }
+
   async function generateEcdsaP256KeyPair() {
     const kp = await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" },
@@ -229,12 +269,15 @@ const EnterpriseWebCrypto = (() => {
   }
 
   return {
+    VIP_NODES_AAD,
     randomHex,
     canonicalJson,
     sha256Hex,
     computeUserLookupId,
     encryptAesGcm,
     decryptAesGcm,
+    encryptRawKeyAesGcm,
+    decryptRawKeyAesGcm,
     sealUserLicenseEnvelope,
     generateEcdsaP256KeyPair,
     signEcdsaP1363B64,

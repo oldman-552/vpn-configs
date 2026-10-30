@@ -10,6 +10,8 @@ import com.bahrain.vpnconfigs.enterprise.ClientDiagnosticsEngine
 import com.bahrain.vpnconfigs.enterprise.EnterpriseClock
 import com.bahrain.vpnconfigs.enterprise.EnterpriseCrypto
 import com.bahrain.vpnconfigs.enterprise.EnterpriseLicenseGuard
+import com.bahrain.vpnconfigs.vpn.ServerCandidate
+import com.bahrain.vpnconfigs.vpn.SmartFailoverEngine
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -101,10 +103,10 @@ class EnterpriseAndroidTest {
                 JSONArray().put(
                     JSONObject()
                         .put("target_app", "USER")
-                        .put("version_code", 9)
-                        .put("version_name", "3.1")
+                        .put("version_code", 10)
+                        .put("version_name", "3.2")
                         .put("mandatory", true)
-                        .put("min_supported_code", 9)
+                        .put("min_supported_code", 10)
                         .put("apk_url", "https://example.com/update.apk")
                         .put("apk_sha256", "a".repeat(64))
                         .put("is_active", true)
@@ -136,7 +138,7 @@ class EnterpriseAndroidTest {
         val upd = AppUpdateManager.evaluateAvailableUpdate(ctx, guard.getVerifiedAppUpdates())
         assertNotNull(upd)
         assertTrue(upd!!.mandatory)
-        assertEquals("3.1", upd.versionName)
+        assertEquals("3.2", upd.versionName)
 
         // Wrong password rejected
         assertTrue(guard.loginWithBundle("ahmed_bh", "WrongPass!", true).isFailure)
@@ -236,5 +238,126 @@ class EnterpriseAndroidTest {
             runCatching { server.close() }
             acceptor.join(1000)
         }
+    }
+
+    @Test
+    fun v31AbiAwareUpdaterVipEncryptionAndSmartFailoverWorkEndToEnd() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val guard = EnterpriseLicenseGuard(ctx)
+
+        // 1. ABI-aware APK selection (arm64-v8a vs x86_64 vs universal fallback)
+        val updateObj = JSONObject()
+            .put("target_app", "USER")
+            .put("version_code", 12)
+            .put("version_name", "3.3")
+            .put("is_active", true)
+            .put("apk_url", "https://example.com/fallback-universal.apk")
+            .put("apk_sha256", "f".repeat(64))
+            .put(
+                "abi_assets",
+                JSONObject()
+                    .put("arm64-v8a", JSONObject().put("apk_url", "https://example.com/arm64.apk").put("apk_sha256", "1".repeat(64)))
+                    .put("x86_64", JSONObject().put("apk_url", "https://example.com/x64.apk").put("apk_sha256", "2".repeat(64)))
+                    .put("universal", JSONObject().put("apk_url", "https://example.com/uni.apk").put("apk_sha256", "3".repeat(64)))
+            )
+
+        val armPick = AppUpdateManager.evaluateAvailableUpdate(ctx, JSONArray().put(updateObj), arrayOf("arm64-v8a", "armeabi-v7a"))!!
+        assertEquals("arm64-v8a", armPick.selectedAbi)
+        assertEquals("https://example.com/arm64.apk", armPick.apkUrl)
+        assertEquals("1".repeat(64), armPick.apkSha256)
+
+        val x64Pick = AppUpdateManager.evaluateAvailableUpdate(ctx, JSONArray().put(updateObj), arrayOf("x86_64"))!!
+        assertEquals("x86_64", x64Pick.selectedAbi)
+        assertEquals("https://example.com/x64.apk", x64Pick.apkUrl)
+
+        val legacyPick = AppUpdateManager.evaluateAvailableUpdate(ctx, JSONArray().put(updateObj), arrayOf("armeabi-v7a"))!!
+        assertEquals("universal", legacyPick.selectedAbi)
+        assertEquals("https://example.com/uni.apk", legacyPick.apkUrl)
+
+        // 2. Encrypted VIP Private Nodes lifecycle (guest=0 -> loggedIn=2 -> expired/logout=0)
+        val kpg = KeyPairGenerator.getInstance("EC")
+        kpg.initialize(ECGenParameterSpec("secp256r1"))
+        val kp = kpg.generateKeyPair()
+        val pubSpkiB64 = Base64.getEncoder().encodeToString(kp.public.encoded)
+        val t0Ms = 1_793_400_000_000L
+        EnterpriseClock.recordNetworkUtc(t0Ms)
+
+        val vipKeyBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val vipKeyHex = vipKeyBytes.joinToString("") { "%02x".format(it) }
+        val vipNodesPlain = JSONArray()
+            .put(JSONObject().put("id", "v1").put("label", "DE Edge").put("country", "DE").put("protocol", "VLESS").put("uri", "vless://u1@de-vip.internal:443").put("priority", 180))
+            .put(JSONObject().put("id", "v2").put("label", "BH Ultra").put("country", "BH").put("protocol", "HYSTERIA2").put("uri", "hysteria2://p2@bh-vip.internal:8443").put("priority", 300))
+        val vipEncB64 = EnterpriseCrypto.encryptAesGcm(
+            vipKeyBytes,
+            vipNodesPlain.toString().toByteArray(Charsets.UTF_8),
+            EnterpriseCrypto.VIP_NODES_AAD.toByteArray(Charsets.UTF_8),
+        )
+
+        val cert = JSONObject()
+            .put("user_id", "usr_vip99")
+            .put("username", "noor_vip")
+            .put("account_status", "ACTIVE")
+            .put("subscription_type", "MONTHLY")
+            .put("subscription_start", java.time.Instant.ofEpochMilli(t0Ms).toString())
+            .put("subscription_expiration", java.time.Instant.ofEpochMilli(t0Ms + 720L * 3600_000L).toString())
+            .put("device_limit", 1)
+            .put("authorized_devices", JSONArray().put(guard.deviceInstallId))
+            .put("vip_access_key_hex", vipKeyHex)
+            .put("bandwidth", JSONObject().put("max_daily_mb", 0))
+        val certSig = signWithEcKey(kp.private, EnterpriseCrypto.canonicalJsonString(cert).toByteArray(Charsets.UTF_8))
+
+        val saltBytes = ByteArray(16).also { SecureRandom().nextBytes(it) }
+        val saltHex = saltBytes.joinToString("") { "%02x".format(it) }
+        val envB64 = EnterpriseCrypto.encryptAesGcm(
+            EnterpriseCrypto.derivePbkdf2Key("noor_vip:Noor#2026", saltBytes),
+            JSONObject().put("certificate", cert).put("signature_b64", certSig).toString().toByteArray(Charsets.UTF_8),
+            "noor_vip".toByteArray(Charsets.UTF_8),
+        )
+        val lookup = EnterpriseCrypto.computeUserLookupId("noor_vip")
+        val bundle = JSONObject()
+            .put("schema_version", 3)
+            .put("bundle_release", "3.1")
+            .put("generated_at", java.time.Instant.ofEpochMilli(t0Ms).toString())
+            .put("public_key_spki_b64", pubSpkiB64)
+            .put("remote_config", JSONObject().put("auto_failover_enabled", true))
+            .put("app_updates", JSONArray())
+            .put("vip_nodes_enc_b64", vipEncB64)
+            .put("licenses", JSONObject().put(lookup, JSONObject().put("salt_hex", saltHex).put("envelope_b64", envB64).put("status_code", "ACTIVE")))
+        val bundleSig = signWithEcKey(kp.private, EnterpriseCrypto.canonicalJsonString(bundle).toByteArray(Charsets.UTF_8))
+        guard.logout()
+        assertTrue(guard.applySignedBundleRaw(JSONObject().put("bundle", bundle).put("signature_b64", bundleSig).toString()))
+        assertEquals(0, guard.getAuthorizedVipNodes().size)
+
+        val st = guard.loginWithBundle("noor_vip", "Noor#2026", true).getOrThrow()
+        assertEquals(2, st.vipNodesUnlocked)
+        val unlockedVip = guard.getAuthorizedVipNodes()
+        assertEquals(2, unlockedVip.size)
+        assertEquals("BH", unlockedVip[0].country) // priority 300 sorted first
+
+        guard.logout()
+        assertEquals(0, guard.getAuthorizedVipNodes().size)
+
+        // 3. SmartFailoverEngine rapid confirmation & speed/VIP ranking + cooldown isolation
+        SmartFailoverEngine.clearForTesting()
+        assertFalse(SmartFailoverEngine.shouldTriggerFailover(processAlive = true, primaryProbeOk = false, secondaryConfirmOk = true))
+        assertTrue(SmartFailoverEngine.shouldTriggerFailover(processAlive = true, primaryProbeOk = false, secondaryConfirmOk = false))
+        assertTrue(SmartFailoverEngine.shouldTriggerFailover(processAlive = false, primaryProbeOk = true, secondaryConfirmOk = true))
+
+        val cDead = ServerCandidate("vless://u@dead.example.com:443", "Dead", speedKbps = 9000.0, latencyMs = 40L)
+        val cSlow = ServerCandidate("vless://u@slow.example.com:443", "Slow", speedKbps = 800.0, latencyMs = 90L)
+        val cFast = ServerCandidate("vless://u@fast.example.com:443", "Fast", speedKbps = 6500.0, latencyMs = 110L)
+        val cCooled = ServerCandidate("vless://u@flapping.example.com:443", "Flapping", speedKbps = 12000.0, latencyMs = 30L)
+        val cVip = ServerCandidate("vless://u@vip.example.com:443", "VIP", speedKbps = 4000.0, latencyMs = 70L, isVip = true)
+
+        SmartFailoverEngine.recordServerDrop(cCooled.cfg, nowMs = 100_000L)
+        val ranked = SmartFailoverEngine.rankFailoverCandidates(
+            excludeCfg = cDead.cfg,
+            pool = listOf(cDead, cSlow, cFast, cCooled, cVip),
+            nowMs = 150_000L,
+            maxCandidates = 3,
+        )
+        assertEquals("VIP", ranked[0].label)
+        assertEquals("Fast", ranked[1].label)
+        assertEquals("Slow", ranked[2].label)
     }
 }

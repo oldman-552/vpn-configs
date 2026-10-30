@@ -134,7 +134,7 @@ private fun AdminRootApp(vaultMgr: AdminGitHubVaultManager) {
                         vEnc.getString("ciphertext_b64"),
                         "bahrain-vpn-admin-vault-v3",
                     )
-                    JSONObject(plain)
+                    vaultMgr.ensureV31Defaults(JSONObject(plain))
                 } else {
                     vaultMgr.createEmptyVaultDb()
                 }
@@ -428,7 +428,78 @@ private fun AdminRootApp(vaultMgr: AdminGitHubVaultManager) {
                 }
 
                 3 -> {
+                    var vipLbl by remember { mutableStateOf("") }
+                    var vipCc by remember { mutableStateOf("") }
+                    var vipUri by remember { mutableStateOf("") }
+                    val vipArr = dbState.optJSONArray("vip_servers") ?: JSONArray().also { dbState.put("vip_servers", it) }
                     val audits = dbState.optJSONArray("admin_audit_logs") ?: JSONArray()
+
+                    Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("💎 سيرفرات VIP الخاصة المشفّرة للمشتركين (${vipArr.length()})", fontWeight = FontWeight.Bold)
+                            Text(
+                                "تُشفّر روابط هذه السيرفرات بخوارزمية AES-256-GCM وتظهر حصريًا للمشتركين الفعّالين مع حمايتها من النسخ.",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            OutlinedTextField(value = vipLbl, onValueChange = { vipLbl = it }, label = { Text("اسم عقدة VIP (مثال: VIP Bahrain #1)") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = vipCc, onValueChange = { vipCc = it.take(2).uppercase() }, label = { Text("رمز الدولة (BH / DE / NL)") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = vipUri, onValueChange = { vipUri = it }, label = { Text("رابط السيرفر (vless:// أو hysteria2:// أو trojan://)") }, modifier = Modifier.fillMaxWidth())
+                            Button(
+                                onClick = {
+                                    val cleanUri = vipUri.trim()
+                                    if (!cleanUri.contains("://") || cleanUri.length < 14) {
+                                        toast("أدخل رابط سيرفر صالح")
+                                        return@Button
+                                    }
+                                    val proto = cleanUri.substringBefore("://").uppercase()
+                                    val vid = "vip_${AdminCrypto.randomHex(5)}"
+                                    val lbl = vipLbl.trim().ifBlank { "VIP Edge" }
+                                    vipArr.put(
+                                        JSONObject()
+                                            .put("id", vid)
+                                            .put("label", lbl)
+                                            .put("country", vipCc.trim().uppercase())
+                                            .put("protocol", proto)
+                                            .put("uri", cleanUri)
+                                            .put("priority", 200)
+                                            .put("enabled", true)
+                                            .put("created_at", Instant.now().toString())
+                                    )
+                                    vipLbl = ""
+                                    vipUri = ""
+                                    vaultMgr.appendAuditLog(dbState, adminUser, "VIP_SERVER_ADD", "vip_servers", vid, JSONObject().put("label", lbl))
+                                    publishChanges("add VIP node $lbl")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("💎 إضافة وتشفير ونشر عقدة VIP") }
+
+                            for (i in 0 until vipArr.length()) {
+                                val v = vipArr.getJSONObject(i)
+                                HorizontalDivider()
+                                Row(
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("💎 ${v.optString("label")} (${v.optString("country", "—")})", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                                        Text("البروتوكول: ${v.optString("protocol")} • الأولوية: ${v.optInt("priority", 200)}", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    OutlinedButton(onClick = {
+                                        val vid = v.optString("id")
+                                        val nextArr = JSONArray()
+                                        for (k in 0 until vipArr.length()) {
+                                            if (k != i) nextArr.put(vipArr.getJSONObject(k))
+                                        }
+                                        dbState.put("vip_servers", nextArr)
+                                        vaultMgr.appendAuditLog(dbState, adminUser, "VIP_SERVER_DELETE", "vip_servers", vid, JSONObject())
+                                        publishChanges("delete VIP node $vid")
+                                    }) { Text("حذف") }
+                                }
+                            }
+                        }
+                    }
+
                     Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("ملخص الخوادم الحيّة (@data)", fontWeight = FontWeight.Bold)

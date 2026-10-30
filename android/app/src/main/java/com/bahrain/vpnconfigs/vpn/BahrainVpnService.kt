@@ -633,80 +633,104 @@ class BahrainVpnService : VpnService() {
             }
         }
 
-        // فحص البينغ الحيّ ومراقب التبديل التلقائي (Watchdog) كل 12 ثانية
+        // فحص البينغ الحيّ ومراقب التبديل الذكي السريع (~ثانيتان عند الانقطاع الفعلي) — v3.1
         probeJob = serviceScope.launch {
-            delay(10_000L)
-            var consecutiveFails = 0
+            delay(SmartFailoverEngine.HEALTHY_CHECK_INTERVAL_MS)
+            val guard = EnterpriseLicenseGuard(applicationContext)
             while (isActive && VpnStateManager.status.value.phase == VpnPhase.CONNECTED) {
                 val aliveProc = daemon?.process?.isAlive == true
-                val probe = if (aliveProc) {
+                val primaryProbe = if (aliveProc) {
                     runCatching {
-                        Socks.measureRealDelay(SingBox.VPN_SOCKS_PORT, SingBox.TEST_URL, 5000)
+                        Socks.measureRealDelay(SingBox.VPN_SOCKS_PORT, SingBox.TEST_URL, 3200)
                     }.getOrNull()
                 } else null
+                val primaryOk = primaryProbe != null && primaryProbe.status in listOf(200, 204)
 
-                if (probe != null && probe.status in listOf(200, 204)) {
-                    consecutiveFails = 0
-                    VpnStateManager.markServerHealthy(Converters.cleanUri(VpnStateManager.status.value.activeCfg ?: ""))
-                    VpnStateManager.update { s -> s.copy(livePingMs = probe.elapsedMs) }
-                } else {
-                    consecutiveFails++
-                    if (!aliveProc || consecutiveFails >= 2) {
-                        val droppedCur = VpnStateManager.status.value.activeCfg ?: ""
-                        if (droppedCur.isNotBlank()) {
-                            VpnStateManager.markServerDropped(Converters.cleanUri(droppedCur))
-                        }
-                        if (prefs.autoFailover) {
-                            val switched = opLock.withLock {
-                                if (VpnStateManager.status.value.phase != VpnPhase.CONNECTED) {
-                                    false
-                                } else {
-                                    val pool = ensureServerPool()
-                                    val curCfg = VpnStateManager.status.value.activeCfg ?: ""
-                                    VpnStateManager.update { s ->
-                                        s.copy(statusMessage = "انقطع السيرفر الحالي — جارٍ التبديل التلقائي…")
-                                    }
-                                    val alt = findWorkingAlternativeParallel(curCfg, pool)
-                                    if (alt != null) {
-                                        singBox.stopDaemon(daemon)
-                                        connectWithVerifiedDaemon(alt.first, alt.second, alt.third, forceRebuildTun = false)
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                }
-                            }
-                            if (switched) return@launch
-                        } else {
-                            opLock.withLock {
-                                teardownInternal("انقطع الاتصال بالسيرفر الحالي", null)
-                                stopSelf()
-                            }
-                            return@launch
-                        }
+                var secondaryOk = false
+                var secondaryElapsed = -1L
+                if (aliveProc && !primaryOk) {
+                    delay(SmartFailoverEngine.RAPID_CONFIRM_DELAY_MS)
+                    val confirmProbe = runCatching {
+                        Socks.measureRealDelay(
+                            SingBox.VPN_SOCKS_PORT,
+                            SmartFailoverEngine.SECONDARY_CONFIRM_URL,
+                            2200,
+                        )
+                    }.getOrNull()
+                    if (confirmProbe != null && confirmProbe.status in listOf(200, 204)) {
+                        secondaryOk = true
+                        secondaryElapsed = confirmProbe.elapsedMs
                     }
                 }
-                delay(12_000L)
+
+                if (!SmartFailoverEngine.shouldTriggerFailover(aliveProc, primaryOk, secondaryOk)) {
+                    val activeClean = Converters.cleanUri(VpnStateManager.status.value.activeCfg ?: "")
+                    SmartFailoverEngine.recordServerHealthy(activeClean)
+                    VpnStateManager.markServerHealthy(activeClean)
+                    val newPing = if (primaryOk) primaryProbe!!.elapsedMs else secondaryElapsed
+                    if (newPing > 0L) {
+                        VpnStateManager.update { s -> s.copy(livePingMs = newPing) }
+                    }
+                } else {
+                    val droppedCur = VpnStateManager.status.value.activeCfg ?: ""
+                    if (droppedCur.isNotBlank()) {
+                        val cleanDropped = Converters.cleanUri(droppedCur)
+                        SmartFailoverEngine.recordServerDrop(cleanDropped)
+                        VpnStateManager.markServerDropped(cleanDropped)
+                    }
+                    val remoteAutoFailover = guard.getRemoteConfig().optBoolean("auto_failover_enabled", true)
+                    if (prefs.autoFailover && remoteAutoFailover) {
+                        val switched = opLock.withLock {
+                            if (VpnStateManager.status.value.phase != VpnPhase.CONNECTED) {
+                                false
+                            } else {
+                                val pool = ensureServerPool()
+                                val curCfg = VpnStateManager.status.value.activeCfg ?: ""
+                                VpnStateManager.update { s ->
+                                    s.copy(statusMessage = "انقطع السيرفر الحالي — جارٍ الانتقال الذكي لأسرع بديل…")
+                                }
+                                val alt = findWorkingAlternativeParallel(curCfg, pool)
+                                if (alt != null) {
+                                    AppHealthMonitor.recordIssue(
+                                        applicationContext,
+                                        type = "AUTO_FAILOVER",
+                                        summary = "Switched to ${alt.first.label} (${alt.third} ms)",
+                                    )
+                                    singBox.stopDaemon(daemon)
+                                    connectWithVerifiedDaemon(alt.first, alt.second, alt.third, forceRebuildTun = false)
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                        }
+                        if (switched) return@launch
+                    } else {
+                        opLock.withLock {
+                            teardownInternal("انقطع الاتصال بالسيرفر الحالي", null)
+                            stopSelf()
+                        }
+                        return@launch
+                    }
+                }
+                delay(SmartFailoverEngine.HEALTHY_CHECK_INTERVAL_MS)
             }
         }
     }
 
     /**
-     * يختبر دفعات من 4 سيرفرات بالتوازي على منافذ مؤقتة (20901..20904) لاختيار أسرع سيرفر شغّال
-     * على شبكة المستخدم خلال ثوانٍ قليلة حتى بدون فحص مسبق.
+     * يختبر دفعات من 4 سيرفرات بالتوازي على منافذ مؤقتة (20901..20904) مرتبةً عبر SmartFailoverEngine
+     * (أولوية VIP + أعلى سرعة تنزيل مقاسة + أقل تأخير) للانتقال الفوري دون هدم واجهة TUN.
      */
     private suspend fun findWorkingAlternativeParallel(
         excludeCfg: String,
         pool: List<ServerCandidate>,
     ): Triple<ServerCandidate, RunningDaemon, Long>? {
-        val startIdx = pool.indexOfFirst { it.cfg == excludeCfg }.let { if (it < 0) 0 else it + 1 }
-        val candidates = buildList {
-            for (step in pool.indices) {
-                val c = pool[(startIdx + step) % pool.size]
-                if (c.cfg != excludeCfg) add(c)
-                if (size >= 16) break
-            }
-        }
+        val candidates = SmartFailoverEngine.rankFailoverCandidates(
+            excludeCfg = excludeCfg,
+            pool = pool,
+            maxCandidates = 16,
+        )
         for (batch in candidates.chunked(4)) {
             val tested = coroutineScope {
                 batch.mapIndexed { idx, cand ->
@@ -755,7 +779,11 @@ class BahrainVpnService : VpnService() {
         if (current.isNotEmpty()) return current
 
         val repo = Repo(applicationContext)
-        val savedBest = repo.loadSavedBest().sortedWith(
+        val vipNodes = EnterpriseLicenseGuard(applicationContext).getAuthorizedVipNodes()
+        val vipByClean = vipNodes.associateBy { Converters.cleanUri(it.uri) }
+        val savedBestResults = repo.loadSavedBest()
+        val bestByClean = savedBestResults.associateBy { Converters.cleanUri(it.cfg) }
+        val savedBest = savedBestResults.sortedWith(
             compareByDescending<com.bahrain.vpnconfigs.engine.TestResult> { it.speedKbps > 0.0 }
                 .thenByDescending { it.speedKbps }
                 .thenBy { if (it.latencyMs > 0L) it.latencyMs else Long.MAX_VALUE }
@@ -773,11 +801,21 @@ class BahrainVpnService : VpnService() {
                 if (lat > 0L) lat else Long.MAX_VALUE
             }
         )
-        val merged = (prefs.customConfigs + savedBest + cachedAll)
+        val vipUris = vipNodes.map { Converters.cleanUri(it.uri) }
+        val merged = (vipUris + prefs.customConfigs + savedBest + cachedAll)
             .distinct()
             .filter { Converters.isSupported(it) }
         val built = merged.mapIndexed { idx, cfg ->
-            ServerCandidate(cfg, "bahrain-vpn #${idx + 1}")
+            val clean = Converters.cleanUri(cfg)
+            val vip = vipByClean[clean]
+            val localRes = bestByClean[clean]
+            ServerCandidate(
+                cfg = cfg,
+                label = if (vip != null) "💎 VIP • ${vip.label}" else "bahrain-vpn #${idx + 1}",
+                speedKbps = localRes?.speedKbps ?: 0.0,
+                latencyMs = localRes?.latencyMs ?: (hints[clean]?.latencyMs ?: 0L),
+                isVip = vip != null,
+            )
         }
         VpnStateManager.serverPool = built
         return built

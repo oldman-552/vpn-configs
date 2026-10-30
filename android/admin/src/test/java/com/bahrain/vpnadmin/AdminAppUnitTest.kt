@@ -72,4 +72,44 @@ class AdminAppUnitTest {
         db.getJSONArray("admin_audit_logs").getJSONObject(0).put("action", "FORGED_ACTION")
         assertFalse(mgr.verifyAuditChain(db))
     }
+
+    @Test
+    fun vipPrivateNodesAreEncryptedInPublicBundleAndRecoverableByKey() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val mgr = AdminGitHubVaultManager(ctx)
+        val db = mgr.createEmptyVaultDb()
+
+        val uObj = JSONObject()
+            .put("id", "usr_vip_1")
+            .put("username", "vipuser")
+            .put("account_status", "ACTIVE")
+            .put("subscription_type", "YEARLY")
+            .put("device_limit", 1)
+        mgr.sealUserEnvelope(db, uObj, "VipSecret#2026")
+        db.getJSONArray("users").put(uObj)
+
+        db.getJSONArray("vip_servers").put(
+            JSONObject()
+                .put("id", "vip_bh_01")
+                .put("label", "VIP Bahrain Private")
+                .put("country", "BH")
+                .put("protocol", "VLESS")
+                .put("uri", "vless://11223344-5566-7788-99aa-bbccddeeff00@bh-private.node.internal:443#VIP")
+                .put("priority", 250)
+                .put("enabled", true)
+        )
+
+        val pubBundle = mgr.buildSignedPublicBundle(db)
+        val rawStr = pubBundle.toString()
+        assertFalse(rawStr.contains("bh-private.node.internal"))
+        assertFalse(rawStr.contains("11223344-5566-7788"))
+
+        val bundleObj = pubBundle.getJSONObject("bundle")
+        assertEquals("3.1", bundleObj.optString("bundle_release"))
+        val vipEnc = bundleObj.getString("vip_nodes_enc_b64")
+        assertTrue(vipEnc.isNotBlank())
+
+        val decryptedJson = AdminCrypto.decryptRawKeyAesGcm(db.getString("vip_key_hex"), vipEnc)
+        assertTrue(decryptedJson.contains("bh-private.node.internal"))
+    }
 }

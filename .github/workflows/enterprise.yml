@@ -49,15 +49,19 @@ jobs:
           pip install -r requirements.txt pytest pyyaml
           pytest -v
 
-      - name: Verify 17-Page Web Admin Dashboard syntax & security
+      - name: Verify 17-Page Modular Web Admin Dashboard syntax & security
         run: |
-          node --check web-admin/crypto_github.js
-          node --check web-admin/app.js
+          for jsf in web-admin/*.js web-admin/modules/*.js; do
+            node --check "$jsf"
+          done
           python - <<'PY'
           import re
           from pathlib import Path
 
-          app_js = Path("web-admin/app.js").read_text(encoding="utf-8")
+          combined_js = "\n".join(
+              p.read_text(encoding="utf-8")
+              for p in sorted(Path("web-admin").rglob("*.js"))
+          )
           expected_pages = [
               "overview", "users", "subscriptions", "devices", "sessions",
               "servers", "health", "speeds", "netdiag", "crashes",
@@ -65,13 +69,13 @@ jobs:
               "admins", "settings",
           ]
           for pid in expected_pages:
-              assert f'id: "{pid}"' in app_js, f"Missing Web Admin page: {pid}"
+              assert f'id: "{pid}"' in combined_js, f"Missing Web Admin page: {pid}"
 
           secret_re = re.compile(r"(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})")
-          for p in Path("web-admin").glob("*"):
+          for p in Path("web-admin").rglob("*"):
               if p.is_file():
                   assert not secret_re.search(p.read_text(encoding="utf-8")), f"Hardcoded token in {p}"
-          print("::notice::Web Admin Audit PASS: 17/17 pages verified, JS syntax clean, 0 hardcoded secrets")
+          print("::notice::Web Admin Audit PASS: 17/17 modular pages verified, JS syntax clean, 0 hardcoded secrets")
           PY
 
       - name: Deploy 17-Page Web Admin Dashboard to gh-pages branch
