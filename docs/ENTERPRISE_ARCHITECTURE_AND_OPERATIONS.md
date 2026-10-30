@@ -1,4 +1,4 @@
-# ULTIMATE VPN ENTERPRISE v3.1 — التوثيق الهندسي، الأمني، والتشغيلي الشامل (100% على GitHub)
+# ULTIMATE VPN ENTERPRISE v3.2 — التوثيق الهندسي، الأمني، والتشغيلي الشامل (100% على GitHub)
 
 ## 1. المعمارية السحابية الخالية من الخوادم الخارجية (100% Pure-GitHub Architecture)
 
@@ -6,14 +6,14 @@
 
 | المكوّن | المسار البرمجي | آلية التشغيل على GitHub |
 |---|---|---|
-| **تطبيق المشترك (User APK `v3.1`)** | `android/app/` (`com.bahrain.vpnconfigs`) | مقلّص الحجم عبر `R8 + Resource Shrinking`، يفك تشفير عقد `VIP` الخاصة للمشتركين الفعّالين فقط، يضم محرك التبديل التلقائي السريع (`~2s Auto-Failover`) ومحدّث `Split ABI` الذكي، ويُنشر موقّعًا على **GitHub Releases**. |
-| **تطبيق المشرف المستقل (Admin APK `v3.1`)** | `android/admin/` (`com.bahrain.vpnadmin`) | تطبيق مستقل رشيق (`app-admin-release.apk`) يتحقق من رمز `TOTP 2FA`، يدير ويشفّر عقد `VIP` الخاصة (`AES-256-GCM`)، ويوقّع التراخيص (`ECDSA P-256`) عبر `api.github.com`. |
-| **لوحة التحكم الويب المعيارية (17 صفحة AR/EN)** | `web-admin/` + `web-admin/modules/` | مبنية بهيكلية معيارية (`Modular JS`) على **GitHub Pages** (`gh-pages`) بتشفير **WebCrypto** ثنائية اللغة (عربي RTL / إنجليزي LTR) مع إدارة عقد `VIP` المشفّرة وتصدير CSV/Excel وPDF. |
-| **محرك البيانات والأمان والذكاء الاصطناعي** | `enterprise/` (`database.py`, `crypto_security.py`, `ai_intelligence.py`, `publisher.py`) | يعمل عبر **GitHub Actions** (`enterprise.yml` + `data.yml`) على قاعدة SQLite علائقية مكونة من **24 جدولًا مطبّعًا** (`001..003`) مع نسخ احتياطي مشفّر (`AES-256-GCM`). |
+| **تطبيق المشترك (User APK `v3.2`)** | `android/app/` (`com.bahrain.vpnconfigs` — `versionCode = 10`) | مقلّص الحجم عبر `R8` (`27.63 MB` لـ `ARM64`)، يضم حماية صارمة من تسرب `DNS/IPv6`، مفتاح إيقاف حقيقي (`Fail-Closed Kill Switch`)، تبديلًا استباقيًا (`OFF/SMART/AGGRESSIVE`)، فك تشفير عقد `VIP 💎`، ومحدّث `Split ABI` الموثّق ببصمات `SHA-256` على **GitHub Releases**. |
+| **تطبيق المشرف المستقل (Admin APK `v3.2`)** | `android/admin/` (`com.bahrain.vpnadmin` — `versionCode = 3`) | تطبيق مستقل رشيق (`2.19 MB`) يتحقق من رمز `TOTP 2FA`، يدير ويشفّر عقد `VIP` الخاصة (`AES-256-GCM`)، ويوقّع التراخيص (`ECDSA P-256`) عبر `api.github.com`. |
+| **لوحة الإدارة (17 صفحة) + المراقبة الحيّة** | `web-admin/` + `web-admin/modules/` + `monitor.{html,js}` | مستضافة على **GitHub Pages** (`gh-pages`): لوحة مشرف مشفّرة بـ **WebCrypto** (`index.html`) + شاشة مراقبة حيّة عامة قرائية (`monitor.html`) ثنائية اللغة (AR/EN) مع رسوم اتجاهات `SVG`. |
+| **محرك الذكاء الأمني والبيانات وواجهة `API v1`** | `enterprise/` + `security_intelligence.py` + `public_api.py` | يعمل عبر **GitHub Actions** (`enterprise.yml` + `data.yml`) على قاعدة SQLite من **24 جدولًا مطبّعًا** (`001..003`)، مع حجر صحي للعُقد المشبوهة وتصدير واجهة `/api/v1/*` المعماة. |
 
 ---
 
-## 2. مخطط قاعدة البيانات العلائقية المطبّعة (21 جدولًا) والترحيلات (Migrations)
+## 2. مخطط قاعدة البيانات العلائقية المطبّعة (24 جدولًا) والترحيلات (Migrations)
 
 تقع ملفات الترحيل في `enterprise/migrations/`:
 - `001_initial_enterprise_schema.sql`: ينشئ الجداول الـ 21 مع `PRAGMA foreign_keys = ON` والفهارس وقيود `CHECK`:
@@ -39,6 +39,7 @@
   20. `admin_users` — حسابات المشرفين مع تجزئة `Argon2id` ومفاتيح `TOTP 2FA` وقفل المحاولات الفاشلة.
   21. `admin_audit_logs` — سجل التدقيق الأمني المتسلسل ببصمات `SHA-256` المقاومة للعبث (`prev_hash -> entry_hash`).
 - `002_seed_roles_and_defaults.sql`: يزرع الأدوار الافتراضية والإعدادات الآمنة المبدئية.
+- `003_v31_vip_and_abi_updates.sql`: يضيف الجداول الـ 3 المكملة للـ 24 جدولًا (`vip_servers`, `vip_access_keys`, `vip_audit_events`) ودعم حزم `abi_assets_json` في جدول `app_versions`.
 
 ---
 
@@ -70,18 +71,18 @@
 
 ## 5. دليل النشر والتشغيل السريع على GitHub
 
-1. **تفعيل لوحة الويب (GitHub Pages):**
+1. **تفعيل لوحتَي الإدارة والمراقبة (GitHub Pages):**
    - ينشر سير عمل `.github/workflows/enterprise.yml` محتويات `web-admin/` تلقائيًا إلى فرع `gh-pages`.
-   - من إعدادات المستودع على GitHub (`Settings -> Pages`)، اختر الفرع `gh-pages` والمجلد `/ (root)` لتعمل اللوحة مباشرة على `https://oldman-552.github.io/vpn-configs/`.
-2. **تطبيقات الأندرويد الموقّعة (GitHub Releases `v3.1`):**
-   - يبني `.github/workflows/apk.yml` كلاً من تطبيق المشترك (`app-arm64-v8a-release.apk`, `app-release.apk`, `app-x86_64-release.apk`) وتطبيق المشرف المستقل (`app-admin-release.apk`) مع ضغط `R8 + Resource Shrinking` ويرفق ملف البصمات `SHA256SUMS.txt` في إصدارات GitHub الرسمية (`v3.1` و`latest-apk`).
+   - من إعدادات المستودع على GitHub (`Settings -> Pages`)، اختر الفرع `gh-pages` والمجلد `/ (root)` لتعمل لوحة الإدارة المشفّرة على `https://oldman-552.github.io/vpn-configs/` وشاشة المراقبة العامة على `https://oldman-552.github.io/vpn-configs/monitor.html`.
+2. **تطبيقات الأندرويد الموقّعة (GitHub Releases `v3.2`):**
+   - يبني `.github/workflows/apk.yml` كلاً من تطبيق المشترك (`app-arm64-v8a-release.apk`, `app-release.apk`, `app-x86_64-release.apk`) وتطبيق المشرف المستقل (`app-admin-release.apk`) مع ضغط `R8 + Resource Shrinking` ويرفق ملف البصمات `SHA256SUMS.txt` في إصدارات GitHub الرسمية (`v3.2` و`latest-apk`).
 
 ---
 
-## 6. ترقيات الإصدار `v3.1` الهندسية
+## 6. ترقيات الإصدارين `v3.1` و`v3.2` الهندسية
 
-1. **تقليص الحجم (`R8 + Resource Shrinking`) والتحديث الذكي حسب معمارية المعالج (`Split per ABI`):** إزالة آلاف كلاسات الأيقونات غير المستخدمة، وتوجيه `AppUpdateManager` لتحميل حزمة `arm64-v8a` الرشيقة تلقائيًا على هواتف `ARM64` مع التحقق من بصمة `SHA-256`.
+1. **تقليص الحجم (`R8 + Resource Shrinking`) والتحديث الذكي حسب معمارية المعالج (`Split per ABI`):** إزالة آلاف كلاسات الأيقونات غير المستخدمة، وتوجيه `AppUpdateManager` لتحميل حزمة `arm64-v8a` الرشيقة (`27.63 MB`) تلقائيًا على هواتف `ARM64` مع التحقق الصارم من بصمة `SHA-256`.
 2. **سيرفرات `VIP` الخاصة المشفّرة للمشتركين فقط (`Encrypted VIP Private Nodes`):** تُشفّر بـ `AES-256-GCM` (`AAD = bahrain-vpn-vip-nodes-v31`) داخل `bundle.json`، ولا يُكشف مفتاح فك تشفيرها إلا داخل مغلف شهادة المشترك النشط (`envelope_b64`)، مع منع نسخ الرابط الخام أو تصديره في الملفات النصية.
-3. **محرك التبديل التلقائي الذكي السريع (`SmartFailoverEngine ~2s`):** فحص تأكيدي مزدوج خلال `600ms` عند أول تعثر لنقل النفق فورًا إلى أسرع سيرفر شغّال (بأولوية `VIP` ثم أعلى سرعة مقاسة على الهاتف) دون هدم واجهة `TUN` ومع عزل السيرفر المتذبذب لمدة دقيقتين (`Cooldown`).
-4. **التفكيك المعياري للكود (`Modularization`):** تقسيم واجهات `EnterpriseScreens.kt` إلى حزمة `ui/enterprise/` وتقسيم `web-admin/app.js` إلى وحدات مستقلة في `web-admin/modules/`.
+3. **منع تسرب `DNS/IPv6` ومفتاح الإيقاف الصارم (`v3.2 Zero-Leak & Fail-Closed Kill Switch`):** توجيه `tunnel-dns` إجباريًا داخل النفق (`detour="proxy"`)، التقاط المسار `::/0` دائمًا لمنع تسرب IPv6 على الشبكات المزدوجة، قفل `tun0` قبل فحص السيرفر، والاحتفاظ بالحجب الفعّال (`PROTECTION_ACTIVE`) عند انقطاع جميع البدائل.
+4. **محرك التبديل التلقائي الاستباقي وذكاء الأمان وواجهة `API v1` (`v3.2`):** دعم سياسات `OFF / SMART / AGGRESSIVE` مع `Hysteresis 25s` وفحص البدائل على المنافذ `20901..20904` دون قطع النفق، فصل تقييم الأمان والخصوصية عن السرعة (`security_intelligence.py` + `SecurityEvaluator.kt`)، ونشر واجهة الإحصاءات العامة المعماة `/api/v1/*` مع مواصفة `OpenAPI 3.1.0`.
 

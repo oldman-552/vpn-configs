@@ -1,5 +1,5 @@
 /**
- * app.js — Modular 17-Page Bilingual (AR/EN RTL/LTR) Enterprise Admin Router (v3.1).
+ * app.js — Modular 17-Page Bilingual (AR/EN RTL/LTR) Enterprise Admin Router (v3.2).
  * Delegates state/sync to `modules/state_and_sync.js` and view rendering to
  * `modules/pages_subscribers.js`, `modules/pages_infrastructure.js`, and `modules/pages_governance.js`.
  */

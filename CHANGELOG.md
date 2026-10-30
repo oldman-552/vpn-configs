@@ -2,6 +2,13 @@
 
 ## [v3.2] — 2026-10-30 — Security Intelligence, Zero-Leak Tunnel, Real Kill Switch & Public API v1
 
+### Signed Release Artifacts (`v3.2`)
+- `app-arm64-v8a-release.apk` (`27.63 MB` / `28,970,075 B`) — `sha256:13dd72d0182de10f5a5b9d75174d3626aae10759f00e79ae89efa8b0da9dfdee`
+- `app-x86_64-release.apk` (`29.44 MB` / `30,870,374 B`) — `sha256:11b8f1828883b1206253ddc619f4c2baa9f85a857591f767e0516a58c7353e5c`
+- `app-release.apk` / `app-universal-release.apk` (`54.27 MB` / `56,901,372 B`) — `sha256:ca21059896f59136334e47c42fec34dc1b5105d5db63c03b56062fd57aff9da9`
+- `app-admin-release.apk` (`2.19 MB` / `2,292,984 B`) — `sha256:f275b145cd1e82626407fe895d68a8cada44cdaea43ec857759a6d6cb8f10a29`
+- `SHA256SUMS.txt` (`443 B`) — `sha256:f17b9fdc7e8a0a7d23ebb763ac22ba96bfef9ecd08b81847b7ada893803df2c3`
+
 ### Added
 - **Phase 1 Audit Suite**: Added source-verified `ARCHITECTURE_AUDIT.md`, `SECURITY_AUDIT.md`, `PERFORMANCE_AUDIT.md`, and `IMPROVEMENT_ROADMAP.md`.
 - **Phase 2 Security & Privacy Intelligence Engine (`security_intelligence.py`, `SecurityEvaluator.kt`)**:

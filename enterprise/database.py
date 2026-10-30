@@ -1377,7 +1377,7 @@ class EnterpriseDB:
 
         signed_body = {
             "schema_version": 3,
-            "bundle_release": "3.1",
+            "bundle_release": "3.2",
             "generated_at": ts,
             "public_key_spki_b64": public_spki_b64,
             "remote_config": remote_cfg,
