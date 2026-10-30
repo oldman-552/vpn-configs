@@ -9,7 +9,7 @@
 | **تطبيق المشترك (User APK `v3.1`)** | `android/app/` (`com.bahrain.vpnconfigs`) | مقلّص الحجم عبر `R8 + Resource Shrinking`، يفك تشفير عقد `VIP` الخاصة للمشتركين الفعّالين فقط، يضم محرك التبديل التلقائي السريع (`~2s Auto-Failover`) ومحدّث `Split ABI` الذكي، ويُنشر موقّعًا على **GitHub Releases**. |
 | **تطبيق المشرف المستقل (Admin APK `v3.1`)** | `android/admin/` (`com.bahrain.vpnadmin`) | تطبيق مستقل رشيق (`app-admin-release.apk`) يتحقق من رمز `TOTP 2FA`، يدير ويشفّر عقد `VIP` الخاصة (`AES-256-GCM`)، ويوقّع التراخيص (`ECDSA P-256`) عبر `api.github.com`. |
 | **لوحة التحكم الويب المعيارية (17 صفحة AR/EN)** | `web-admin/` + `web-admin/modules/` | مبنية بهيكلية معيارية (`Modular JS`) على **GitHub Pages** (`gh-pages`) بتشفير **WebCrypto** ثنائية اللغة (عربي RTL / إنجليزي LTR) مع إدارة عقد `VIP` المشفّرة وتصدير CSV/Excel وPDF. |
-| **محرك البيانات والأمان والذكاء الاصطناعي** | `enterprise/` (`database.py`, `crypto_security.py`, `ai_intelligence.py`, `publisher.py`) | يعمل عبر **GitHub Actions** (`enterprise.yml` + `data.yml`) على قاعدة SQLite علائقية مكونة من **22 جدولًا مطبّعًا** (`001..003`) مع نسخ احتياطي مشفّر (`AES-256-GCM`). |
+| **محرك البيانات والأمان والذكاء الاصطناعي** | `enterprise/` (`database.py`, `crypto_security.py`, `ai_intelligence.py`, `publisher.py`) | يعمل عبر **GitHub Actions** (`enterprise.yml` + `data.yml`) على قاعدة SQLite علائقية مكونة من **24 جدولًا مطبّعًا** (`001..003`) مع نسخ احتياطي مشفّر (`AES-256-GCM`). |
 
 ---
 
