@@ -1,0 +1,46 @@
+{
+  "enabled": true,
+  "close_delay_sec": 3,
+  "ads": [
+    {
+      "id": "ad1",
+      "enabled": true,
+      "image": "ad1.png",
+      "title": "",
+      "link": "",
+      "button_text": ""
+    },
+    {
+      "id": "ad2",
+      "enabled": true,
+      "image": "ad2.png",
+      "title": "",
+      "link": "",
+      "button_text": ""
+    },
+    {
+      "id": "ad3",
+      "enabled": true,
+      "image": "ad3.png",
+      "title": "",
+      "link": "",
+      "button_text": ""
+    },
+    {
+      "id": "ad4",
+      "enabled": true,
+      "image": "ad4.png",
+      "title": "",
+      "link": "",
+      "button_text": ""
+    },
+    {
+      "id": "ad5",
+      "enabled": true,
+      "image": "ad5.png",
+      "title": "",
+      "link": "",
+      "button_text": ""
+    }
+  ]
+}

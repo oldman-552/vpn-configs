@@ -37,6 +37,7 @@ data class VpnStatus(
     val exitIp: String = "",
     val exitCountry: String = "",
     val failoverCount: Int = 0,
+    val droppedConfigs: Set<String> = emptySet(),
     val statusMessage: String? = null,
     val error: String? = null,
 ) {
@@ -55,6 +56,20 @@ object VpnStateManager {
         _status.update(transform)
     }
 
+    fun markServerDropped(cfg: String?) {
+        val clean = cfg?.trim().orEmpty()
+        if (clean.isEmpty()) return
+        _status.update { prev -> prev.copy(droppedConfigs = prev.droppedConfigs + clean) }
+    }
+
+    fun markServerHealthy(cfg: String?) {
+        val clean = cfg?.trim().orEmpty()
+        if (clean.isEmpty()) return
+        _status.update { prev ->
+            if (clean in prev.droppedConfigs) prev.copy(droppedConfigs = prev.droppedConfigs - clean) else prev
+        }
+    }
+
     fun resetDisconnected(errorMsg: String? = null, infoMsg: String? = null) {
         _status.update { prev ->
             VpnStatus(
@@ -63,6 +78,7 @@ object VpnStateManager {
                 activeLabel = prev.activeLabel,
                 activeProto = prev.activeProto,
                 activeEndpoint = prev.activeEndpoint,
+                droppedConfigs = prev.droppedConfigs,
                 statusMessage = infoMsg,
                 error = errorMsg,
             )

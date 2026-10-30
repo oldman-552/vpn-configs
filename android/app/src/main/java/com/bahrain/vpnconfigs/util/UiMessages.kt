@@ -23,7 +23,7 @@ object UiMessages {
         "(" +
             "https?://|" +
             "github\\.com|githubusercontent\\.com|github\\.io|jsdelivr\\.net|@data|" +
-            "alive\\.(?:json|txt)|meta\\.json|reliable\\.txt|low_latency\\.txt|high_throughput\\.txt|" +
+            "alive\\.(?:json|txt)|meta\\.json|ads\\.json|reliable\\.txt|low_latency\\.txt|high_throughput\\.txt|" +
             "best100\\.txt|config\\.txt|sub\\.txt|libsingbox\\.so|" +
             "/data/|/storage/|/sdcard/|cache:|" +
             "Exception|Error:|Throwable|StackTrace|\\bat\\s+[a-z0-9_]+\\.[a-z0-9_]+" +

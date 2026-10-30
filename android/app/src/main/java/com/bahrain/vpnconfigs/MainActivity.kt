@@ -34,10 +34,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,6 +49,9 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -56,6 +61,7 @@ import com.bahrain.vpnconfigs.ui.AppTheme
 import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.AppsSplitScreen
 import com.bahrain.vpnconfigs.ui.ConnectHomeScreen
+import com.bahrain.vpnconfigs.ui.PromoPopupDialog
 import com.bahrain.vpnconfigs.ui.ServerItem
 import com.bahrain.vpnconfigs.ui.ServersListScreen
 import com.bahrain.vpnconfigs.ui.SettingsAndExportScreen
@@ -100,6 +106,34 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
     val vpnStatus by VpnStateManager.status.collectAsState()
 
     var pendingTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var backgroundedAtMs by remember { mutableLongStateOf(0L) }
+    var skipNextReopenPromo by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    val changingCfg = (ctx as? Activity)?.isChangingConfigurations == true
+                    if (!changingCfg) {
+                        backgroundedAtMs = System.currentTimeMillis()
+                    }
+                }
+                Lifecycle.Event.ON_START -> {
+                    val bgAt = backgroundedAtMs
+                    backgroundedAtMs = 0L
+                    if (skipNextReopenPromo) {
+                        skipNextReopenPromo = false
+                    } else if (bgAt > 0L && pendingTarget == null && System.currentTimeMillis() - bgAt >= 15_000L) {
+                        vm.triggerNextPromoBanner()
+                    }
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val notifLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -239,6 +273,14 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                 onShareFile = { file -> shareFile(ctx, file) },
             )
         }
+    }
+
+    state.activePromo?.let { promo ->
+        PromoPopupDialog(
+            banner = promo,
+            onDismiss = { vm.dismissPromo() },
+            onLinkOpened = { skipNextReopenPromo = true },
+        )
     }
 }
 

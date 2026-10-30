@@ -19,7 +19,9 @@ import androidx.core.view.WindowCompat
 
 val VpnConnectedGreen = Color(0xFF10B981)
 val VpnConnectingAmber = Color(0xFFF59E0B)
+val VpnWeakPurple = Color(0xFFA855F7)
 val VpnDangerRed = Color(0xFFEF4444)
+val VpnUntestedGray = Color(0xFF94A3B8)
 
 private val Teal = Color(0xFF008F7A)
 private val TealDark = Color(0xFF34D399)

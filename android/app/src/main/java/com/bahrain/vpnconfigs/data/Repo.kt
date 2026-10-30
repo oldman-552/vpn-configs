@@ -64,6 +64,7 @@ class Repo(
 ) {
 
     private val dir = File(ctx.filesDir, "data").apply { mkdirs() }
+    private val promoDir = File(ctx.filesDir, "promo").apply { mkdirs() }
 
     private fun candidates(file: String): List<String> =
         mirrorOverride?.invoke(file) ?: listOf(
@@ -71,6 +72,24 @@ class Repo(
             "https://raw.githubusercontent.com/$owner/$repo/data/$file",
             "https://$owner.github.io/$repo/$file",
         )
+
+    private fun promoCandidates(fileOrUrl: String): List<String> {
+        val trimmed = fileOrUrl.trim()
+        if (trimmed.startsWith("https://", ignoreCase = true)) {
+            val safe = sanitizePromoLink(trimmed)
+            return if (safe.isNotEmpty()) listOf(safe) else emptyList()
+        }
+        val cleanRel = trimmed
+            .removePrefix("/")
+            .removePrefix("promo/")
+            .replace("..", "")
+            .trim()
+        if (cleanRel.isEmpty()) return emptyList()
+        return mirrorOverride?.invoke("promo/$cleanRel") ?: listOf(
+            "https://raw.githubusercontent.com/$owner/$repo/main/promo/$cleanRel",
+            "https://cdn.jsdelivr.net/gh/$owner/$repo@main/promo/$cleanRel",
+        )
+    }
 
     private data class HttpResp(
         val status: Int,
@@ -91,7 +110,7 @@ class Repo(
                 connectTimeout = timeoutMs
                 readTimeout = timeoutMs
                 requestMethod = "GET"
-                setRequestProperty("User-Agent", "bahrain-vpn/2.3")
+                setRequestProperty("User-Agent", "bahrain-vpn/2.4")
                 if (!etag.isNullOrBlank()) {
                     setRequestProperty("If-None-Match", etag)
                 }
@@ -525,6 +544,266 @@ class Repo(
         }.getOrDefault(emptyList())
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  نظام الإعلانات المتناوبة (5 صور متغيّرة + تحديث تلقائي عبر ETag)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private data class HttpBytesResp(
+        val status: Int,
+        val bytes: ByteArray? = null,
+        val etag: String? = null,
+    )
+
+    private fun httpGetBytesBounded(
+        url: String,
+        etag: String?,
+        maxBytes: Int = MAX_PROMO_IMAGE_BYTES,
+        timeoutMs: Int = 5000,
+    ): HttpBytesResp? {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = timeoutMs
+                readTimeout = timeoutMs
+                requestMethod = "GET"
+                setRequestProperty("User-Agent", "bahrain-vpn/2.4")
+                if (!etag.isNullOrBlank()) {
+                    setRequestProperty("If-None-Match", etag)
+                }
+                instanceFollowRedirects = true
+            }
+            val code = conn.responseCode
+            if (code == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                return HttpBytesResp(status = 304, etag = conn.getHeaderField("ETag") ?: etag)
+            }
+            if (code !in 200..299) return null
+            val contentLength = conn.contentLengthLong
+            if (contentLength > maxBytes) return null
+
+            val out = java.io.ByteArrayOutputStream()
+            conn.inputStream.use { input ->
+                val buf = ByteArray(8192)
+                var read: Int
+                while (input.read(buf).also { read = it } != -1) {
+                    if (out.size() + read > maxBytes) return null
+                    out.write(buf, 0, read)
+                }
+            }
+            HttpBytesResp(status = code, bytes = out.toByteArray(), etag = conn.getHeaderField("ETag"))
+        } catch (e: Exception) {
+            AppDiag.d("Repo", "promo binary fetch skipped: ${e.javaClass.simpleName}")
+            null
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    private fun writeBytesAtomic(target: File, bytes: ByteArray) {
+        target.parentFile?.mkdirs()
+        val tmp = File(target.parentFile, "${target.name}.tmp")
+        tmp.writeBytes(bytes)
+        if (!tmp.renameTo(target)) {
+            target.writeBytes(bytes)
+            tmp.delete()
+        }
+    }
+
+    internal fun isValidImageMagic(bytes: ByteArray): Boolean {
+        if (bytes.size < 12) return false
+        val isPng = bytes.size >= 16 &&
+            bytes[0] == 0x89.toByte() &&
+            bytes[1] == 0x50.toByte() &&
+            bytes[2] == 0x4E.toByte() &&
+            bytes[3] == 0x47.toByte()
+        if (isPng) return true
+
+        val isJpeg = bytes[0] == 0xFF.toByte() &&
+            bytes[1] == 0xD8.toByte() &&
+            bytes[2] == 0xFF.toByte()
+        if (isJpeg) return true
+
+        val isWebp = bytes.size >= 16 &&
+            bytes[0] == 'R'.code.toByte() &&
+            bytes[1] == 'I'.code.toByte() &&
+            bytes[2] == 'F'.code.toByte() &&
+            bytes[3] == 'F'.code.toByte() &&
+            bytes[8] == 'W'.code.toByte() &&
+            bytes[9] == 'E'.code.toByte() &&
+            bytes[10] == 'B'.code.toByte() &&
+            bytes[11] == 'P'.code.toByte()
+        if (isWebp) return true
+
+        val isGif = bytes[0] == 'G'.code.toByte() &&
+            bytes[1] == 'I'.code.toByte() &&
+            bytes[2] == 'F'.code.toByte() &&
+            bytes[3] == '8'.code.toByte()
+        return isGif
+    }
+
+    internal fun sanitizePromoLink(raw: String?): String {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return ""
+        return try {
+            val uri = java.net.URI(trimmed)
+            val scheme = uri.scheme?.lowercase() ?: return ""
+            val host = uri.host?.trim()?.lowercase() ?: return ""
+            if (scheme != "https" || host.isBlank()) return ""
+            if (host == "localhost" || host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.")) {
+                return ""
+            }
+            trimmed
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun promoImageCacheFile(imageRef: String): File {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(imageRef.trim().toByteArray(Charsets.UTF_8))
+            .take(10)
+            .joinToString("") { "%02x".format(it) }
+        val ext = imageRef.substringBefore('?').substringAfterLast('.', "img")
+            .lowercase()
+            .filter { it in 'a'..'z' || it in '0'..'9' }
+            .take(5)
+            .ifBlank { "img" }
+        return File(promoDir, "slot_$digest.$ext")
+    }
+
+    private fun parsePromoManifest(raw: String): PromoManifest? {
+        return try {
+            val obj = JSONObject(raw)
+            val enabled = obj.optBoolean("enabled", true)
+            val closeSec = obj.optInt("close_delay_sec", 3).coerceIn(0, 15)
+            val arr = obj.optJSONArray("ads") ?: JSONArray()
+            val items = ArrayList<PromoItem>()
+            for (i in 0 until minOf(arr.length(), 20)) {
+                val itemObj = arr.optJSONObject(i) ?: continue
+                val img = itemObj.optString("image").trim()
+                if (img.isEmpty()) continue
+                items.add(
+                    PromoItem(
+                        id = itemObj.optString("id", "ad${i + 1}").trim().ifBlank { "ad${i + 1}" },
+                        enabled = itemObj.optBoolean("enabled", true),
+                        image = img,
+                        title = itemObj.optString("title").trim().take(120),
+                        link = sanitizePromoLink(itemObj.optString("link")),
+                        buttonText = itemObj.optString("button_text").trim().take(40),
+                    )
+                )
+            }
+            PromoManifest(enabled = enabled, closeDelaySec = closeSec, ads = items)
+        } catch (e: Exception) {
+            AppDiag.w("Repo", "invalid promo manifest", e)
+            null
+        }
+    }
+
+    private fun fetchOrLoadPromoManifest(timeoutMs: Int = 3000): PromoManifest? {
+        val manifestFile = File(promoDir, "ads_manifest.json")
+        val etagFile = File(promoDir, "ads_manifest.etag")
+        val savedEtag = if (manifestFile.exists() && etagFile.exists()) {
+            runCatching { etagFile.readText(Charsets.UTF_8).trim() }.getOrNull()
+        } else null
+
+        for (url in promoCandidates("ads.json")) {
+            val resp = httpGetBounded(url, savedEtag, timeoutMs = timeoutMs) ?: continue
+            if (resp.status == 304 && manifestFile.exists()) {
+                val cachedTxt = runCatching { manifestFile.readText(Charsets.UTF_8) }.getOrNull()
+                val parsed = cachedTxt?.let { parsePromoManifest(it) }
+                if (parsed != null) return parsed
+            }
+            val body = resp.body
+            if (!body.isNullOrBlank()) {
+                val parsed = parsePromoManifest(body)
+                if (parsed != null) {
+                    runCatching {
+                        writeAtomic(manifestFile, body)
+                        if (!resp.etag.isNullOrBlank()) writeAtomic(etagFile, resp.etag)
+                    }
+                    return parsed
+                }
+            }
+        }
+
+        if (manifestFile.exists()) {
+            val cachedTxt = runCatching { manifestFile.readText(Charsets.UTF_8) }.getOrNull()
+            return cachedTxt?.let { parsePromoManifest(it) }
+        }
+        return null
+    }
+
+    private fun fetchOrLoadPromoImage(imageRef: String, timeoutMs: Int = 4000): File? {
+        val target = promoImageCacheFile(imageRef)
+        val etagFile = File(promoDir, "${target.name}.etag")
+        val hasValidCached = target.exists() && runCatching {
+            val head = ByteArray(16)
+            val n = target.inputStream().use { it.read(head) }
+            n >= 12 && isValidImageMagic(head.copyOf(n))
+        }.getOrDefault(false)
+        val savedEtag = if (hasValidCached && etagFile.exists()) {
+            runCatching { etagFile.readText(Charsets.UTF_8).trim() }.getOrNull()
+        } else null
+
+        for (url in promoCandidates(imageRef)) {
+            val resp = httpGetBytesBounded(url, savedEtag, timeoutMs = timeoutMs) ?: continue
+            if (resp.status == 304 && hasValidCached) {
+                return target
+            }
+            val bytes = resp.bytes
+            if (bytes != null && isValidImageMagic(bytes)) {
+                runCatching {
+                    writeBytesAtomic(target, bytes)
+                    if (!resp.etag.isNullOrBlank()) writeAtomic(etagFile, resp.etag)
+                }
+                return target
+            }
+        }
+
+        return if (hasValidCached) target else null
+    }
+
+    /**
+     * يختار الإعلان التالي بالتناوب في كل مرة يُفتح فيها التطبيق (1 -> 2 -> 3 -> 4 -> 5 -> 1)
+     * مع التحقق السريع من أي تحديث للصور عبر ETag والرجوع السلس للكاش المحفوظ عند بطء الشبكة.
+     */
+    fun selectNextPromoBanner(prefs: Prefs): ResolvedPromoBanner? {
+        val manifest = fetchOrLoadPromoManifest(timeoutMs = minOf(httpTimeoutMs, 3000)) ?: return null
+        if (!manifest.enabled) return null
+        val activeAds = manifest.ads.filter { it.enabled && it.image.isNotBlank() }
+        if (activeAds.isEmpty()) return null
+
+        val startIdx = (prefs.lastPromoRotationIndex + 1).mod(activeAds.size)
+        for (offset in activeAds.indices) {
+            val idx = (startIdx + offset) % activeAds.size
+            val item = activeAds[idx]
+            val imgFile = fetchOrLoadPromoImage(item.image, timeoutMs = minOf(httpTimeoutMs, 4000))
+            if (imgFile != null && imgFile.exists()) {
+                prefs.lastPromoRotationIndex = idx
+                return ResolvedPromoBanner(
+                    id = item.id,
+                    imageFile = imgFile,
+                    title = item.title,
+                    link = item.link,
+                    buttonText = item.buttonText,
+                    closeDelaySec = manifest.closeDelaySec,
+                    slotIndex = idx,
+                    totalSlots = activeAds.size,
+                )
+            }
+        }
+        return null
+    }
+
+    /** يحمّل ويحدّث جميع صور الإعلانات الخمس في الخلفية لتكون جاهزة فورًا عند الفتحات القادمة. */
+    fun syncAllPromoAssets() {
+        val manifest = fetchOrLoadPromoManifest(timeoutMs = minOf(httpTimeoutMs, 5000)) ?: return
+        if (!manifest.enabled) return
+        manifest.ads.filter { it.enabled && it.image.isNotBlank() }.forEach { item ->
+            fetchOrLoadPromoImage(item.image, timeoutMs = minOf(httpTimeoutMs, 6000))
+        }
+    }
+
     companion object {
         @JvmField
         internal val DEFAULT_OWNER: String = "oldman-552"
@@ -533,6 +812,7 @@ class Repo(
         private const val MAX_BODY_BYTES = 10L * 1024L * 1024L
         private const val MAX_BODY_CHARS = 8_000_000
         private const val MAX_PARSED_SERVERS = 5_000
+        private const val MAX_PROMO_IMAGE_BYTES = 5 * 1024 * 1024
 
         fun containsSourceIdentifier(text: String): Boolean =
             text.contains(DEFAULT_OWNER, ignoreCase = true) ||

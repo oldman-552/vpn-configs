@@ -110,6 +110,7 @@ class Tester(private val ctx: Context) {
         dnsServer: String = "1.1.1.1",
         useDoh: Boolean = false,
         onProgress: suspend (TestProgress) -> Unit = {},
+        onDeadDetected: (Set<String>) -> Unit = {},
     ): List<TestResult> = withContext(Dispatchers.IO) {
         if (!engine.isAvailable) return@withContext emptyList()
 
@@ -153,6 +154,13 @@ class Tester(private val ctx: Context) {
         }
 
         ports.close()
+
+        val deadSet = firstStage.filterNot { it.ok && it.latencyMs > 0L }
+            .map { Converters.cleanUri(it.cfg) }
+            .toHashSet()
+        if (deadSet.isNotEmpty()) {
+            onDeadDetected(deadSet)
+        }
 
         val okList = firstStage.filter { it.ok && it.latencyMs > 0L }.sortedBy { it.latencyMs }
         if (okList.isEmpty()) return@withContext emptyList()

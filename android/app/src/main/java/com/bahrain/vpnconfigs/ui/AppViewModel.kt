@@ -19,6 +19,7 @@ import com.bahrain.vpnconfigs.data.ConnectionHistoryEntry
 import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.data.RemoteMeta
 import com.bahrain.vpnconfigs.data.Repo
+import com.bahrain.vpnconfigs.data.ResolvedPromoBanner
 import com.bahrain.vpnconfigs.data.ResultLine
 import com.bahrain.vpnconfigs.data.ServerHint
 import com.bahrain.vpnconfigs.engine.Converters
@@ -34,6 +35,7 @@ import com.bahrain.vpnconfigs.vpn.AppEntry
 import com.bahrain.vpnconfigs.vpn.BahrainVpnService
 import com.bahrain.vpnconfigs.vpn.InstalledApps
 import com.bahrain.vpnconfigs.vpn.ServerCandidate
+import com.bahrain.vpnconfigs.vpn.VpnPhase
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import com.bahrain.vpnconfigs.work.RefreshWorker
 import kotlinx.coroutines.CancellationException
@@ -97,6 +99,7 @@ data class UiState(
     val splitApps: Set<String> = emptySet(),
     val splitIncludeOnly: Boolean = false,
     val tunnelNeedsReload: Boolean = false,
+    val activePromo: ResolvedPromoBanner? = null,
 ) {
     val selectedServer: ServerItem?
         get() = servers.firstOrNull { it.cfg == selectedCfg } ?: servers.firstOrNull()
@@ -127,15 +130,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private var testJob: Job? = null
+    private var promoJob: Job? = null
+    private var lastObservedDropped: Set<String> = emptySet()
+    private var promoSyncedWhileConnected: Boolean = false
 
     init {
         AppDiag.init(app)
 
+        // تحميل الإعلان المتناوب عند فتح التطبيق وتحديث بقية الصور الخمس في الخلفية
+        triggerNextPromoBanner()
+
         viewModelScope.launch {
-            VpnStateManager.status.collectLatest {
+            VpnStateManager.status.collectLatest { vpnSt ->
                 val latestHistory = prefs.connectionHistory
-                if (latestHistory != state.connectionHistory) {
+                val droppedChanged = vpnSt.droppedConfigs != lastObservedDropped
+                if (droppedChanged) {
+                    val newlyDropped = vpnSt.droppedConfigs - lastObservedDropped
+                    val recovered = lastObservedDropped - vpnSt.droppedConfigs
+                    lastObservedDropped = vpnSt.droppedConfigs
+                    failedConfigs.addAll(newlyDropped)
+                    failedConfigs.removeAll(recovered)
+                    val filteredResults = if (newlyDropped.isNotEmpty()) {
+                        state.results.filterNot { Converters.cleanUri(it.cfg) in newlyDropped }
+                    } else {
+                        state.results
+                    }
+                    val rebuilt = buildServerList(state.configs, filteredResults, state.sortMode)
+                    val sel = resolveSelected(state.selectedCfg, rebuilt)
+                    state = state.copy(
+                        connectionHistory = latestHistory,
+                        results = filteredResults,
+                        servers = rebuilt,
+                        selectedCfg = sel,
+                    )
+                } else if (latestHistory != state.connectionHistory) {
                     state = state.copy(connectionHistory = latestHistory)
+                }
+
+                if (vpnSt.phase == VpnPhase.CONNECTED && !promoSyncedWhileConnected) {
+                    promoSyncedWhileConnected = true
+                    viewModelScope.launch(Dispatchers.IO) {
+                        runCatching { buildRepo().syncAllPromoAssets() }
+                    }
                 }
             }
         }
@@ -239,28 +275,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (Converters.isSupported(cleaned)) allUnique.add(cleaned)
         }
 
+        val droppedNow = VpnStateManager.status.value.droppedConfigs
         val rankablePairs = allUnique.map { cfg ->
-            val local = resultMap[cfg]
-            val failed = local == null && cfg in failedConfigs
+            val failed = cfg in failedConfigs || cfg in droppedNow
+            val local = if (failed) null else resultMap[cfg]
             val hint = serverHints[cfg]
             val hintMs = hint?.latencyMs?.takeIf { it > 0L } ?: (serverLatencies[cfg] ?: 0L)
-            val effectiveLatency = when {
+            val rankLatency = when {
                 failed -> -1L
                 local != null && local.latencyMs > 0L -> local.latencyMs
                 else -> hintMs
             }
+            // العرض داخل التطبيق يعكس فقط حالة وفحص الهاتف الفعلي (رمادي قبل الفحص، وأحمر للمنقطع فقط)
+            val displayLatency = when {
+                failed -> -1L
+                local != null && local.latencyMs > 0L -> local.latencyMs
+                else -> 0L
+            }
+            // سرعة السيرفر المعروضة والمعتمدة هي سرعة الاختبار الحقيقي من الهاتف فقط (بدون سرعة السحابة الخارجية)
             val effectiveSpeed = when {
                 failed -> 0.0
                 local != null && local.speedKbps > 0.0 -> local.speedKbps
-                else -> hint?.speedKbps?.takeIf { it > 0.0 } ?: 0.0
+                else -> 0.0
             }
-            val cloudTestedMs = UiMessages.parseIsoUtcMillis(hint?.verifiedAt)
-            val localTestedMs = local?.testedAtMs ?: 0L
-            val effectiveTestedMs = maxOf(localTestedMs, cloudTestedMs)
+            val effectiveTestedMs = if (!failed && local != null) local.testedAtMs else 0L
 
             val rankable = RankableServer(
                 cfg = cfg,
-                latencyMs = effectiveLatency,
+                latencyMs = rankLatency,
                 jitterMs = hint?.jitterMs ?: 0.0,
                 speedKbps = effectiveSpeed,
                 stabilityRuns = hint?.stabilityRuns ?: 0,
@@ -277,7 +319,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 name = "",
                 proto = Converters.protocolBadge(cfg),
                 endpoint = Converters.endpointLabel(cfg),
-                latencyMs = effectiveLatency,
+                latencyMs = displayLatency,
                 jitterMs = hint?.jitterMs ?: 0.0,
                 speedKbps = effectiveSpeed,
                 score = hint?.score ?: 0.0,
@@ -507,6 +549,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val topLimit = if (quickPingOnly) minOf(prefs.testTop, 250) else prefs.testTop
                 val spdLimit = if (quickPingOnly) 0 else maxOf(prefs.speedTop, 20)
                 val useSpeedRank = !quickPingOnly && ServerSortMode.fromKey(prefs.sortMode) == ServerSortMode.FASTEST_DOWNLOAD
+                var detectedDead: Set<String> = emptySet()
                 val results = tester.run(
                     configs = pool,
                     testTop = topLimit,
@@ -516,24 +559,44 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     rankBySpeed = useSpeedRank,
                     dnsServer = prefs.dnsServer,
                     useDoh = prefs.dnsDoh,
-                ) { p ->
-                    withContext(Dispatchers.Main.immediate) {
-                        state = state.copy(progress = p)
+                    onProgress = { p ->
+                        withContext(Dispatchers.Main.immediate) {
+                            state = state.copy(progress = p)
+                        }
+                    },
+                    onDeadDetected = { dead ->
+                        detectedDead = dead
+                    },
+                )
+
+                detectedDead.forEach { deadCfg ->
+                    failedConfigs.add(deadCfg)
+                    VpnStateManager.markServerDropped(deadCfg)
+                }
+                results.forEach {
+                    if (it.ok) {
+                        val clean = Converters.cleanUri(it.cfg)
+                        failedConfigs.remove(clean)
+                        VpnStateManager.markServerHealthy(clean)
                     }
                 }
 
-                results.forEach { if (it.ok) failedConfigs.remove(Converters.cleanUri(it.cfg)) }
-
-                // دمج سرعة التنزيل المقاسة سابقًا إن كان الفحص الحالي للتأخير فقط دون اختلاق درجات
-                val prevSpeedByCfg = state.results.associate { Converters.cleanUri(it.cfg) to it.speedKbps }
-                val mergedResults = if (quickPingOnly) {
+                // دمج سرعة التنزيل المقاسة سابقًا إن كان الفحص الحالي للتأخير فقط دون اختلاق درجات، مع الاحتفاظ بالسيرفرات غير الداخلة في العينة والناجحة سابقًا
+                val prevByCfg = state.results.associateBy { Converters.cleanUri(it.cfg) }
+                val freshAliveSet = results.map { Converters.cleanUri(it.cfg) }.toHashSet()
+                val mergedFresh = if (quickPingOnly) {
                     results.map { r ->
-                        val prevSpd = prevSpeedByCfg[Converters.cleanUri(r.cfg)] ?: 0.0
+                        val prevSpd = prevByCfg[Converters.cleanUri(r.cfg)]?.speedKbps ?: 0.0
                         if (r.speedKbps <= 0.0 && prevSpd > 0.0) r.copy(speedKbps = prevSpd) else r
                     }
                 } else {
                     results
                 }
+                val untouchedPrev = state.results.filter { old ->
+                    val c = Converters.cleanUri(old.cfg)
+                    c !in freshAliveSet && c !in detectedDead
+                }
+                val mergedResults = mergedFresh + untouchedPrev
 
                 val r = buildRepo()
                 val allFile = withContext(Dispatchers.IO) {
@@ -614,30 +677,41 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val cleanedCfg = Converters.cleanUri(item.cfg)
             if (res.ok && res.latencyMs > 0L) {
                 failedConfigs.remove(cleanedCfg)
-                val prevSpeed = state.results.firstOrNull { Converters.cleanUri(it.cfg) == cleanedCfg }?.speedKbps ?: 0.0
-                val mergedRes = if (res.speedKbps > 0.0) res else res.copy(speedKbps = prevSpeed)
+                VpnStateManager.markServerHealthy(cleanedCfg)
                 val updatedResults = buildList {
-                    add(mergedRes)
+                    add(res)
                     state.results.forEach { if (Converters.cleanUri(it.cfg) != cleanedCfg) add(it) }
+                }
+                val r = buildRepo()
+                val bestPair = withContext(Dispatchers.IO) {
+                    runCatching {
+                        r.writeBest(
+                            updatedResults.map { ResultLine(it.cfg, it.latencyMs, it.speedKbps, it.testedAtMs) },
+                            prefs.bestN,
+                        )
+                    }.getOrNull()
                 }
                 val rebuilt = buildServerList(state.configs, updatedResults, state.sortMode)
                 val sel = resolveSelected(state.selectedCfg, rebuilt)
                 val newItem = rebuilt.firstOrNull { it.cfg == cleanedCfg }
-                val speedSummary = if (mergedRes.speedKbps >= 1024.0) {
-                    String.format(Locale.US, " • %.2f MB/s", mergedRes.speedKbps / 1024.0)
-                } else if (mergedRes.speedKbps > 0.0) {
-                    " • ${mergedRes.speedKbps.toInt()} KB/s"
+                val speedSummary = if (res.speedKbps >= 1024.0) {
+                    String.format(Locale.US, " • سرعة جهازك %.2f MB/s", res.speedKbps / 1024.0)
+                } else if (res.speedKbps > 0.0) {
+                    " • سرعة جهازك ${res.speedKbps.toInt()} KB/s"
                 } else ""
                 state = state.copy(
                     pingingSingleCfg = null,
                     results = updatedResults,
                     servers = rebuilt,
                     selectedCfg = sel,
+                    bestFile = bestPair?.first ?: state.bestFile,
+                    subFile = bestPair?.second ?: state.subFile,
                     info = "${newItem?.name ?: item.name}: ${res.latencyMs} ms$speedSummary",
                 )
             } else {
                 AppDiag.d("AppViewModel", "single server check failed code=${res.error}")
                 failedConfigs.add(cleanedCfg)
+                VpnStateManager.markServerDropped(cleanedCfg)
                 val updatedResults = state.results.filterNot { Converters.cleanUri(it.cfg) == cleanedCfg }
                 val rebuilt = buildServerList(state.configs, updatedResults, state.sortMode)
                 val sel = resolveSelected(state.selectedCfg, rebuilt)
@@ -756,6 +830,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             selectedCfg = sel,
             autoFailover = autoFailover,
         )
+    }
+
+    // ── نافذة الإعلانات المتناوبة (5 صور تتغير مع كل فتح) ──
+    fun triggerNextPromoBanner() {
+        if (state.activePromo != null) return
+        promoJob?.cancel()
+        promoJob = viewModelScope.launch {
+            val repo = buildRepo()
+            val next = withContext(Dispatchers.IO) {
+                runCatching { repo.selectNextPromoBanner(prefs) }.getOrNull()
+            }
+            if (next != null) {
+                state = state.copy(activePromo = next)
+            }
+            withContext(Dispatchers.IO) {
+                runCatching { repo.syncAllPromoAssets() }
+            }
+        }
+    }
+
+    fun dismissPromo() {
+        state = state.copy(activePromo = null)
     }
 
     fun settings() = prefs
