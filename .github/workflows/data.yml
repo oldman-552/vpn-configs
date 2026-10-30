@@ -88,7 +88,15 @@ jobs:
           if [ -d prev_dist/enterprise ]; then
             cp -r prev_dist/enterprise/. dist/enterprise/
           fi
+          NEEDS_BUNDLE=0
           if [ ! -f dist/enterprise/bundle.json ]; then
+            NEEDS_BUNDLE=1
+          elif [ ! -f dist/enterprise/vault.enc.json ] && [ ! -f dist/enterprise/vault_sqlite.enc.json ]; then
+            if ! python -c 'import json,sys; sys.exit(0 if json.load(open("dist/enterprise/bundle.json",encoding="utf-8")).get("bundle",{}).get("bundle_release")=="3.2" else 1)' 2>/dev/null; then
+              NEEDS_BUNDLE=1
+            fi
+          fi
+          if [ "$NEEDS_BUNDLE" = "1" ]; then
             python -m enterprise.publisher \
               --vault dist/enterprise/vault_sqlite.enc.json \
               --alive dist/alive.json \
