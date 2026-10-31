@@ -40,6 +40,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bahrain.vpnconfigs.ui.enterprise.AccountLicenseCard
 import com.bahrain.vpnconfigs.ui.enterprise.AppHealthAndFailoverCard
+import com.bahrain.vpnconfigs.ui.enterprise.AntiCensorshipToolsCard
 import com.bahrain.vpnconfigs.ui.enterprise.BlockingDetectionCard
 import com.bahrain.vpnconfigs.ui.enterprise.NetworkDiagnosticsCard
 import com.bahrain.vpnconfigs.ui.enterprise.SignedAppUpdateBanner
@@ -180,6 +181,7 @@ fun EnterpriseHubScreen(
         TunnelSpeedStudioCard(state = state, vpnStatus = vpnStatus, vm = vm)
         NetworkDiagnosticsCard(state = state, vm = vm)
         BlockingDetectionCard(vm = vm)
+        AntiCensorshipToolsCard(vm = vm)
         AppHealthAndFailoverCard(state = state, vm = vm, onCopy = onCopy)
     }
 }

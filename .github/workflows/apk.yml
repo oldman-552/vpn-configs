@@ -103,6 +103,8 @@ jobs:
 
       - name: Run Android unit tests (:app + :admin) & build signed release APKs
         working-directory: android
+        env:
+          SINGBOX_CONFIG_EXPORT_DIR: ${{ runner.temp }}/singbox-configs
         run: |
           set -o pipefail
           gradle --no-daemon :app:testReleaseUnitTest :admin:testReleaseUnitTest :app:assembleRelease :admin:assembleRelease 2>&1 | tee gradle.log || {
@@ -135,6 +137,20 @@ jobs:
           print(f"::notice::Android JUnit Suite (:app + :admin): {total} tests executed, {fails} failures, {errs} errors")
           assert total >= 15 and fails == 0 and errs == 0
           PY
+
+      - name: Validate generated sing-box configs (sing-box check)
+        run: |
+          set -euo pipefail
+          VER=$(grep -oP 'SINGBOX_VERSION:-\K[0-9.]+' android/scripts/fetch-engines.sh)
+          curl -fsSL -o "$RUNNER_TEMP/sb.tgz" "https://github.com/SagerNet/sing-box/releases/download/v${VER}/sing-box-${VER}-linux-amd64.tar.gz"
+          tar -xzf "$RUNNER_TEMP/sb.tgz" -C "$RUNNER_TEMP"
+          SB="$RUNNER_TEMP/sing-box-${VER}-linux-amd64/sing-box"
+          shopt -s nullglob
+          files=("$RUNNER_TEMP"/singbox-configs/*.json)
+          [ ${#files[@]} -gt 0 ] || { echo "::error::No sing-box configs were exported by unit tests"; exit 1; }
+          for f in "${files[@]}"; do
+            if "$SB" check -c "$f"; then echo "OK  $(basename "$f")"; else echo "::error title=sing-box check::$(basename "$f") rejected by sing-box ${VER}"; exit 1; fi
+          done
 
       - name: Collect User & Admin APKs, compute SHA-256 & run security/resource audits
         run: |

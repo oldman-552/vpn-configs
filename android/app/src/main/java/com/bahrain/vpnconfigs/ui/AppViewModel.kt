@@ -732,6 +732,60 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return { cfg -> com.bahrain.vpnconfigs.engine.CensorshipProbe.bonusFor(cfg, profile) }
     }
 
+    // ── Anti-censorship tools: TLS fragment + free Cloudflare WARP ──
+    var tlsFragmentMode by androidx.compose.runtime.mutableStateOf(prefs.tlsFragmentMode)
+        private set
+
+    fun updateTlsFragmentMode(mode: String) {
+        prefs.tlsFragmentMode = mode
+        tlsFragmentMode = mode // applied when the next tunnel is started
+    }
+
+    var warpRegistered by androidx.compose.runtime.mutableStateOf(prefs.warpAccountJson.isNotBlank())
+        private set
+    var warpFallbackEnabled by androidx.compose.runtime.mutableStateOf(prefs.warpFallback)
+        private set
+    var warpBusy by androidx.compose.runtime.mutableStateOf(false)
+        private set
+
+    fun updateWarpFallback(on: Boolean) {
+        prefs.warpFallback = on
+        warpFallbackEnabled = on
+    }
+
+    /** One-time free WARP registration. Must run while the VPN is off (talks to Cloudflare directly). */
+    fun registerWarp(onDone: (Boolean) -> Unit) {
+        if (warpBusy) return
+        warpBusy = true
+        viewModelScope.launch {
+            val res = withContext(Dispatchers.IO) {
+                com.bahrain.vpnconfigs.engine.WarpManager.register(
+                    com.bahrain.vpnconfigs.engine.SingBox(getApplication()).binaryPath,
+                )
+            }
+            res.onSuccess {
+                prefs.warpAccountJson = it.toJson()
+                warpRegistered = true
+            }
+            warpBusy = false
+            onDone(res.isSuccess)
+        }
+    }
+
+    fun connectWarp() {
+        if (!warpRegistered) return
+        com.bahrain.vpnconfigs.vpn.BahrainVpnService.startConnect(
+            getApplication(),
+            com.bahrain.vpnconfigs.engine.WarpManager.WARP_URI,
+            com.bahrain.vpnconfigs.engine.WarpManager.LABEL,
+        )
+    }
+
+    fun resetWarp() {
+        prefs.warpAccountJson = ""
+        warpRegistered = false
+    }
+
     var blockingProbeRunning by androidx.compose.runtime.mutableStateOf(false)
         private set
 
