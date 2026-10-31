@@ -115,6 +115,21 @@ class Prefs(ctx: Context) {
             }
         }
 
+    /** TLS ClientHello fragmentation: AUTO (on when SNI filtering detected), ON, OFF. */
+    var tlsFragmentMode: String
+        get() = sp.getString("tls_fragment_mode_v1", "AUTO") ?: "AUTO"
+        set(v) = sp.edit { putString("tls_fragment_mode_v1", v) }
+
+    /** Registered free Cloudflare WARP account (WarpAccount JSON), empty if not set up. */
+    var warpAccountJson: String
+        get() = sp.getString("warp_account_v1", "") ?: ""
+        set(v) = sp.edit { putString("warp_account_v1", v) }
+
+    /** Switch to WARP automatically when every server fails. */
+    var warpFallback: Boolean
+        get() = sp.getBoolean("warp_fallback_v1", true)
+        set(v) = sp.edit { putBoolean("warp_fallback_v1", v) }
+
     /** Last censorship probe result (BlockingProfile JSON), used to bias protocol choice. */
     var blockingProfileJson: String
         get() = sp.getString("blocking_profile_v1", "") ?: ""

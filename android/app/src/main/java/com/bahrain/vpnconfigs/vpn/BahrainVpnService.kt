@@ -406,8 +406,13 @@ class BahrainVpnService : VpnService() {
             ?: pool.firstOrNull { it.cfg == chosenCfg }?.label
             ?: prefs.selectedLabel.ifBlank { "bahrain-vpn #1" }
 
-        prefs.selectedCfg = chosenCfg
-        prefs.selectedLabel = chosenLabel
+        if (com.bahrain.vpnconfigs.engine.WarpManager.isWarp(chosenCfg)) {
+            // Keep the user's chosen server as "selected"; WARP is only a fallback/manual extra.
+        } else {
+            warpFallbackAttempted = false
+            prefs.selectedCfg = chosenCfg
+            prefs.selectedLabel = chosenLabel
+        }
 
         val osLockdown = KillSwitchController.isOsLockdownActive(this)
         val killSwitchOn = prefs.killSwitch
@@ -712,7 +717,27 @@ class BahrainVpnService : VpnService() {
      * مقفلة في حالة PROTECTION_ACTIVE لمنع تسرب بيانات التطبيقات عبر الشبكة غير المحمية،
      * ونشغّل حلقة استعادة هادئة في الخلفية حتى يعود اتصال موثّق أو يطلب المستخدم الإيقاف.
      */
+    /** Set once WARP has been tried as a fallback; cleared when connecting to a regular server. */
+    @Volatile
+    private var warpFallbackAttempted = false
+
     private fun handleAllCandidatesFailed(reasonMsg: String) {
+        // Free Cloudflare WARP as a last resort before giving up (once per failure chain).
+        val activeIsWarp = com.bahrain.vpnconfigs.engine.WarpManager.isWarp(VpnStateManager.status.value.activeCfg)
+        if (!warpFallbackAttempted && !activeIsWarp && prefs.wasVpnDesiredActive && prefs.warpFallback &&
+            com.bahrain.vpnconfigs.engine.WarpAccount.fromJson(prefs.warpAccountJson) != null
+        ) {
+            warpFallbackAttempted = true
+            VpnStateManager.appendEvent("كل السيرفرات فشلت — تجربة Cloudflare WARP المجاني كاحتياط")
+            serviceScope.launch {
+                handleConnect(
+                    com.bahrain.vpnconfigs.engine.WarpManager.WARP_URI,
+                    com.bahrain.vpnconfigs.engine.WarpManager.LABEL,
+                    forceRebuildTun = false,
+                )
+            }
+            return
+        }
         monitorJob?.cancel()
         probeJob?.cancel()
         traceJob?.cancel()

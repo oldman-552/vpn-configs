@@ -53,6 +53,17 @@ class SingBox(private val ctx: Context) {
     val isAvailable: Boolean
         get() = File(binaryPath).let { it.exists() && it.canExecute() }
 
+    private val prefs by lazy { com.bahrain.vpnconfigs.data.Prefs(ctx) }
+
+    /** TLS fragmentation for the current network (setting ON/OFF, or AUTO from the last block probe). */
+    private fun tlsFragmentEnabled(): Boolean = runCatching {
+        TlsFragment.shouldEnable(
+            prefs.tlsFragmentMode,
+            BlockingProfile.fromJson(prefs.blockingProfileJson),
+            com.bahrain.vpnconfigs.vpn.VpnStateManager.status.value.underlyingNetwork,
+        )
+    }.getOrDefault(false)
+
     private val tmpDir: File by lazy {
         File(ctx.cacheDir, "sbx").apply { mkdirs() }
     }
@@ -103,7 +114,8 @@ class SingBox(private val ctx: Context) {
         bypassIrDomains: Boolean = false,
         physicalDnsServer: String? = null,
     ): String? {
-        val out = Converters.toOutbound(cfg) ?: return null
+        val warp = if (WarpManager.isWarp(cfg)) WarpAccount.fromJson(prefs.warpAccountJson) ?: return null else null
+        val out = if (warp == null) Converters.toOutbound(cfg) ?: return null else null
         val safeDns = com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.sanitizeDnsServer(dnsServer)
         val domainStrategy = if (enableIpv6) "prefer_ipv4" else "ipv4_only"
 
@@ -128,8 +140,11 @@ class SingBox(private val ctx: Context) {
         }
         dnsServers.put(tunnelDns)
 
-        out.put("tag", "proxy")
-        out.put("domain_resolver", "bootstrap")
+        out?.let {
+            if (tlsFragmentEnabled()) TlsFragment.apply(it)
+            it.put("tag", "proxy")
+            it.put("domain_resolver", "bootstrap")
+        }
 
         val dnsObj = JSONObject()
             .put("servers", dnsServers)
@@ -140,7 +155,8 @@ class SingBox(private val ctx: Context) {
             .put("final", "proxy")
             .put("default_domain_resolver", "tunnel-dns")
 
-        val outboundsArr = JSONArray().put(out)
+        val outboundsArr = JSONArray()
+        out?.let { outboundsArr.put(it) }
 
         if (bypassIrDomains) {
             val irSuffixArr = JSONArray().apply {
@@ -196,6 +212,7 @@ class SingBox(private val ctx: Context) {
                 ),
             )
             .put("outbounds", outboundsArr)
+        warp?.let { conf.put("endpoints", JSONArray().put(it.toSingBoxEndpoint())) }
         return conf.toString()
     }
 

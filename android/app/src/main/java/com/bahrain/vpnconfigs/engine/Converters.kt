@@ -672,6 +672,7 @@ object Converters {
         "socks", "socks5" -> "SOCKS5"
         "http" -> "HTTP"
         "https" -> "HTTPS"
+        "warp" -> "WARP"
         else -> schemeOf(cfg).uppercase().ifBlank { "VPN" }
     }
 

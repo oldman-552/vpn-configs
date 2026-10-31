@@ -102,6 +102,10 @@ object CensorshipProbe {
             bonus["hy2"] = 5.0
             bonus["tuic"] = 4.0
         }
+        if (BlockType.IP in blocks) {
+            // Direct IPs are blocked: servers behind a shared CDN address are the most likely to work.
+            bonus["cdn"] = 7.0
+        }
         return BlockingProfile(nowMs, networkType, true, blocks, bonus)
     }
 
@@ -110,8 +114,10 @@ object CensorshipProbe {
         if (profile == null || profile.protocolBonus.isEmpty() || nowMs - profile.measuredAtMs > PROFILE_TTL_MS) return 0.0
         val scheme = cfg.substringBefore("://").lowercase()
         val isReality = scheme == "vless" && cfg.contains("security=reality", ignoreCase = true)
-        return (if (isReality) profile.protocolBonus["vless-reality"] else null)
+        val base = (if (isReality) profile.protocolBonus["vless-reality"] else null)
             ?: profile.protocolBonus[scheme] ?: 0.0
+        val cdn = profile.protocolBonus["cdn"]?.takeIf { CdnDetector.isCdnFronted(cfg) } ?: 0.0
+        return base + cdn
     }
 
     /** Runs all probes on the current (non-VPN) network. Call only while the VPN is off. */

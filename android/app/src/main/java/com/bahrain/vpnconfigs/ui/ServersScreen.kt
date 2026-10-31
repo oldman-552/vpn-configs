@@ -480,6 +480,18 @@ private fun ServerCard(
                     modifier = Modifier.weight(1f),
                 ) {
                     ProtoChip(item.proto)
+                    val isCdn = remember(item.cfg) { com.bahrain.vpnconfigs.engine.CdnDetector.isCdnFronted(item.cfg) }
+                    if (isCdn) {
+                        Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(6.dp)) {
+                            Text(
+                                text = "CDN",
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
                     if (item.country.isNotBlank()) {
                         Surface(
                             color = MaterialTheme.colorScheme.secondaryContainer,
