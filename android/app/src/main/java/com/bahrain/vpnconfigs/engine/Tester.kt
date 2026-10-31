@@ -105,10 +105,11 @@ class Tester(private val ctx: Context) {
          */
         suspend fun fastTcpIpPreScreen(
             configs: List<String>,
-            timeoutMs: Int = 620,
+            timeoutMs: Int = 480,
+            onProgressTick: suspend (deadSoFar: Int) -> Unit = {},
         ): Pair<List<String>, List<String>> = coroutineScope {
             if (configs.isEmpty()) return@coroutineScope emptyList<String>() to emptyList()
-            val tcpTargetsByEndpoint = LinkedHashMap<Pair<String, Int>, Unit>()
+            val tcpTargetsByEndpoint = LinkedHashMap<Pair<String, Int>, Int>()
             val endpointForIndex = arrayOfNulls<Pair<String, Int>>(configs.size)
 
             configs.forEachIndexed { idx, raw ->
@@ -122,7 +123,7 @@ class Tester(private val ctx: Context) {
                 if (port in 1..65535 && rawIpv4Regex.matches(host)) {
                     val ep = host to port
                     endpointForIndex[idx] = ep
-                    tcpTargetsByEndpoint[ep] = Unit
+                    tcpTargetsByEndpoint[ep] = (tcpTargetsByEndpoint[ep] ?: 0) + 1
                 }
             }
 
@@ -132,7 +133,10 @@ class Tester(private val ctx: Context) {
 
             val sem = Semaphore(140)
             val reachableSet = HashSet<Pair<String, Int>>(tcpTargetsByEndpoint.size)
-            tcpTargetsByEndpoint.keys.map { ep ->
+            val deadConfigEstimate = AtomicInteger(0)
+            val reachableEpCount = AtomicInteger(0)
+
+            tcpTargetsByEndpoint.entries.map { (ep, weight) ->
                 async(scanIoDispatcher) {
                     ensureActive()
                     val ok = sem.withPermit {
@@ -147,6 +151,14 @@ class Tester(private val ctx: Context) {
                             } catch (_: Exception) {
                                 false
                             }
+                        }
+                    }
+                    if (ok) {
+                        reachableEpCount.incrementAndGet()
+                    } else {
+                        val est = deadConfigEstimate.addAndGet(weight)
+                        if (reachableEpCount.get() > 0 && est % 10 < weight) {
+                            onProgressTick(est)
                         }
                     }
                     ep to ok
@@ -335,124 +347,159 @@ class Tester(private val ctx: Context) {
         }
 
         val stage1Parallelism = maxOf(concurrency, DEFAULT_STAGE1_CONCURRENCY).coerceIn(8, 130)
-        val stage1TimeoutMs = (timeoutSec.coerceIn(2, 5) * 420).coerceIn(1_250, 1_750)
+        val stage1TimeoutMs = (timeoutSec.coerceIn(2, 5) * 380).coerceIn(1_150, 1_550)
+        val stage1Title = tr("فحص الأنفاق فائق السرعة", "Fast Tunnel Check")
 
-        val (tunnelTargets, tcpDeadCleanList) = fastTcpIpPreScreen(candidates, timeoutMs = 600)
+        onProgress(TestProgress(stage1Title, 0, candidates.size, 0))
+        val (tunnelTargets, tcpDeadCleanList) = fastTcpIpPreScreen(candidates, timeoutMs = 480) { estDead ->
+            onProgress(TestProgress(stage1Title, estDead.coerceAtMost(candidates.size - 1), candidates.size, 0))
+        }
         var done = tcpDeadCleanList.size
         var alive = 0
         val liveAlive = ArrayList<TestResult>()
         val liveDead = LinkedHashSet<String>(insecureRejected).apply { addAll(tcpDeadCleanList) }
-        onProgress(TestProgress(tr("فحص الأنفاق فائق السرعة", "Fast Tunnel Check"), done, candidates.size, 0))
+        if (done > 0) {
+            onProgress(TestProgress(stage1Title, done, candidates.size, 0))
+        }
 
         val firstStage = ArrayList<TestResult>(candidates.size)
         for (deadClean in tcpDeadCleanList) {
             firstStage.add(TestResult(deadClean, ok = false, error = "tcp-down", packetLossPct = 100.0))
         }
-        val batches = tunnelTargets.chunked(DEFAULT_BATCH_SIZE)
-        for (batch in batches) {
-            ensureActive()
-            val batchResults = runBatchProbeChunk(
-                chunk = batch,
-                basePort = 0,
-                timeoutMs = stage1TimeoutMs,
-                parallelism = stage1Parallelism,
-                measureThroughput = false,
-                throughputBudgetBytes = 0L,
-                dnsServer = dnsServer,
-                useDoh = useDoh,
-            ) { r ->
-                var snap: TestProgress? = null
-                synchronized(this@Tester) {
-                    done++
-                    if (r.ok && r.latencyMs > 0L) {
-                        alive++
-                        liveAlive.add(r)
-                    } else {
-                        liveDead.add(Converters.cleanUri(r.cfg))
-                    }
-                    if (done % 16 == 0 || done == candidates.size) {
-                        snap = TestProgress(tr("فحص الأنفاق فائق السرعة", "Fast Tunnel Check"), done, candidates.size, alive)
-                    }
-                }
-                snap?.let { onProgress(it) }
-            }
-            firstStage.addAll(batchResults)
-            onPartialResults(synchronized(this@Tester) { liveAlive.toList() }, synchronized(this@Tester) { liveDead.toSet() })
-        }
 
-        val deadSet = LinkedHashSet<String>(insecureRejected)
-        firstStage.filterNot { it.ok && it.latencyMs > 0L }.forEach { deadSet.add(Converters.cleanUri(it.cfg)) }
-        if (deadSet.isNotEmpty()) {
-            onDeadDetected(deadSet)
-        }
-
-        val okList = firstStage.filter { it.ok && it.latencyMs > 0L }
-            .sortedWith(
-                compareBy<TestResult> { it.latencyMs }
-                    .thenBy { it.jitterMs }
-            )
-        if (okList.isEmpty()) return@withContext emptyList()
-
-        // ── المرحلة 2: قياس سرعة التنزيل الحقيقية (600 KB HTTPS) داخل دفعة sing-box دافئة واحدة ──
-        val effectiveSpeedTop = speedTop.coerceIn(0, 60)
-        val speedPool = okList.take(effectiveSpeedTop)
         val speedMap = HashMap<String, Double>()
         val speedTsMap = HashMap<String, Long>()
+        var okList: List<TestResult> = emptyList()
 
-        if (speedPool.isNotEmpty() && throughputBudgetBytes >= 16_384L) {
-            var sdone = 0
-            onProgress(TestProgress(tr("قياس سرعة التنزيل الفعلية", "Measuring Real Download Speed"), 0, speedPool.size, 0))
-            for (sBatch in speedPool.map { it.cfg }.chunked(DEFAULT_BATCH_SIZE)) {
-                ensureActive()
-                val ports = allocateFreePorts(sBatch.size, basePort = 0)
-                val paired = sBatch.mapIndexed { idx, c -> c to ports[idx] }
-                val session = runInterruptible(scanIoDispatcher) {
-                    engine.startBatchDaemon(paired, dnsServer = dnsServer, useDoh = useDoh, waitMs = 1500L)
+        // Start all batch daemons concurrently upfront and keep warm sockets open through Stage 2 -> ZERO mid-scan pauses!
+        val activeSessions = ArrayList<BatchDaemonSession>(3)
+        try {
+            if (tunnelTargets.isNotEmpty()) {
+                val allPorts = allocateFreePorts(tunnelTargets.size, basePort = 0)
+                val pairedAll = tunnelTargets.mapIndexed { idx, c -> c to allPorts[idx] }
+                val startedSessions = coroutineScope {
+                    pairedAll.chunked(DEFAULT_BATCH_SIZE).map { sub ->
+                        async(scanIoDispatcher) {
+                            runInterruptible(scanIoDispatcher) {
+                                engine.startBatchDaemon(sub, dnsServer = dnsServer, useDoh = useDoh, waitMs = 1500L)
+                            }
+                        }
+                    }.awaitAll().filterNotNull()
                 }
-                if (session != null) {
-                    val sem = Semaphore(DEFAULT_STAGE2_CONCURRENCY)
-                    try {
-                        coroutineScope {
-                            session.slots.map { slot ->
-                                async(scanIoDispatcher) {
+                activeSessions.addAll(startedSessions)
+
+                val slotByClean = HashMap<String, BatchOutboundSlot>(tunnelTargets.size)
+                for (sess in activeSessions) {
+                    for (slot in sess.slots) {
+                        slotByClean[Converters.cleanUri(slot.cfg)] = slot
+                    }
+                }
+
+                val sem1 = Semaphore(stage1Parallelism)
+                val stage1Wave = coroutineScope {
+                    tunnelTargets.map { rawCfg ->
+                        async(scanIoDispatcher) {
+                            ensureActive()
+                            val clean = Converters.cleanUri(rawCfg)
+                            val slot = slotByClean[clean]
+                            val res = if (slot != null) {
+                                sem1.withPermit {
                                     ensureActive()
-                                    val kbps = sem.withPermit {
+                                    runInterruptible(scanIoDispatcher) {
+                                        engine.probeSlotOnRunningBatch(
+                                            slot = slot,
+                                            timeoutMs = stage1TimeoutMs,
+                                            measureThroughput = false,
+                                            throughputBudgetBytes = 0L,
+                                        )
+                                    }
+                                }
+                            } else {
+                                TestResult(rawCfg, ok = false, error = "invalid-config", packetLossPct = 100.0)
+                            }
+                            var snap: TestProgress? = null
+                            synchronized(this@Tester) {
+                                done++
+                                if (res.ok && res.latencyMs > 0L) {
+                                    alive++
+                                    liveAlive.add(res)
+                                } else {
+                                    liveDead.add(clean)
+                                }
+                                if (done % 6 == 0 || done == candidates.size) {
+                                    snap = TestProgress(stage1Title, done, candidates.size, alive)
+                                }
+                            }
+                            snap?.let { onProgress(it) }
+                            res
+                        }
+                    }.awaitAll()
+                }
+                firstStage.addAll(stage1Wave)
+                onPartialResults(synchronized(this@Tester) { liveAlive.toList() }, synchronized(this@Tester) { liveDead.toSet() })
+
+                val deadSet = LinkedHashSet<String>(insecureRejected)
+                firstStage.filterNot { it.ok && it.latencyMs > 0L }.forEach { deadSet.add(Converters.cleanUri(it.cfg)) }
+                if (deadSet.isNotEmpty()) {
+                    onDeadDetected(deadSet)
+                }
+
+                okList = firstStage.filter { it.ok && it.latencyMs > 0L }
+                    .sortedWith(compareBy<TestResult> { it.latencyMs }.thenBy { it.jitterMs })
+
+                // ── المرحلة 2: قياس سرعة التنزيل الحقيقية (600 KB HTTPS) فورًا على نفس المنافذ الدافئة دون إعادة تشغيل sing-box ──
+                val effectiveSpeedTop = speedTop.coerceIn(0, 60)
+                val speedPool = okList.take(effectiveSpeedTop)
+                if (speedPool.isNotEmpty() && throughputBudgetBytes >= 16_384L) {
+                    var sdone = 0
+                    val stage2Title = tr("قياس سرعة التنزيل الفعلية", "Measuring Real Download Speed")
+                    onProgress(TestProgress(stage2Title, 0, speedPool.size, 0))
+                    val sem2 = Semaphore(DEFAULT_STAGE2_CONCURRENCY)
+                    coroutineScope {
+                        speedPool.map { cand ->
+                            async(scanIoDispatcher) {
+                                ensureActive()
+                                val clean = Converters.cleanUri(cand.cfg)
+                                val slot = slotByClean[clean]
+                                val kbps = if (slot != null) {
+                                    sem2.withPermit {
                                         ensureActive()
                                         runInterruptible(scanIoDispatcher) {
                                             SingBox.measureFastBatchThroughputOnPort(
                                                 port = slot.listenPort,
-                                                connectTimeoutMs = 1_850,
-                                                maxTransferMs = 1_800L,
+                                                connectTimeoutMs = 1_750,
+                                                maxTransferMs = 1_650L,
                                                 budgetBytes = throughputBudgetBytes,
                                             )
                                         }
                                     }
-                                    var snap: TestProgress? = null
-                                    synchronized(this@Tester) {
-                                        if (kbps > 0.0) {
-                                            speedMap[slot.cfg] = kbps
-                                            speedTsMap[slot.cfg] = System.currentTimeMillis()
-                                        }
-                                        sdone++
-                                        if (sdone % 3 == 0 || sdone == speedPool.size) {
-                                            snap = TestProgress(
-                                                tr("قياس سرعة التنزيل الفعلية", "Measuring Real Download Speed"),
-                                                sdone,
-                                                speedPool.size,
-                                                speedMap.size,
-                                            )
-                                        }
-                                    }
-                                    snap?.let { onProgress(it) }
+                                } else {
+                                    0.0
                                 }
-                            }.awaitAll()
-                        }
-                    } finally {
-                        engine.stopBatchDaemon(session)
+                                var snap: TestProgress? = null
+                                synchronized(this@Tester) {
+                                    if (kbps > 0.0) {
+                                        speedMap[cand.cfg] = kbps
+                                        speedMap[clean] = kbps
+                                        speedTsMap[cand.cfg] = System.currentTimeMillis()
+                                    }
+                                    sdone++
+                                    snap = TestProgress(stage2Title, sdone, speedPool.size, speedTsMap.size)
+                                }
+                                snap?.let { onProgress(it) }
+                            }
+                        }.awaitAll()
                     }
                 }
+            } else {
+                val deadSet = LinkedHashSet<String>(insecureRejected).apply { addAll(tcpDeadCleanList) }
+                if (deadSet.isNotEmpty()) onDeadDetected(deadSet)
             }
+        } finally {
+            activeSessions.forEach { engine.stopBatchDaemon(it) }
         }
+
+        if (okList.isEmpty()) return@withContext emptyList()
 
         val nowCompletedMs = System.currentTimeMillis()
         val merged = okList.map { r ->

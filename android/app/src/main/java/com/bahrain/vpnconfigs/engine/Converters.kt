@@ -127,10 +127,98 @@ object Converters {
         items.forEach { if (it.isNotBlank()) put(it.trim()) }
     }
 
+    private val SINGBOX_UTLS_FPS = setOf(
+        "chrome", "firefox", "edge", "safari", "360",
+        "qq", "ios", "android", "random", "randomized",
+    )
+
+    private val SINGBOX_SS_METHODS = setOf(
+        "2022-blake3-aes-128-gcm",
+        "2022-blake3-aes-256-gcm",
+        "2022-blake3-chacha20-poly1305",
+        "none",
+        "aes-128-gcm",
+        "aes-192-gcm",
+        "aes-256-gcm",
+        "chacha20-ietf-poly1305",
+        "xchacha20-ietf-poly1305",
+        "aes-128-ctr",
+        "aes-192-ctr",
+        "aes-256-ctr",
+        "aes-128-cfb",
+        "aes-192-cfb",
+        "aes-256-cfb",
+        "rc4-md5",
+        "chacha20-ietf",
+        "xchacha20",
+    )
+
+    private val SINGBOX_VMESS_SCY = setOf(
+        "auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305", "aes-128-ctr",
+    )
+
+    private val UUID_RE = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+    private val HEX_RE = Regex("^[0-9a-fA-F]*$")
+
+    /**
+     * تطبيع بصمة uTLS لتوافق sing-box 1.14.4 تمامًا (منع انهيار الدفعة عند وجود قيم Xray مثل fp=unsafe).
+     */
+    fun normalizeUtlsFingerprint(rawFp: String?): String {
+        val f = rawFp?.trim()?.lowercase().orEmpty()
+        if (f.isEmpty() || f == "none") return ""
+        if (f in SINGBOX_UTLS_FPS) return f
+        return when {
+            f.startsWith("firefox") -> "firefox"
+            f.startsWith("safari") -> "safari"
+            f.startsWith("ios") -> "ios"
+            f.startsWith("edge") -> "edge"
+            f.startsWith("android") -> "android"
+            f.startsWith("qq") -> "qq"
+            f.startsWith("360") -> "360"
+            else -> "chrome"
+        }
+    }
+
+    private fun normalizeVmessSecurity(rawScy: String?): String {
+        val s = rawScy?.trim()?.lowercase().orEmpty()
+        if (s.isEmpty()) return "auto"
+        if (s == "chacha20-ietf-poly1305") return "chacha20-poly1305"
+        return if (s in SINGBOX_VMESS_SCY) s else "auto"
+    }
+
+    private fun normalizeShadowsocksMethod(rawMethod: String, password: String): String? {
+        val lower = rawMethod.trim().lowercase()
+        val mapped = when (lower) {
+            "chacha20-poly1305" -> "chacha20-ietf-poly1305"
+            "xchacha20-poly1305" -> "xchacha20-ietf-poly1305"
+            else -> lower
+        }
+        if (mapped !in SINGBOX_SS_METHODS) return null
+        if (mapped.startsWith("2022-blake3-")) {
+            val expectedLen = if (mapped.contains("128")) 16 else 32
+            val keyPart = password.substringAfterLast(':')
+            val okKey = try {
+                b64(keyPart).size == expectedLen
+            } catch (_: Exception) {
+                false
+            }
+            if (!okKey) return null
+        }
+        return mapped
+    }
+
+    private fun normalizeRealityShortId(rawSid: String?): String? {
+        val s = rawSid?.trim().orEmpty()
+        if (s.isEmpty()) return ""
+        if (s.length > 16 || !HEX_RE.matches(s)) return null
+        return if (s.length % 2 == 1) "0$s" else s
+    }
+
     private fun tlsBlock(
         host: String,
         q: Map<String, String>,
         defaultAlpn: List<String>? = null,
+        allowUtls: Boolean = true,
     ): JSONObject {
         val t = JSONObject()
         t.put("enabled", true)
@@ -140,9 +228,11 @@ object Converters {
             "insecure",
             q["allowInsecure"] in listOf("1", "true") || q["insecure"] in listOf("1", "true"),
         )
-        val fp = q["fp"]?.trim()
-        if (!fp.isNullOrBlank() && !fp.equals("none", ignoreCase = true)) {
-            t.put("utls", JSONObject().put("enabled", true).put("fingerprint", fp))
+        if (allowUtls) {
+            val normFp = normalizeUtlsFingerprint(q["fp"])
+            if (normFp.isNotEmpty()) {
+                t.put("utls", JSONObject().put("enabled", true).put("fingerprint", normFp))
+            }
         }
         val alpnRaw = q["alpn"]
         if (!alpnRaw.isNullOrBlank()) {
@@ -154,10 +244,15 @@ object Converters {
         return t
     }
 
-    private fun realityBlock(q: Map<String, String>): JSONObject = JSONObject()
-        .put("enabled", true)
-        .put("public_key", q["pbk"] ?: "")
-        .put("short_id", q["sid"] ?: "")
+    private fun realityBlock(q: Map<String, String>): JSONObject? {
+        val sid = normalizeRealityShortId(q["sid"]) ?: return null
+        val pbk = q["pbk"]?.trim().orEmpty()
+        if (pbk.isEmpty()) return null
+        return JSONObject()
+            .put("enabled", true)
+            .put("public_key", pbk)
+            .put("short_id", sid)
+    }
 
     /** نقل البيانات (transport) — null يعني TCP خام. */
     private fun transportOf(net: String?, q: Map<String, String>): JSONObject? = when (net) {
@@ -224,18 +319,19 @@ object Converters {
             .put("uuid", uuid)
 
         val flow = q["flow"]?.trim()
-        if (!flow.isNullOrBlank() && (net == "tcp" || net == "raw")) {
-            ob.put("flow", flow)
+        if (flow.equals("xtls-rprx-vision", ignoreCase = true) && (net == "tcp" || net == "raw")) {
+            ob.put("flow", "xtls-rprx-vision")
         }
 
         when (q["security"]?.lowercase()) {
             "tls" -> ob.put("tls", tlsBlock(host, q))
             "reality" -> {
+                val r = realityBlock(q) ?: return null
                 val t = tlsBlock(host, q)
                 if (!t.has("utls")) {
                     t.put("utls", JSONObject().put("enabled", true).put("fingerprint", "chrome"))
                 }
-                t.put("reality", realityBlock(q))
+                t.put("reality", r)
                 ob.put("tls", t)
             }
         }
@@ -261,7 +357,7 @@ object Converters {
             .put("server_port", port)
             .put("uuid", uuid)
             .put("alter_id", aid)
-            .put("security", json.optString("scy", "auto").ifBlank { "auto" })
+            .put("security", normalizeVmessSecurity(json.optString("scy", "auto")))
 
         val tlsVal = json.optString("tls").trim().lowercase()
         if (tlsVal in listOf("tls", "reality", "true", "1")) {
@@ -274,9 +370,8 @@ object Converters {
                 .put("enabled", true)
                 .put("server_name", sni)
                 .put("insecure", insecure)
-            val fp = json.optString("fp").trim()
-            val chosenFp = if (fp.isBlank() || fp.equals("none", true)) "chrome" else fp
-            t.put("utls", JSONObject().put("enabled", true).put("fingerprint", chosenFp))
+            val normFp = normalizeUtlsFingerprint(json.optString("fp")).ifEmpty { "chrome" }
+            t.put("utls", JSONObject().put("enabled", true).put("fingerprint", normFp))
             val alpn = json.optString("alpn")
             if (alpn.isNotBlank()) {
                 val list = alpn.split(",").map { it.trim() }.filter { it.isNotBlank() }
@@ -315,11 +410,12 @@ object Converters {
         when (q["security"]?.lowercase()) {
             "none" -> { /* بلا TLS */ }
             "reality" -> {
+                val r = realityBlock(q) ?: return null
                 val t = tlsBlock(host, q)
                 if (!t.has("utls")) {
                     t.put("utls", JSONObject().put("enabled", true).put("fingerprint", "chrome"))
                 }
-                t.put("reality", realityBlock(q))
+                t.put("reality", r)
                 ob.put("tls", t)
             }
             else -> ob.put("tls", tlsBlock(host, q, listOf("h2", "http/1.1")))
@@ -337,13 +433,13 @@ object Converters {
 
         fun build(method: String, password: String, rawHost: String, port: Int): JSONObject? {
             val host = stripBrackets(rawHost)
-            val m = method.trim()
-            if (host.isBlank() || !validPort(port) || m.isBlank()) return null
+            val normMethod = normalizeShadowsocksMethod(method, password) ?: return null
+            if (host.isBlank() || !validPort(port)) return null
             return JSONObject()
                 .put("type", "shadowsocks")
                 .put("server", host)
                 .put("server_port", port)
-                .put("method", m)
+                .put("method", normMethod)
                 .put("password", password)
         }
 
@@ -450,7 +546,7 @@ object Converters {
             .put("type", "hysteria2")
             .put("server", host)
             .put("password", dec(userInfo))
-            .put("tls", tlsBlock(host, q, listOf("h3")))
+            .put("tls", tlsBlock(host, q, listOf("h3"), allowUtls = false))
 
         if (hasHopping) {
             val ranges = ArrayList<String>()
@@ -494,7 +590,13 @@ object Converters {
         val port = u.port.takeIf { it > 0 } ?: 443
         val rawUser = u.encodedUserInfo ?: ""
         val uuid = dec(rawUser.substringBefore(":")).trim()
-        if (host.isBlank() || uuid.isBlank() || !validPort(port)) return null
+        if (host.isBlank() || !UUID_RE.matches(uuid) || !validPort(port)) return null
+        val cc = q["congestion_control"]?.trim()?.lowercase()?.takeIf {
+            it in setOf("cubic", "new_reno", "bbr")
+        } ?: "bbr"
+        val relayMode = q["udp_relay_mode"]?.trim()?.lowercase()?.takeIf {
+            it in setOf("native", "quic")
+        } ?: "native"
 
         return JSONObject()
             .put("type", "tuic")
@@ -502,9 +604,9 @@ object Converters {
             .put("server_port", port)
             .put("uuid", uuid)
             .put("password", dec(rawUser.substringAfter(":", "")))
-            .put("congestion_control", q["congestion_control"]?.ifBlank { "bbr" } ?: "bbr")
-            .put("udp_relay_mode", q["udp_relay_mode"]?.ifBlank { "native" } ?: "native")
-            .put("tls", tlsBlock(host, q, listOf("h3")))
+            .put("congestion_control", cc)
+            .put("udp_relay_mode", relayMode)
+            .put("tls", tlsBlock(host, q, listOf("h3"), allowUtls = false))
     }
 
     // ───────────────────────── socks / socks5 ─────────────────────────

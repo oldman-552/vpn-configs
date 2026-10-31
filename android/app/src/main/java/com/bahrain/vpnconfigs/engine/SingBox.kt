@@ -8,6 +8,7 @@
 package com.bahrain.vpnconfigs.engine
 
 import android.content.Context
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -314,8 +315,29 @@ class SingBox(private val ctx: Context) {
         return conf.toString()
     }
 
+    private fun isOutboundBatchSafe(out: JSONObject): Boolean {
+        val tls = out.optJSONObject("tls") ?: return true
+        val reality = tls.optJSONObject("reality") ?: return true
+        if (!reality.optBoolean("enabled", false)) return true
+        val pbk = reality.optString("public_key", "").trim()
+            .replace('-', '+')
+            .replace('_', '/')
+        if (pbk.isEmpty()) return false
+        val padded = pbk + "=".repeat((4 - pbk.length % 4) % 4)
+        val okKey = try {
+            Base64.decode(padded, Base64.DEFAULT).size == 32
+        } catch (_: Exception) {
+            false
+        }
+        if (!okKey) return false
+        val sid = reality.optString("short_id", "")
+        return sid.length <= 16 && sid.length % 2 == 0 && sid.all {
+            it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F'
+        }
+    }
+
     /**
-     * بناء ملف إعداد دفعي متوافق 100% مع sing-box 1.14.4 يجمع حتى 50 كونفيق داخل عملية نظام واحدة فقط:
+     * بناء ملف إعداد دفعي متوافق 100% مع sing-box 1.14.4 يجمع حتى مئات الكونفيقات داخل عملية نظام واحدة فقط:
      * يربط كل منفذ محلي `in-$i` (`127.0.0.1:port_i`) بالـ outbound المشفّر المقابل `proxy-$i`
      * مما يقضي نهائيًا على بطء تشغيل 500 عملية منفصلة ويجعل فحص الـ 500 كونفيق يتم خلال ثوانٍ.
      */
@@ -338,11 +360,20 @@ class SingBox(private val ctx: Context) {
             if (listenPort !in 1025..65534 || !usedPorts.add(listenPort)) return@forEachIndexed
             if (WarpManager.isWarp(cfg)) return@forEachIndexed
             val out = Converters.toOutbound(cfg) ?: return@forEachIndexed
+            if (!isOutboundBatchSafe(out)) return@forEachIndexed
             val slotIdx = validSlots.size
             val inTag = "in-$slotIdx"
             val outTag = "proxy-$slotIdx"
 
-            if (applyFrag) TlsFragment.apply(out)
+            if (applyFrag) {
+                val tls = out.optJSONObject("tls")
+                val isQuic = out.optString("type") in setOf("hysteria2", "tuic", "wireguard")
+                val isReality = tls?.optJSONObject("reality")?.optBoolean("enabled") == true
+                if (tls != null && tls.optBoolean("enabled") && !isQuic && !isReality) {
+                    // Use zero-delay record_fragment during batch scanning to avoid 500ms per-socket fallback sleeps
+                    tls.put("record_fragment", true)
+                }
+            }
             out.put("tag", outTag)
             out.put("domain_resolver", "bootstrap")
 
@@ -405,53 +436,90 @@ class SingBox(private val ctx: Context) {
         items: List<Pair<String, Int>>,
         dnsServer: String = "1.1.1.1",
         useDoh: Boolean = false,
-        waitMs: Long = 2400L,
+        waitMs: Long = 1800L,
     ): BatchDaemonSession? {
-        if (!isAvailable) return null
-        val built = buildBatchConfig(items, dnsServer, useDoh) ?: return null
-        val (json, slots) = built
-        val firstPort = slots.first().listenPort
-        val lastPort = slots.last().listenPort
-        val confFile = File(tmpDir, "cfg-batch-$firstPort-${System.nanoTime() and 0xFFFFF}.json")
-        confFile.writeText(json, Charsets.UTF_8)
+        if (!isAvailable || items.isEmpty()) return null
+        var candidateItems = items.toList()
+        val slotErrRegex = Regex("""(?:proxy-|in-|outbounds?\[|inbounds?\[)(\d+)""")
+        val portErrRegex = Regex("""127\.0\.0\.1:(\d+)""")
 
-        val devNull = File("/dev/null")
-        var proc: Process? = null
-        return try {
-            val pb = ProcessBuilder(binaryPath, "run", "-c", confFile.absolutePath)
-            if (devNull.exists()) {
-                pb.redirectOutput(devNull)
-                pb.redirectError(devNull)
-            } else {
-                pb.redirectErrorStream(true)
-            }
-            proc = pb.start()
+        for (attempt in 0 until 4) {
+            if (candidateItems.isEmpty() || Thread.currentThread().isInterrupted) return null
+            val built = buildBatchConfig(candidateItems, dnsServer, useDoh) ?: return null
+            val (json, slots) = built
+            val firstPort = slots.first().listenPort
+            val lastPort = slots.last().listenPort
+            val nonce = System.nanoTime() and 0xFFFFF
+            val confFile = File(tmpDir, "cfg-batch-$firstPort-$nonce.json")
+            val errFile = File(tmpDir, "cfg-batch-$firstPort-$nonce.err")
+            confFile.writeText(json, Charsets.UTF_8)
 
-            val deadline = System.currentTimeMillis() + waitMs
-            var up = false
-            while (System.currentTimeMillis() < deadline) {
-                if (Thread.currentThread().isInterrupted || !proc.isAlive) break
-                try {
-                    Socket().use { s -> s.connect(InetSocketAddress("127.0.0.1", firstPort), 40) }
-                    if (lastPort != firstPort) {
-                        Socket().use { s -> s.connect(InetSocketAddress("127.0.0.1", lastPort), 40) }
+            val devNull = File("/dev/null")
+            var proc: Process? = null
+            try {
+                val pb = ProcessBuilder(binaryPath, "run", "-c", confFile.absolutePath)
+                if (devNull.exists()) pb.redirectOutput(devNull)
+                pb.redirectError(errFile)
+                proc = pb.start()
+
+                val deadline = System.currentTimeMillis() + waitMs
+                var up = false
+                while (System.currentTimeMillis() < deadline) {
+                    if (Thread.currentThread().isInterrupted || !proc.isAlive) break
+                    try {
+                        Socket().use { s -> s.connect(InetSocketAddress("127.0.0.1", firstPort), 35) }
+                        if (lastPort != firstPort) {
+                            Socket().use { s -> s.connect(InetSocketAddress("127.0.0.1", lastPort), 35) }
+                        }
+                        up = true
+                        break
+                    } catch (_: Exception) {
+                        Thread.sleep(6)
                     }
-                    up = true
-                    break
-                } catch (_: Exception) {
-                    Thread.sleep(8)
                 }
-            }
-            if (!up) {
+                if (up) {
+                    runCatching { errFile.delete() }
+                    return BatchDaemonSession(proc, confFile, slots)
+                }
+
+                // Surgical excision: read stderr to remove ONLY the offending slot/port without slow log2(N) bisection!
+                val errText = runCatching {
+                    if (errFile.exists()) errFile.readText(Charsets.UTF_8).take(8192) else ""
+                }.getOrDefault("")
                 stopProcessForcibly(proc, confFile)
-                null
-            } else {
-                BatchDaemonSession(proc, confFile, slots)
+                runCatching { errFile.delete() }
+
+                if (attempt >= 3 || candidateItems.size <= 1 || errText.isBlank()) return null
+
+                val badSlotIndices = slotErrRegex.findAll(errText)
+                    .mapNotNull { it.groupValues.getOrNull(1)?.toIntOrNull() }
+                    .filter { it in slots.indices }
+                    .toSet()
+                val badPorts = portErrRegex.findAll(errText)
+                    .mapNotNull { it.groupValues.getOrNull(1)?.toIntOrNull() }
+                    .toSet()
+
+                if (badSlotIndices.isNotEmpty()) {
+                    val dropRawIndices = badSlotIndices.map { slots[it].index }.toSet()
+                    candidateItems = candidateItems.filterIndexed { idx, _ -> idx !in dropRawIndices }
+                    continue
+                }
+                if (badPorts.isNotEmpty()) {
+                    val freshPorts = Tester.allocateFreePorts(badPorts.size)
+                    var fpIdx = 0
+                    candidateItems = candidateItems.map { (c, p) ->
+                        if (p in badPorts && fpIdx < freshPorts.size) c to freshPorts[fpIdx++] else c to p
+                    }
+                    continue
+                }
+                return null
+            } catch (_: Exception) {
+                stopProcessForcibly(proc, confFile)
+                runCatching { errFile.delete() }
+                return null
             }
-        } catch (_: Exception) {
-            stopProcessForcibly(proc, confFile)
-            null
         }
+        return null
     }
 
     fun stopBatchDaemon(session: BatchDaemonSession?) {
