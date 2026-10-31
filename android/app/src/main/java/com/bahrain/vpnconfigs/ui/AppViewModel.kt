@@ -1681,7 +1681,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 .put("last_ul_mbps", spd.uploadMbps)
                 .put("last_ping_ms", spd.pingMs)
         }
+        val clean = com.bahrain.vpnconfigs.util.DiagnosticRedactor::clean
+        val vpn = com.bahrain.vpnconfigs.vpn.VpnStateManager.status.value
+        o.put("generated_at", java.time.Instant.now().toString())
+            .put("android_sdk", android.os.Build.VERSION.SDK_INT)
+            .put("device", "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            .put("vpn_phase", vpn.phase.name)
+            .put("underlying_network", vpn.underlyingNetwork)
+            .put("metered", vpn.isMeteredNetwork)
+            .put("kill_switch_active", vpn.killSwitchActive)
+            .put("failover_mode", vpn.failoverMode)
+            .put("failover_count", vpn.failoverCount)
+            .put("reconnect_attempt", vpn.reconnectAttempt)
+            .put("last_error", clean(vpn.error))
+            .put("recent_events", org.json.JSONArray(vpn.recentEvents.take(30).map(clean)))
+            .put("recent_issues", org.json.JSONArray(h.recentIssues.take(30).map(clean)))
         return o.toString(2)
+    }
+
+    /** Writes the redacted report to app storage and returns the file for sharing. */
+    fun writeRedactedDiagnosticReportFile(): java.io.File {
+        val dir = java.io.File(getApplication<android.app.Application>().filesDir, "diagnostics").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+        return java.io.File(dir, "bahrain-vpn-diagnostics-$stamp.json").apply {
+            writeText(buildRedactedDiagnosticReportJson(), Charsets.UTF_8)
+        }
     }
 
     fun downloadAndInstallSignedUpdate() {
