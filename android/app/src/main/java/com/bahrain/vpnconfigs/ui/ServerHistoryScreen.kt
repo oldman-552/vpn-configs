@@ -124,6 +124,10 @@ fun ServerHistoryScreen(
 
         Spacer(Modifier.height(8.dp))
 
+        UsageStatsCard(dateRangeDays = dateRangeDays, refreshKey = totalMatchingCount)
+
+        Spacer(Modifier.height(8.dp))
+
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchChange,
