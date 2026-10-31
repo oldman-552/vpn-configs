@@ -53,6 +53,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bahrain.vpnconfigs.data.ProtectionEventRecord
+import com.bahrain.vpnconfigs.util.AppI18n
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.vpn.DiagnosticOutcome
 import com.bahrain.vpnconfigs.vpn.KillSwitchController
 import com.bahrain.vpnconfigs.vpn.ResourceTelemetrySnapshot
@@ -91,12 +93,12 @@ fun SecurityStatusScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "تصنيف الأمان وفحص التسرب",
+                    text = tr("تصنيف الأمان وفحص التسرب", "Security & Leak Verification"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "آخر تقييم: ${timeFmt.format(Date(report.checkedAtMs))}",
+                    text = tr("آخر تقييم: ${timeFmt.format(Date(report.checkedAtMs))}", "Last checked: ${timeFmt.format(Date(report.checkedAtMs))}"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -107,7 +109,7 @@ fun SecurityStatusScreen(
             ) {
                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(if (runningDiagnostics) "جارٍ الفحص…" else "فحص الآن")
+                Text(if (runningDiagnostics) tr("جارٍ الفحص…", "Checking…") else tr("فحص الآن", "Run Check"))
             }
         }
 
@@ -122,13 +124,13 @@ fun SecurityStatusScreen(
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Text(
-                    text = report.headlineAr,
+                    text = tr(report.headlineAr, report.headlineEn),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = report.headlineEn,
+                    text = tr(report.headlineEn, report.headlineAr),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -146,7 +148,7 @@ fun SecurityStatusScreen(
                         }
                         AssistChip(
                             onClick = {},
-                            label = { Text("${st.name} • ${st.titleAr}") },
+                            label = { Text("${st.name} • ${tr(st.titleAr, st.titleEn)}") },
                             colors = AssistChipDefaults.assistChipColors(
                                 labelColor = chipColor,
                             ),
@@ -180,14 +182,30 @@ fun SecurityStatusScreen(
 
         // 1) Tunnel & Encryption + Operator Trust Card
         SecurityDetailSection(
-            title = "١. حالة النفق، التشفير، وهوية المشغّل",
+            title = tr("١. حالة النفق، التشفير، وهوية المشغّل", "1. Tunnel, Encryption & Operator Trust"),
             icon = Icons.Default.Lock,
         ) {
-            KeyValRow("حالة نفق الـ VPN", if (report.tunnelEstablished) "متّصل ومُتحقّق من مرور البيانات" else "غير متّصل")
-            KeyValRow("التحقق من تشفير النقل", if (report.encryptionVerified) "موثّق (${report.encryptionDetailAr})" else report.encryptionDetailAr)
-            KeyValRow("ثقة مشغّل السيرفر", report.serverTrustLabelAr)
+            KeyValRow(
+                tr("حالة نفق الـ VPN", "VPN Tunnel State"),
+                if (report.tunnelEstablished) tr("متّصل ومُتحقّق من مرور البيانات", "Established & Verified")
+                else tr("غير متّصل", "Disconnected"),
+            )
+            KeyValRow(
+                tr("التحقق من تشفير النقل", "Transport Encryption"),
+                if (report.encryptionVerified) tr("موثّق (${report.encryptionDetailAr})", "Verified (${report.encryptionDetailAr})")
+                else report.encryptionDetailAr,
+            )
+            KeyValRow(
+                tr("ثقة مشغّل السيرفر", "Operator Trust"),
+                if (AppI18n.isEnglish && !report.serverTrustVerified) "Unverified Public Operator (UNKNOWN_SERVER_TRUST)"
+                else if (AppI18n.isEnglish) "Managed VIP Node"
+                else report.serverTrustLabelAr,
+            )
             Text(
-                text = "ملاحظة شفافية: تشفير النفق يحمي بياناتك من مزوّد الإنترنت المحلي والشبكات العامة، لكن السيرفرات العامة المجانية يديرها أطراف غير موثّقين؛ لا تفترض عدم احتفاظ المشغّل بالسجلات.",
+                text = tr(
+                    "ملاحظة شفافية: تشفير النفق يحمي بياناتك من مزوّد الإنترنت المحلي والشبكات العامة، لكن السيرفرات العامة المجانية يديرها أطراف غير موثّقين؛ لا تفترض عدم احتفاظ المشغّل بالسجلات.",
+                    "Transparency note: Tunnel encryption protects traffic from your local ISP and public Wi-Fi, but public community nodes are operated by unverified third parties — never assume zero-logging.",
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -195,14 +213,20 @@ fun SecurityStatusScreen(
 
         // 2) DNS & IPv6 Leak Protection Card
         SecurityDetailSection(
-            title = "٢. حماية تسرب DNS ومسار IPv6",
+            title = tr("٢. حماية تسرب DNS ومسار IPv6", "2. DNS & IPv6 Leak Protection"),
             icon = Icons.Default.Dns,
         ) {
-            KeyValRow("نتيجة فحص DNS", report.dnsCheck.outcome.labelAr)
-            KeyValRow("محلّل DNS المُعدّ", "${report.dnsCheck.configuredResolver} (${if (report.dnsCheck.usesEncryptedDoh) "DoH مشفّر" else "داخل النفق"})")
-            Text(text = report.dnsCheck.explanationAr, style = MaterialTheme.typography.bodySmall)
+            KeyValRow(tr("نتيجة فحص DNS", "DNS Check"), tr(report.dnsCheck.outcome.labelAr, report.dnsCheck.outcome.labelEn))
+            KeyValRow(
+                tr("محلّل DNS المُعدّ", "Configured DNS"),
+                "${report.dnsCheck.configuredResolver} (${if (report.dnsCheck.usesEncryptedDoh) tr("DoH مشفّر", "Encrypted DoH") else tr("داخل النفق", "In-Tunnel")})",
+            )
+            Text(text = tr(report.dnsCheck.explanationAr, report.dnsCheck.explanationEn), style = MaterialTheme.typography.bodySmall)
             Text(
-                text = report.dnsCheck.limitationNoteAr,
+                text = tr(
+                    report.dnsCheck.limitationNoteAr,
+                    "This check inspects active local routing and TUN DNS capture; full end-to-end recursive DNS verification requires live external probing.",
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -212,20 +236,15 @@ fun SecurityStatusScreen(
             Spacer(Modifier.height(8.dp))
 
             KeyValRow(
-                "نتيجة فحص IPv6",
-                when (report.ipv6Check.outcome) {
-                    DiagnosticOutcome.PROTECTED -> "محمي داخل النفق"
-                    DiagnosticOutcome.UNAVAILABLE_SAFE -> "غير متوفّر على الشبكة (آمن)"
-                    DiagnosticOutcome.LEAK_DETECTED -> "رُصد احتمال تسرب!"
-                    DiagnosticOutcome.INCONCLUSIVE -> "غير حاسم (النفق متوقف)"
-                }
+                tr("نتيجة فحص IPv6", "IPv6 Check"),
+                tr(report.ipv6Check.outcome.labelAr, report.ipv6Check.outcome.labelEn),
             )
-            Text(text = report.ipv6Check.explanationAr, style = MaterialTheme.typography.bodySmall)
+            Text(text = tr(report.ipv6Check.explanationAr, report.ipv6Check.explanationEn), style = MaterialTheme.typography.bodySmall)
         }
 
         // 3) Kill Switch (App-level Fail-Closed vs Android OS Always-On Lockdown)
         SecurityDetailSection(
-            title = "٣. مفتاح الإيقاف الصارم (Kill Switch)",
+            title = tr("٣. مفتاح الإيقاف الصارم (Kill Switch)", "3. Strict Fail-Closed Kill Switch"),
             icon = Icons.Default.Security,
         ) {
             Row(
@@ -234,10 +253,19 @@ fun SecurityStatusScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("مفتاح الإيقاف الوقائي داخل التطبيق", fontWeight = FontWeight.SemiBold)
+                    Text(tr("مفتاح الإيقاف الوقائي داخل التطبيق", "In-App Fail-Closed Kill Switch"), fontWeight = FontWeight.SemiBold)
                     Text(
-                        text = if (appKillSwitchEnabled) "نشط: يحتجز واجهة TUN ويمنع الارتداد للشبكة العادية عند سقوط النفق"
-                        else "متوقف: يسمح بعودة الإنترنت المباشر عند فشل جميع السيرفرات",
+                        text = if (appKillSwitchEnabled) {
+                            tr(
+                                "نشط: يحتجز واجهة TUN ويمنع الارتداد للشبكة العادية عند سقوط النفق",
+                                "Active: Holds TUN interface to prevent fallback to unprotected network if tunnel drops",
+                            )
+                        } else {
+                            tr(
+                                "متوقف: يسمح بعودة الإنترنت المباشر عند فشل جميع السيرفرات",
+                                "Off: Allows direct internet fallback if all VPN servers fail",
+                            )
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -247,15 +275,16 @@ fun SecurityStatusScreen(
 
             Spacer(Modifier.height(8.dp))
             KeyValRow(
-                "القفل الصارم من نظام أندرويد (OS Lockdown)",
-                if (report.killSwitchOsConfirmed) "مؤكّد ونشط من النظام ✓" else "غير مفعّل في إعدادات أندرويد",
+                tr("القفل الصارم من نظام أندرويد (OS Lockdown)", "Android OS VPN Lockdown"),
+                if (report.killSwitchOsConfirmed) tr("مؤكّد ونشط من النظام ✓", "Confirmed Active by OS ✓")
+                else tr("غير مفعّل في إعدادات أندرويد", "Not enabled in Android settings"),
             )
             if (lastProtectionEvent.isNotBlank()) {
-                KeyValRow("آخر حدث حماية مسجّل", lastProtectionEvent)
+                KeyValRow(tr("آخر حدث حماية مسجّل", "Last Protection Event"), lastProtectionEvent)
             }
 
             Spacer(Modifier.height(6.dp))
-            KillSwitchController.ALWAYS_ON_STEPS_AR.forEach { step ->
+            KillSwitchController.alwaysOnSteps().forEach { step ->
                 Text(text = step, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
@@ -266,12 +295,16 @@ fun SecurityStatusScreen(
             ) {
                 Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("فتح إعدادات VPN في أندرويد لتفعيل القفل الدائم")
+                Text(tr("فتح إعدادات VPN في أندرويد لتفعيل القفل الدائم", "Open Android VPN Settings (Always-on Lockdown)"))
             }
 
             if (protectionEvents.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Text("سجل أحداث الحماية الأخيرة:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    tr("سجل أحداث الحماية الأخيرة:", "Recent Protection Events:"),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
                 protectionEvents.take(4).forEach { ev ->
                     Text(
                         text = "• [${timeFmt.format(Date(ev.eventAtMs))}] ${ev.titleAr}",
@@ -284,14 +317,14 @@ fun SecurityStatusScreen(
 
         // 4) Battery & Resource Efficiency Telemetry (Part 2.8)
         SecurityDetailSection(
-            title = "٤. كفاءة استهلاك البطارية والموارد",
+            title = tr("٤. كفاءة استهلاك البطارية والموارد", "4. Battery & Resource Efficiency"),
             icon = Icons.Default.BatterySaver,
         ) {
-            KeyValRow("وقت المعالج التراكمي / النسبة", "${resourceSnapshot.cpuTimeMs} ms (${resourceSnapshot.estimatedCpuPct}%)")
-            KeyValRow("الذاكرة المستخدمة (Heap / PSS)", "${resourceSnapshot.javaHeapMb} MB / ${resourceSnapshot.nativePssMb} MB")
-            KeyValRow("فترة الفحص التكيّفية الحالية", "${resourceSnapshot.activePollingIntervalMs / 1000} ثانية")
-            KeyValRow("الفحوصات الخلفية / الإعادات", "${resourceSnapshot.backgroundProbesCount} (${resourceSnapshot.probesPerMinute}/د) • ${resourceSnapshot.reconnectCount} إعادة")
-            KeyValRow("أقفال الإيقاظ الممسوكة (WakeLocks)", "${resourceSnapshot.wakeLocksHeld} (صفر أقفال لتوفير الطاقة)")
+            KeyValRow(tr("وقت المعالج التراكمي / النسبة", "Cumulative CPU / Load"), "${resourceSnapshot.cpuTimeMs} ms (${resourceSnapshot.estimatedCpuPct}%)")
+            KeyValRow(tr("الذاكرة المستخدمة (Heap / PSS)", "Memory Usage (Heap / PSS)"), "${resourceSnapshot.javaHeapMb} MB / ${resourceSnapshot.nativePssMb} MB")
+            KeyValRow(tr("فترة الفحص التكيّفية الحالية", "Adaptive Probe Interval"), tr("${resourceSnapshot.activePollingIntervalMs / 1000} ثانية", "${resourceSnapshot.activePollingIntervalMs / 1000} sec"))
+            KeyValRow(tr("الفحوصات الخلفية / الإعادات", "Background Probes / Reconnects"), tr("${resourceSnapshot.backgroundProbesCount} (${resourceSnapshot.probesPerMinute}/د) • ${resourceSnapshot.reconnectCount} إعادة", "${resourceSnapshot.backgroundProbesCount} (${resourceSnapshot.probesPerMinute}/min) • ${resourceSnapshot.reconnectCount} reconnects"))
+            KeyValRow(tr("أقفال الإيقاظ الممسوكة (WakeLocks)", "Held WakeLocks"), tr("${resourceSnapshot.wakeLocksHeld} (صفر أقفال لتوفير الطاقة)", "${resourceSnapshot.wakeLocksHeld} (zero wake-locks for battery saving)"))
         }
 
         Spacer(Modifier.height(16.dp))

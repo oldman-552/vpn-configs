@@ -1,5 +1,5 @@
 // =====================================================================
-// AppUpdateManager.kt — نظام إشعارات التحديث الذكي المتوافق مع Play Protect (v3.5).
+// AppUpdateManager.kt — نظام إشعارات التحديث الذكي المتوافق مع Play Protect (v1).
 // يختار تلقائيًا حزمة المعالج المناسبة (arm64-v8a / x86_64 / universal)،
 // يتحقق من أمان رابط HTTPS الرسمي، ويعرض/ينسخ بصمة SHA-256، ثم يفوّض التحميل
 // لمتصفح النظام الرسمي بدل تنزيل أو تثبيت ملفات APK داخليًا (Zero Dropper Behavior).
@@ -12,6 +12,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import com.bahrain.vpnconfigs.util.tr
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -37,8 +38,8 @@ object AppUpdateManager {
     }.getOrDefault(13)
 
     fun currentVersionName(ctx: Context): String = runCatching {
-        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "3.5"
-    }.getOrDefault("3.5")
+        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1.0"
+    }.getOrDefault("1.0")
 
     /**
      * يحسم الحزمة الأنسب لمعمارية معالج الهاتف (مثل arm64-v8a لتوفير ~50% من الحجم)
@@ -152,7 +153,7 @@ object AppUpdateManager {
      */
     fun buildSafeBrowserUpdateIntent(info: AppUpdateInfo): Result<Intent> {
         val safeUri = validateSafeUpdateHttpsUrl(info.apkUrl)
-            ?: return Result.failure(SecurityException("رابط التحديث غير آمن — يُسمح بروابط HTTPS الرسمية فقط"))
+            ?: return Result.failure(SecurityException(tr("رابط التحديث غير آمن — يُسمح بروابط HTTPS الرسمية فقط", "Unsafe update URL — only official HTTPS URLs are permitted")))
         val intent = Intent(Intent.ACTION_VIEW, safeUri).apply {
             addCategory(Intent.CATEGORY_BROWSABLE)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -162,7 +163,7 @@ object AppUpdateManager {
 
     fun openVerifiedUpdateInSystemBrowser(ctx: Context, info: AppUpdateInfo): Result<Uri> {
         val safeUri = validateSafeUpdateHttpsUrl(info.apkUrl)
-            ?: return Result.failure(SecurityException("رابط التحديث غير آمن — يُسمح بروابط HTTPS الرسمية فقط"))
+            ?: return Result.failure(SecurityException(tr("رابط التحديث غير آمن — يُسمح بروابط HTTPS الرسمية فقط", "Unsafe update URL — only official HTTPS URLs are permitted")))
         return runCatching {
             if (info.apkSha256.length == 64) {
                 runCatching {

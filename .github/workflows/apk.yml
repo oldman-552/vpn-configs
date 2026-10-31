@@ -286,14 +286,18 @@ jobs:
             out/SHA256SUMS.txt
           retention-days: 30
 
-      - name: Publish User & Admin APKs to GitHub Releases
+      - name: Publish Official v1 Release to GitHub Releases
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VER_NAME=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)
-          VER_TAG="v${VER_NAME:-3.5}"
-          NOTES="منصة **ULTIMATE VPN ENTERPRISE (${VER_TAG})** المتكاملة — تشمل معمارية **Central GitHub Top 500 + Local Android Personalized Top 50** المنفصلة لشبكتي \`Wi-Fi\` و\`Mobile Data\`، التوافق الأمني الكامل مع **Google Play Protect** (إزالة صلاحية وكود \`REQUEST_INSTALL_PACKAGES / Dropper\` وتوقيع إصدار \`RSA-4096 APK Signature v2/v3\` بدل شهادة \`Debug\`)، الفحص التسلسلي عبر النفق الحقيقي (\`Quick Scan\` / \`Full Scan\`)، تقليص الحجم عبر \`R8\`، التحديث الآمن عبر المتصفح حسب المعمارية (\`arm64-v8a\` / \`x86_64\`)، عُقد **VIP المشفّرة (\`AES-256-GCM\`)**، مفتاح الإيقاف الصارم، وتطبيق المشرف المستقل \`app-admin-release.apk\`."
+          if [ "${VER_NAME}" = "1.0" ] || [ "${VER_NAME}" = "1" ] || [ -z "${VER_NAME}" ]; then
+            VER_TAG="v1"
+          else
+            VER_TAG="v${VER_NAME}"
+          fi
+          NOTES="الإصدار الرسمي المعتمد **bahrain-vpn (${VER_TAG})** — يدعم اللغتين **العربية (اللغة الأساسية RTL) والإنجليزية (LTR)** مع التبديل الفوري الحي، ومعمارية **Central GitHub Top 500 + Local Android Personalized Top 50** المنفصلة لشبكتي \`Wi-Fi\` و\`Mobile Data\`، والتوافق الأمني الكامل مع **Google Play Protect** (توقيع رسمي \`RSA-4096 APK Signature v1/v2/v3\` وبدون صلاحيات \`Dropper\`)، والفحص التسلسلي عبر النفق الحقيقي (\`Quick Scan\` / \`Full Scan\`)، وتقليص الحجم عبر \`R8\`، وعُقد **VIP المشفّرة (\`AES-256-GCM\`)**، ومفتاح الإيقاف الصارم، وتطبيق الإدارة المستقل \`app-admin-release.apk\`."
 
           publish_release() {
             local tag="$1"
@@ -313,12 +317,8 @@ jobs:
           }
 
           if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            if gh release view "latest-apk" >/dev/null 2>&1; then
-              gh release delete-asset "latest-apk" "app-debug.apk" --yes >/dev/null 2>&1 || true
-            fi
-            publish_release "latest-apk" "bahrain-vpn ${VER_TAG} (latest-apk)" "--latest=false"
             publish_release "${VER_TAG}" "bahrain-vpn ${VER_TAG}" "--latest"
-            echo "::notice::Published tags: ${VER_TAG} (Latest) and latest-apk -> ${GITHUB_SHA}"
+            echo "::notice::Published official release tag: ${VER_TAG} (Latest) -> ${GITHUB_SHA}"
           else
             publish_release "${GITHUB_REF_NAME}" "bahrain-vpn ${GITHUB_REF_NAME}" "--latest"
             echo "::notice::Published tag: ${GITHUB_REF_NAME} -> ${GITHUB_SHA}"

@@ -59,6 +59,7 @@ import com.bahrain.vpnconfigs.data.FavoriteServerRecord
 import com.bahrain.vpnconfigs.data.FavoriteSortOrder
 import com.bahrain.vpnconfigs.data.LocalServerTelemetry
 import com.bahrain.vpnconfigs.engine.Converters
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import java.util.Locale
 
@@ -86,12 +87,15 @@ fun FavoritesScreen(
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Text(
-            text = "السيرفرات المفضّلة (${favorites.size})",
+            text = tr("السيرفرات المفضّلة (${favorites.size})", "Favorite Servers (${favorites.size})"),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "إدارة منظّمة بالمجموعات والأسماء المخصّصة مع حفظ البصمة الآمنة المستقرة.",
+            text = tr(
+                "إدارة منظّمة بالمجموعات والأسماء المخصّصة مع حفظ البصمة الآمنة المستقرة.",
+                "Organized by custom names and groups using stable cryptographic server IDs.",
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -108,7 +112,7 @@ fun FavoritesScreen(
             FilterChip(
                 selected = selectedGroup == "ALL",
                 onClick = { onSelectGroup("ALL") },
-                label = { Text("كل المجموعات") },
+                label = { Text(tr("كل المجموعات", "All Groups")) },
             )
             groups.forEach { g ->
                 FilterChip(
@@ -132,7 +136,7 @@ fun FavoritesScreen(
                 FilterChip(
                     selected = sortOrder == order,
                     onClick = { onSelectSort(order) },
-                    label = { Text("ترتيب: ${order.labelAr}") },
+                    label = { Text(tr("ترتيب: ${order.labelAr}", "Sort: ${order.labelEn}")) },
                 )
             }
         }
@@ -155,12 +159,15 @@ fun FavoritesScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "لا توجد سيرفرات مفضّلة في هذه المجموعة بعد",
+                        text = tr("لا توجد سيرفرات مفضّلة في هذه المجموعة بعد", "No favorite servers in this group yet"),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "اضغط على أيقونة النجمة ⭐ بجانب أي سيرفر لإضافته هنا وتنظيمه.",
+                        text = tr(
+                            "اضغط على أيقونة النجمة ⭐ بجانب أي سيرفر لإضافته هنا وتنظيمه.",
+                            "Tap the ⭐ star next to any server to save and organize it here.",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -238,12 +245,12 @@ fun FavoritesScreen(
 
                                 Row {
                                     IconButton(onClick = { editingFav = fav }) {
-                                        Icon(Icons.Default.Edit, contentDescription = "تعديل الاسم والمجموعة")
+                                        Icon(Icons.Default.Edit, contentDescription = tr("تعديل الاسم والمجموعة", "Edit name & group"))
                                     }
                                     IconButton(onClick = { onRemoveFavorite(fav.serverId) }) {
                                         Icon(
                                             Icons.Default.Delete,
-                                            contentDescription = "إزالة من المفضلة",
+                                            contentDescription = tr("إزالة من المفضلة", "Remove from favorites"),
                                             tint = MaterialTheme.colorScheme.error,
                                         )
                                     }
@@ -254,17 +261,20 @@ fun FavoritesScreen(
 
                             // Historical & live performance metrics
                             val histText = buildString {
-                                append(if (isOnlineAvailable) "متاح في القائمة الحالية" else "غير متاح مؤقتًا في التحديث الحالي")
+                                append(
+                                    if (isOnlineAvailable) tr("متاح في القائمة الحالية", "Available in current pool")
+                                    else tr("غير متاح مؤقتًا في التحديث الحالي", "Temporarily absent from current pool")
+                                )
                                 if (tel != null && tel.attempts > 0) {
-                                    append(" • النجاح ${(tel.successRate * 100).toInt()}% (${tel.successes}/${tel.attempts})")
+                                    append(tr(" • النجاح ${(tel.successRate * 100).toInt()}% (${tel.successes}/${tel.attempts})", " • Success ${(tel.successRate * 100).toInt()}% (${tel.successes}/${tel.attempts})"))
                                     if (tel.ewmaLatencyMs > 0.0) {
-                                        append(" • متوسط ${tel.ewmaLatencyMs.toInt()} ms")
+                                        append(tr(" • متوسط ${tel.ewmaLatencyMs.toInt()} ms", " • Avg ${tel.ewmaLatencyMs.toInt()} ms"))
                                     }
                                     if (tel.bestDownloadKbps > 0.0) {
-                                        append(String.format(Locale.US, " • أقصى سرعة %.1f KB/s", tel.bestDownloadKbps))
+                                        append(String.format(Locale.US, tr(" • أقصى سرعة %.1f KB/s", " • Peak %.1f KB/s"), tel.bestDownloadKbps))
                                     }
                                 } else if ((liveServer?.latencyMs ?: 0L) > 0L) {
-                                    append(" • استجابة ${liveServer!!.latencyMs} ms")
+                                    append(tr(" • استجابة ${liveServer!!.latencyMs} ms", " • Ping ${liveServer!!.latencyMs} ms"))
                                 }
                             }
                             Text(
@@ -282,7 +292,7 @@ fun FavoritesScreen(
                                 ) {
                                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text(if (isCurrentlyConnected) "متّصل حاليًا بهذا السيرفر" else "اتصال مباشر الآن")
+                                    Text(if (isCurrentlyConnected) tr("متّصل حاليًا بهذا السيرفر", "Currently Connected") else tr("اتصال مباشر الآن", "Connect Now"))
                                 }
                             }
                         }
@@ -298,13 +308,13 @@ fun FavoritesScreen(
 
         AlertDialog(
             onDismissRequest = { editingFav = null },
-            title = { Text("تخصيص السيرفر المفضّل") },
+            title = { Text(tr("تخصيص السيرفر المفضّل", "Customize Favorite Server")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = customNameInput,
                         onValueChange = { customNameInput = it },
-                        label = { Text("الاسم المخصّص (اختياري)") },
+                        label = { Text(tr("الاسم المخصّص (اختياري)", "Custom Name (optional)")) },
                         placeholder = { Text(target.defaultLabel) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -312,7 +322,7 @@ fun FavoritesScreen(
                     OutlinedTextField(
                         value = groupInput,
                         onValueChange = { groupInput = it },
-                        label = { Text("المجموعة (مثل: عام، العمل، الألعاب، البث)") },
+                        label = { Text(tr("المجموعة (مثل: عام، العمل، الألعاب، البث)", "Group (e.g., General, Work, Gaming, Streaming)")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -320,7 +330,13 @@ fun FavoritesScreen(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        listOf("عام", "العمل", "الألعاب", "البث").forEach { preset ->
+                        val presets = listOf(
+                            tr("عام", "General"),
+                            tr("العمل", "Work"),
+                            tr("الألعاب", "Gaming"),
+                            tr("البث", "Streaming"),
+                        )
+                        presets.forEach { preset ->
                             FilterChip(
                                 selected = groupInput == preset,
                                 onClick = { groupInput = preset },
@@ -337,12 +353,12 @@ fun FavoritesScreen(
                         editingFav = null
                     }
                 ) {
-                    Text("حفظ")
+                    Text(tr("حفظ", "Save"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { editingFav = null }) {
-                    Text("إلغاء")
+                    Text(tr("إلغاء", "Cancel"))
                 }
             },
         )

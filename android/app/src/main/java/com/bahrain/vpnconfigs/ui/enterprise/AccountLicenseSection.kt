@@ -1,6 +1,6 @@
 // =====================================================================
 // AccountLicenseSection.kt — بطاقة التحديث الذكي حسب المعالج (Split ABI)
-// وبطاقة حساب المشترك، عدّاد تجربة 48 ساعة، ربط الجهاز، وحالة عقد VIP (v3.1).
+// وبطاقة حساب المشترك، عدّاد تجربة 48 ساعة، ربط الجهاز، وحالة عقد VIP (v1).
 // =====================================================================
 package com.bahrain.vpnconfigs.ui.enterprise
 
@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.UiState
+import com.bahrain.vpnconfigs.util.tr
 import java.util.Locale
 
 @Composable
@@ -65,8 +66,11 @@ fun SignedAppUpdateBanner(
                 Icon(Icons.Filled.SystemUpdate, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = if (upd.mandatory) "تحديث أمني إلزامي (${upd.versionName} • ${upd.selectedAbi})"
-                    else "تحديث ذكي متاح (${upd.versionName} • حزمة ${upd.selectedAbi})",
+                    text = if (upd.mandatory) {
+                        tr("تحديث أمني إلزامي (${upd.versionName} • ${upd.selectedAbi})", "Mandatory Security Update (${upd.versionName} • ${upd.selectedAbi})")
+                    } else {
+                        tr("تحديث ذكي متاح (${upd.versionName} • حزمة ${upd.selectedAbi})", "Smart Update Available (${upd.versionName} • ${upd.selectedAbi})")
+                    },
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -75,7 +79,7 @@ fun SignedAppUpdateBanner(
             }
             if (upd.apkSha256.length == 64) {
                 Text(
-                    "بصمة SHA-256 الرسمية: ${upd.apkSha256.take(16)}…",
+                    tr("بصمة SHA-256 الرسمية: ${upd.apkSha256.take(16)}…", "Official SHA-256: ${upd.apkSha256.take(16)}…"),
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -84,8 +88,8 @@ fun SignedAppUpdateBanner(
                 enabled = !state.updatingApk,
             ) {
                 Text(
-                    if (state.updatingApk) "جارٍ فتح المتصفح الآمن…"
-                    else "فتح التحميل الرسمي الآمن (${upd.selectedAbi})"
+                    if (state.updatingApk) tr("جارٍ فتح المتصفح الآمن…", "Opening secure browser…")
+                    else tr("فتح التحميل الرسمي الآمن (${upd.selectedAbi})", "Open Official Download (${upd.selectedAbi})")
                 )
             }
         }
@@ -117,10 +121,10 @@ fun AccountLicenseCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.AccountCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
-                    Text("الحساب والترخيص المؤسسي", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(tr("الحساب والترخيص المؤسسي", "Account & License"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 TextButton(onClick = { vm.syncEnterpriseBundle() }) {
-                    Text("مزامنة")
+                    Text(tr("مزامنة", "Sync"))
                 }
             }
 
@@ -133,11 +137,14 @@ fun AccountLicenseCard(
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("معرّف ربط الجهاز (1 حساب = ${acct.deviceLimit} جهاز)", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        tr("معرّف ربط الجهاز (1 حساب = ${acct.deviceLimit} جهاز)", "Device Binding ID (1 account = ${acct.deviceLimit} device)"),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                     Text(acct.deviceInstallId, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                 }
-                IconButton(onClick = { onCopy(acct.deviceInstallId, "تم نسخ رمز الجهاز") }) {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = "نسخ رمز الجهاز")
+                IconButton(onClick = { onCopy(acct.deviceInstallId, tr("تم نسخ رمز الجهاز", "Device ID copied")) }) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = tr("نسخ رمز الجهاز", "Copy Device ID"))
                 }
             }
 
@@ -155,11 +162,17 @@ fun AccountLicenseCard(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(acct.statusHeadlineEn, fontWeight = FontWeight.Bold, color = statusColor)
-                        Text(acct.statusDetailAr, style = MaterialTheme.typography.bodySmall)
-                        Text("المشترك: ${acct.username} • الباقة: ${acct.subscriptionType}", style = MaterialTheme.typography.labelMedium)
+                        Text(acct.displayStatusDetail, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            tr("المشترك: ${acct.username} • الباقة: ${acct.subscriptionType}", "User: ${acct.username} • Plan: ${acct.subscriptionType}"),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
                         if (acct.vipNodesUnlocked > 0) {
                             Text(
-                                "💎 عقد VIP المشفّرة المفتوحة لحسابك: ${acct.vipNodesUnlocked} عقدة خاصة",
+                                tr(
+                                    "💎 عقد VIP المشفّرة المفتوحة لحسابك: ${acct.vipNodesUnlocked} عقدة خاصة",
+                                    "💎 Unlocked Encrypted VIP Nodes: ${acct.vipNodesUnlocked}",
+                                ),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFFFA000),
@@ -170,7 +183,13 @@ fun AccountLicenseCard(
                             val mins = (liveRemainingSec % 3600L) / 60L
                             val secs = liveRemainingSec % 60L
                             Text(
-                                String.format(Locale.US, "العدّاد الزمني المتبقّي: %02dh : %02dm : %02ds", hrs, mins, secs),
+                                String.format(
+                                    Locale.US,
+                                    tr("العدّاد الزمني المتبقّي: %02dh : %02dm : %02ds", "Time Remaining: %02dh : %02dm : %02ds"),
+                                    hrs,
+                                    mins,
+                                    secs,
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = statusColor,
@@ -184,7 +203,7 @@ fun AccountLicenseCard(
                 Text(
                     String.format(
                         Locale.US,
-                        "استهلاك اليوم: %.1f MB%s  •  الشهر: %.1f MB%s",
+                        tr("استهلاك اليوم: %.1f MB%s  •  الشهر: %.1f MB%s", "Today: %.1f MB%s  •  Month: %.1f MB%s"),
                         dayMb,
                         if (acct.bandwidth.maxDailyMb > 0) " / ${acct.bandwidth.maxDailyMb} MB" else "",
                         monthMb,
@@ -200,34 +219,37 @@ fun AccountLicenseCard(
                 }
                 if (acct.bandwidth.maxDownloadKbps > 0 || acct.bandwidth.maxUploadKbps > 0) {
                     Text(
-                        "سقف السرعة المخصّص: ↓ ${acct.bandwidth.maxDownloadKbps} KB/s • ↑ ${acct.bandwidth.maxUploadKbps} KB/s",
+                        tr(
+                            "سقف السرعة المخصّص: ↓ ${acct.bandwidth.maxDownloadKbps} KB/s • ↑ ${acct.bandwidth.maxUploadKbps} KB/s",
+                            "Bandwidth Cap: ↓ ${acct.bandwidth.maxDownloadKbps} KB/s • ↑ ${acct.bandwidth.maxUploadKbps} KB/s",
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
 
                 OutlinedButton(onClick = { vm.logoutEnterpriseAccount() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("تسجيل الخروج وإلغاء الجلسة المحلية")
+                    Text(tr("تسجيل الخروج وإلغاء الجلسة المحلية", "Sign Out & Clear Local Session"))
                 }
             } else {
-                Text(acct.statusDetailAr, style = MaterialTheme.typography.bodySmall)
+                Text(acct.displayStatusDetail, style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("اسم المستخدم") },
+                    label = { Text(tr("اسم المستخدم", "Username")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("كلمة المرور") },
+                    label = { Text(tr("كلمة المرور", "Password")) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = rememberMe, onCheckedChange = { rememberMe = it })
-                    Text("تذكّر الجلسة بأمان", style = MaterialTheme.typography.bodySmall)
+                    Text(tr("تذكّر الجلسة بأمان", "Remember session securely"), style = MaterialTheme.typography.bodySmall)
                 }
                 state.authError?.let { err ->
                     Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -237,13 +259,16 @@ fun AccountLicenseCard(
                     enabled = !state.authLoading,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (state.authLoading) "جارٍ التحقق التشفيري…" else "تسجيل الدخول وتفعيل الجهاز وعقد VIP")
+                    Text(
+                        if (state.authLoading) tr("جارٍ التحقق التشفيري…", "Verifying credentials…")
+                        else tr("تسجيل الدخول وتفعيل الجهاز وعقد VIP", "Sign In & Unlock VIP Nodes")
+                    )
                 }
             }
 
             if (acct.loginHistory.isNotEmpty()) {
                 HorizontalDivider()
-                Text("آخر عمليات المصادقة:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Text(tr("آخر عمليات المصادقة:", "Recent Authentication Events:"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 acct.loginHistory.take(3).forEach { item ->
                     Text(item, style = MaterialTheme.typography.labelSmall)
                 }

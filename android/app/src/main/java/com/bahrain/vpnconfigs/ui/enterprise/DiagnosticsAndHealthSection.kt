@@ -1,6 +1,6 @@
 // =====================================================================
 // DiagnosticsAndHealthSection.kt — تشخيص التسرب (DNS/IP/TLS/MTU)،
-// التبديل التلقائي السريع (~ثانيتين)، ومراقب صحة التطبيق والخصوصية (v3.1).
+// التبديل التلقائي السريع (~ثانيتين)، ومراقب صحة التطبيق والخصوصية (v1).
 // =====================================================================
 package com.bahrain.vpnconfigs.ui.enterprise
 
@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.UiState
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.vpn.FailoverMode
 import com.bahrain.vpnconfigs.vpn.KillSwitchController
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
@@ -62,7 +63,11 @@ fun NetworkDiagnosticsCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.NetworkCheck, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
-                Text("تشخيص الشبكة وكشف التسرب (DNS / IP / TLS)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    tr("تشخيص الشبكة وكشف التسرب (DNS / IP / TLS)", "Network Diagnostics & Leak Check (DNS / IP / TLS)"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
             }
 
             FilledTonalButton(
@@ -70,7 +75,10 @@ fun NetworkDiagnosticsCard(
                 enabled = !state.netDiagRunning,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (state.netDiagRunning) "جارٍ فحص المسارات والتسريبات…" else "تشغيل الفحص الأمني للشبكة")
+                Text(
+                    if (state.netDiagRunning) tr("جارٍ فحص المسارات والتسريبات…", "Checking routes & leaks…")
+                    else tr("تشغيل الفحص الأمني للشبكة", "Run Network Security Check")
+                )
             }
 
             state.netDiagReport?.let { rep ->
@@ -83,51 +91,72 @@ fun NetworkDiagnosticsCard(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = if (safeNoLeak) "الحماية سليمة • مؤشر الاستقرار ${rep.stabilityScore}/100"
-                        else "تنبيه: تحقّق من مسار النفق أو إعداد DNS • الاستقرار ${rep.stabilityScore}/100",
+                        text = if (safeNoLeak) {
+                            tr("الحماية سليمة • مؤشر الاستقرار ${rep.stabilityScore}/100", "Protection verified • Stability ${rep.stabilityScore}/100")
+                        } else {
+                            tr("تنبيه: تحقّق من مسار النفق أو إعداد DNS • الاستقرار ${rep.stabilityScore}/100", "Alert: Check tunnel route or DNS • Stability ${rep.stabilityScore}/100")
+                        },
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
                 Text(
-                    "حالة النفق: ${rep.tunnelStatus} • DNS: ${rep.dnsResolutionMs} ms • TLS صالح: ${if (rep.tlsValid) "نعم" else "لا"} • MTU: ${rep.mtuBytes}",
+                    tr(
+                        "حالة النفق: ${rep.tunnelStatus} • DNS: ${rep.dnsResolutionMs} ms • TLS صالح: ${if (rep.tlsValid) "نعم" else "لا"} • MTU: ${rep.mtuBytes}",
+                        "Tunnel: ${rep.tunnelStatus} • DNS: ${rep.dnsResolutionMs} ms • TLS Valid: ${if (rep.tlsValid) "Yes" else "No"} • MTU: ${rep.mtuBytes}",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                 )
                 Text(
-                    "تسرب IP: ${if (rep.ipLeakDetected) "مكتشف!" else "محمي"} • تسرب DNS: ${if (rep.dnsLeakDetected) "مكتشف!" else "محمي"} • حماية IPv6: ${if (rep.ipv6LeakProtected) "محكم (::/0)" else "غير نشط"} • الخروج: ${rep.exitCountry.ifBlank { "—" }}",
+                    tr(
+                        "تسرب IP: ${if (rep.ipLeakDetected) "مكتشف!" else "محمي"} • تسرب DNS: ${if (rep.dnsLeakDetected) "مكتشف!" else "محمي"} • حماية IPv6: ${if (rep.ipv6LeakProtected) "محكم (::/0)" else "غير نشط"} • الخروج: ${rep.exitCountry.ifBlank { "—" }}",
+                        "IP Leak: ${if (rep.ipLeakDetected) "Detected!" else "Protected"} • DNS Leak: ${if (rep.dnsLeakDetected) "Detected!" else "Protected"} • IPv6: ${if (rep.ipv6LeakProtected) "Captured (::/0)" else "Off"} • Exit: ${rep.exitCountry.ifBlank { "—" }}",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                 )
                 if (rep.webRtcSummaryAr.isNotBlank()) {
                     Text(
-                        "حالة WebRTC: ${rep.webRtcSummaryAr}",
+                        tr("حالة WebRTC: ${rep.webRtcSummaryAr}", "WebRTC: ${rep.webRtcSummaryAr}"),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Medium,
                     )
                 }
                 Text(
-                    "مفتاح الإيقاف: ${if (rep.killSwitchEnabled) "مفعّل بالتطبيق" else "معطّل"} • قفل أندرويد الدائم (OS Lockdown): ${if (rep.osLockdownActive) "مفعّل" else "غير مفعّل"}",
+                    tr(
+                        "مفتاح الإيقاف: ${if (rep.killSwitchEnabled) "مفعّل بالتطبيق" else "معطّل"} • قفل أندرويد الدائم (OS Lockdown): ${if (rep.osLockdownActive) "مفعّل" else "غير مفعّل"}",
+                        "Kill Switch: ${if (rep.killSwitchEnabled) "App Enabled" else "Off"} • Android OS Lockdown: ${if (rep.osLockdownActive) "Active" else "Not Enabled"}",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
 
             HorizontalDivider()
-            Text("فحص استجابة رابط اختباري صريح (بدون أي تتبع للتصفح):", style = MaterialTheme.typography.labelMedium)
+            Text(
+                tr("فحص استجابة رابط اختباري صريح (بدون أي تتبع للتصفح):", "Explicit HTTPS Test URL Probe (zero browsing tracking):"),
+                style = MaterialTheme.typography.labelMedium,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = testUrlInput,
                     onValueChange = { testUrlInput = it },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
-                    label = { Text("رابط الاختبار (HTTPS)") },
+                    label = { Text(tr("رابط الاختبار (HTTPS)", "Test URL (HTTPS)")) },
                 )
                 Button(onClick = { vm.probeExplicitTestUrl(testUrlInput) }) {
-                    Text("افحص")
+                    Text(tr("افحص", "Probe"))
                 }
             }
             state.urlProbeResult?.let { pr ->
                 Text(
-                    text = if (pr.reachable) "متاح (HTTP ${pr.httpStatus}) خلال ${pr.responseTimeMs} ms • شهادة TLS: ${if (pr.tlsVerified) "موثوقة" else "غير متحققة"}"
-                    else "تعذّر الوصول للرابط المحدد من المسار الحالي",
+                    text = if (pr.reachable) {
+                        tr(
+                            "متاح (HTTP ${pr.httpStatus}) خلال ${pr.responseTimeMs} ms • شهادة TLS: ${if (pr.tlsVerified) "موثوقة" else "غير متحققة"}",
+                            "Reachable (HTTP ${pr.httpStatus}) in ${pr.responseTimeMs} ms • TLS: ${if (pr.tlsVerified) "Verified" else "Unverified"}",
+                        )
+                    } else {
+                        tr("تعذّر الوصول للرابط المحدد من المسار الحالي", "Could not reach URL through current route")
+                    },
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -151,7 +180,11 @@ fun AppHealthAndFailoverCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.HealthAndSafety, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
-                Text("مفتاح الإيقاف والتبديل الذكي وصحة النفق (v3.5)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    tr("مفتاح الإيقاف والتبديل الذكي وصحة النفق (v1)", "Kill Switch, Smart Failover & Tunnel Health (v1)"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
             }
 
             Row(
@@ -160,8 +193,18 @@ fun AppHealthAndFailoverCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("مفتاح الإيقاف الصارم (Fail-Closed Kill Switch)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                    Text("يقفل واجهة TUN قبل الربط ويمنع تسرب البيانات عند سقوط جميع السيرفرات", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        tr("مفتاح الإيقاف الصارم (Fail-Closed Kill Switch)", "Fail-Closed Kill Switch"),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        tr(
+                            "يقفل واجهة TUN قبل الربط ويمنع تسرب البيانات عند سقوط جميع السيرفرات",
+                            "Locks TUN interface before probing and prevents traffic leaks if all servers drop",
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                 }
                 Switch(
                     checked = state.killSwitch,
@@ -169,13 +212,20 @@ fun AppHealthAndFailoverCard(
                 )
             }
             Text(
-                KillSwitchController.OS_LIMITATION_NOTE_AR,
+                tr(
+                    KillSwitchController.OS_LIMITATION_NOTE_AR,
+                    "In-app Kill Switch blocks app leaks during connection, switching, and drops; to block pre-boot system packets on device restart, also enable 'Always-on VPN + Block connections without VPN' in Android settings.",
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.secondary,
             )
 
             HorizontalDivider()
-            Text("سياسة التبديل التلقائي ومقاومة التدهور (Failover Policy):", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            Text(
+                tr("سياسة التبديل التلقائي ومقاومة التدهور (Failover Policy):", "Smart Failover Policy:"),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -186,7 +236,7 @@ fun AppHealthAndFailoverCard(
                     FilterChip(
                         selected = FailoverMode.fromKey(state.failoverMode) == mode,
                         onClick = { vm.setFailoverMode(mode.key) },
-                        label = { Text(mode.titleAr) },
+                        label = { Text(mode.displayTitle) },
                     )
                 }
             }
@@ -194,20 +244,29 @@ fun AppHealthAndFailoverCard(
             // ── لوحة مؤشرات التبديل الحيّة (Phase 6.5 Failover Telemetry) ──
             val lastSwitchLbl = if (vpnSt.lastSuccessfulSwitchAtMs > 0L) {
                 val secAgo = ((System.currentTimeMillis() - vpnSt.lastSuccessfulSwitchAtMs) / 1000L).coerceAtLeast(0L)
-                if (secAgo < 60L) "منذ ${secAgo} ث" else "منذ ${secAgo / 60L} د"
+                if (secAgo < 60L) tr("منذ ${secAgo} ث", "${secAgo}s ago") else tr("منذ ${secAgo / 60L} د", "${secAgo / 60L}m ago")
             } else "—"
             Text(
-                "السيرفر الحالي: ${vpnSt.activeLabel} • السابق: ${vpnSt.previousServerLabel.ifBlank { "—" }} • البديل المرشّح: ${vpnSt.targetServerLabel.ifBlank { "—" }}",
+                tr(
+                    "السيرفر الحالي: ${vpnSt.activeLabel} • السابق: ${vpnSt.previousServerLabel.ifBlank { "—" }} • البديل المرشّح: ${vpnSt.targetServerLabel.ifBlank { "—" }}",
+                    "Current: ${vpnSt.activeLabel} • Previous: ${vpnSt.previousServerLabel.ifBlank { "—" }} • Backup: ${vpnSt.targetServerLabel.ifBlank { "—" }}",
+                ),
                 style = MaterialTheme.typography.labelSmall,
             )
             Text(
-                "جودة الاتصال: ${vpnSt.connectionQuality} • التأخير: ${if (vpnSt.livePingMs > 0L) "${vpnSt.livePingMs} ms" else "—"} • فقدان الحزم: ${vpnSt.packetLossPct}% • الحالة: ${vpnSt.switchingStatus} • آخر تبديل ناجح: $lastSwitchLbl",
+                tr(
+                    "جودة الاتصال: ${vpnSt.displayConnectionQuality} • التأخير: ${if (vpnSt.livePingMs > 0L) "${vpnSt.livePingMs} ms" else "—"} • فقدان الحزم: ${vpnSt.packetLossPct}% • الحالة: ${vpnSt.displaySwitchingStatus} • آخر تبديل ناجح: $lastSwitchLbl",
+                    "Quality: ${vpnSt.displayConnectionQuality} • Ping: ${if (vpnSt.livePingMs > 0L) "${vpnSt.livePingMs} ms" else "—"} • Loss: ${vpnSt.packetLossPct}% • State: ${vpnSt.displaySwitchingStatus} • Last switch: $lastSwitchLbl",
+                ),
                 style = MaterialTheme.typography.labelSmall,
             )
 
             HorizontalDivider()
             Text(
-                "زمن الإقلاع: ${health.startupTimeMs} ms • الذاكرة: ${health.memoryUsedMb} MB • الانهيارات: ${health.crashCount} • أحداث النفق/DNS: ${health.dnsErrorCount + health.tunnelErrorCount}",
+                tr(
+                    "زمن الإقلاع: ${health.startupTimeMs} ms • الذاكرة: ${health.memoryUsedMb} MB • الانهيارات: ${health.crashCount} • أحداث النفق/DNS: ${health.dnsErrorCount + health.tunnelErrorCount}",
+                    "Startup: ${health.startupTimeMs} ms • Memory: ${health.memoryUsedMb} MB • Crashes: ${health.crashCount} • Tunnel/DNS events: ${health.dnsErrorCount + health.tunnelErrorCount}",
+                ),
                 style = MaterialTheme.typography.labelSmall,
             )
             Row(
@@ -216,7 +275,10 @@ fun AppHealthAndFailoverCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    "الموافقة على تصدير تقرير التشخيص الخالي من البيانات الشخصية",
+                    tr(
+                        "الموافقة على تصدير تقرير التشخيص الخالي من البيانات الشخصية",
+                        "Consent to export redacted zero-PII diagnostic report",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.weight(1f),
                 )
@@ -229,11 +291,11 @@ fun AppHealthAndFailoverCard(
                 OutlinedButton(
                     onClick = {
                         val reportJson = vm.buildRedactedDiagnosticReportJson()
-                        onCopy(reportJson, "تم نسخ تقرير التشخيص المعمّى للحافظة")
+                        onCopy(reportJson, tr("تم نسخ تقرير التشخيص المعمّى للحافظة", "Redacted diagnostic report copied"))
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("نسخ تقرير التشخيص التقني الآمن")
+                    Text(tr("نسخ تقرير التشخيص التقني الآمن", "Copy Redacted Technical Report"))
                 }
             }
         }

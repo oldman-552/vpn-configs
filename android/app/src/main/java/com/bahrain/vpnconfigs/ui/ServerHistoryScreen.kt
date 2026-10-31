@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bahrain.vpnconfigs.data.HistorySortOrder
 import com.bahrain.vpnconfigs.data.ServerSessionRecord
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -97,12 +98,15 @@ fun ServerHistoryScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "سجل الجلسات التاريخي ($totalMatchingCount)",
+                    text = tr("سجل الجلسات التاريخي ($totalMatchingCount)", "Session History ($totalMatchingCount)"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "مخزّن محليًا بأمان في SQLite بدون بيانات اعتماد • الاحتفاظ: $retentionDays يومًا",
+                    text = tr(
+                        "مخزّن محليًا بأمان في SQLite بدون بيانات اعتماد • الاحتفاظ: $retentionDays يومًا",
+                        "Stored locally in SQLite with zero credentials • Retention: $retentionDays days",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -111,7 +115,7 @@ fun ServerHistoryScreen(
                 IconButton(onClick = { confirmClearAll = true }) {
                     Icon(
                         imageVector = Icons.Default.DeleteSweep,
-                        contentDescription = "مسح السجل بالكامل",
+                        contentDescription = tr("مسح السجل بالكامل", "Clear all history"),
                         tint = MaterialTheme.colorScheme.error,
                     )
                 }
@@ -124,7 +128,7 @@ fun ServerHistoryScreen(
             value = searchQuery,
             onValueChange = onSearchChange,
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            placeholder = { Text("ابحث باسم السيرفر، البروتوكول، أو رمز الدولة…") },
+            placeholder = { Text(tr("ابحث باسم السيرفر، البروتوكول، أو رمز الدولة…", "Search by server name, protocol, or country code…")) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -138,7 +142,12 @@ fun ServerHistoryScreen(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            listOf(0 to "كل الفترات", 1 to "آخر 24 ساعة", 7 to "آخر 7 أيام", 30 to "آخر 30 يومًا").forEach { (days, lbl) ->
+            listOf(
+                0 to tr("كل الفترات", "All Time"),
+                1 to tr("آخر 24 ساعة", "Last 24h"),
+                7 to tr("آخر 7 أيام", "Last 7d"),
+                30 to tr("آخر 30 يومًا", "Last 30d"),
+            ).forEach { (days, lbl) ->
                 FilterChip(
                     selected = dateRangeDays == days,
                     onClick = { onDateRangeChange(days) },
@@ -158,14 +167,17 @@ fun ServerHistoryScreen(
                 FilterChip(
                     selected = sortOrder == ord,
                     onClick = { onSortChange(ord) },
-                    label = { Text(ord.labelAr) },
+                    label = { Text(ord.displayLabel) },
                 )
             }
             listOf(7, 30, 90).forEach { ret ->
                 AssistChip(
                     onClick = { onRetentionChange(ret) },
                     label = {
-                        Text(if (retentionDays == ret) "الاحتفاظ: ${ret}ي ✓" else "احتفاظ ${ret}ي")
+                        Text(
+                            if (retentionDays == ret) tr("الاحتفاظ: ${ret}ي ✓", "Keep: ${ret}d ✓")
+                            else tr("احتفاظ ${ret}ي", "Keep ${ret}d")
+                        )
                     },
                 )
             }
@@ -189,7 +201,7 @@ fun ServerHistoryScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "لا توجد جلسات مسجّلة تطابق الفلتر الحالي",
+                        text = tr("لا توجد جلسات مسجّلة تطابق الفلتر الحالي", "No recorded sessions match the current filter"),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -234,7 +246,7 @@ fun ServerHistoryScreen(
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = if (rec.success) "ناجح" else "فشل",
+                                        text = if (rec.success) tr("ناجح", "OK") else tr("فشل", "Failed"),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = statusColor,
                                         fontWeight = FontWeight.Bold,
@@ -242,7 +254,7 @@ fun ServerHistoryScreen(
                                     IconButton(onClick = { onDeleteEntry(rec.id) }) {
                                         Icon(
                                             imageVector = Icons.Default.Delete,
-                                            contentDescription = "حذف السجل",
+                                            contentDescription = tr("حذف السجل", "Delete entry"),
                                             modifier = Modifier.size(18.dp),
                                         )
                                     }
@@ -251,13 +263,13 @@ fun ServerHistoryScreen(
 
                             Spacer(Modifier.height(6.dp))
                             val metricsLine = buildString {
-                                append("المدة: ${VpnStateManager.formatDuration(rec.durationSec)}")
-                                if (rec.avgLatencyMs > 0L) append(" • الاستجابة: ${rec.avgLatencyMs} ms")
-                                if (rec.peakDownloadBps > 0L) append(" • الذروة: ↓ ${VpnStateManager.formatSpeed(rec.peakDownloadBps)}")
+                                append(tr("المدة: ${VpnStateManager.formatDuration(rec.durationSec)}", "Duration: ${VpnStateManager.formatDuration(rec.durationSec)}"))
+                                if (rec.avgLatencyMs > 0L) append(tr(" • الاستجابة: ${rec.avgLatencyMs} ms", " • Ping: ${rec.avgLatencyMs} ms"))
+                                if (rec.peakDownloadBps > 0L) append(tr(" • الذروة: ↓ ${VpnStateManager.formatSpeed(rec.peakDownloadBps)}", " • Peak: ↓ ${VpnStateManager.formatSpeed(rec.peakDownloadBps)}"))
                                 if (rec.totalDownBytes > 0L || rec.totalUpBytes > 0L) {
-                                    append(" • البيانات: ${VpnStateManager.formatBytes(rec.totalDownBytes + rec.totalUpBytes)}")
+                                    append(tr(" • البيانات: ${VpnStateManager.formatBytes(rec.totalDownBytes + rec.totalUpBytes)}", " • Data: ${VpnStateManager.formatBytes(rec.totalDownBytes + rec.totalUpBytes)}"))
                                 }
-                                append(" • الشبكة: ${rec.networkType}")
+                                append(tr(" • الشبكة: ${rec.networkType}", " • Net: ${rec.networkType}"))
                             }
                             Text(
                                 text = metricsLine,
@@ -267,7 +279,7 @@ fun ServerHistoryScreen(
                             if (rec.failureReason.isNotBlank()) {
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = "السبب: ${rec.failureReason}",
+                                    text = tr("السبب: ${rec.failureReason}", "Note: ${rec.failureReason}"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (rec.success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                                 )
@@ -281,7 +293,7 @@ fun ServerHistoryScreen(
                                 ) {
                                     Icon(Icons.Default.Replay, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("إعادة الاتصال بهذا السيرفر")
+                                    Text(tr("إعادة الاتصال بهذا السيرفر", "Reconnect to this server"))
                                 }
                             }
                         }
@@ -294,7 +306,7 @@ fun ServerHistoryScreen(
                             onClick = onLoadMore,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("تحميل المزيد (${records.size} من $totalMatchingCount)")
+                            Text(tr("تحميل المزيد (${records.size} من $totalMatchingCount)", "Load More (${records.size} of $totalMatchingCount)"))
                         }
                     }
                 }
@@ -305,8 +317,8 @@ fun ServerHistoryScreen(
     if (confirmClearAll) {
         AlertDialog(
             onDismissRequest = { confirmClearAll = false },
-            title = { Text("مسح سجل الاتصالات بالكامل؟") },
-            text = { Text("سيتم حذف جميع الجلسات المحفوظة من قاعدة البيانات المحلية نهائيًا.") },
+            title = { Text(tr("مسح سجل الاتصالات بالكامل؟", "Clear all connection history?")) },
+            text = { Text(tr("سيتم حذف جميع الجلسات المحفوظة من قاعدة البيانات المحلية نهائيًا.", "All saved session records will be permanently deleted from the local database.")) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -314,12 +326,12 @@ fun ServerHistoryScreen(
                         confirmClearAll = false
                     }
                 ) {
-                    Text("مسح الكل")
+                    Text(tr("مسح الكل", "Clear All"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { confirmClearAll = false }) {
-                    Text("إلغاء")
+                    Text(tr("إلغاء", "Cancel"))
                 }
             },
         )

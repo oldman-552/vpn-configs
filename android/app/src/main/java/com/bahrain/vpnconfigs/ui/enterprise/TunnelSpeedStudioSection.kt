@@ -1,6 +1,6 @@
 // =====================================================================
 // TunnelSpeedStudioSection.kt — استوديو اختبار السرعة الحقيقي عبر النفق
-// (التنزيل / الرفع / Ping / Jitter / Packet Loss + سجل المقارنة) — v3.1.
+// (التنزيل / الرفع / Ping / Jitter / Packet Loss + سجل المقارنة) — v1.
 // =====================================================================
 package com.bahrain.vpnconfigs.ui.enterprise
 
@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.UiState
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.vpn.VpnPhase
 import com.bahrain.vpnconfigs.vpn.VpnStatus
 import java.util.Locale
@@ -48,10 +49,17 @@ fun TunnelSpeedStudioCard(
                 Icon(Icons.Filled.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Column {
-                    Text("اختبار السرعة الحقيقي عبر النفق", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        if (vpnStatus.isTunnelVerified) "يمر الفحص فعليًا داخل نفق ${vpnStatus.activeLabel}"
-                        else "الـ VPN غير متّصل — سيقيس سرعة الشبكة المباشرة للمقارنة",
+                        tr("اختبار السرعة الحقيقي عبر النفق", "Live In-Tunnel Speed Test"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        if (vpnStatus.isTunnelVerified) {
+                            tr("يمر الفحص فعليًا داخل نفق ${vpnStatus.activeLabel}", "Routed inside ${vpnStatus.activeLabel} VPN tunnel")
+                        } else {
+                            tr("الـ VPN غير متّصل — سيقيس سرعة الشبكة المباشرة للمقارنة", "VPN disconnected — measuring direct network baseline")
+                        },
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -73,14 +81,14 @@ fun TunnelSpeedStudioCard(
 
             latest?.let { r ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    MetricTile("التنزيل", String.format(Locale.US, "%.2f Mbps", r.downloadMbps))
-                    MetricTile("الرفع", String.format(Locale.US, "%.2f Mbps", r.uploadMbps))
+                    MetricTile(tr("التنزيل", "Download"), String.format(Locale.US, "%.2f Mbps", r.downloadMbps))
+                    MetricTile(tr("الرفع", "Upload"), String.format(Locale.US, "%.2f Mbps", r.uploadMbps))
                     MetricTile("Ping", "${r.pingMs} ms")
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     MetricTile("Jitter", "${r.jitterMs} ms")
-                    MetricTile("فقدان الحزم", String.format(Locale.US, "%.0f%%", r.packetLossPct))
-                    MetricTile("الذروة", String.format(Locale.US, "%.2f Mbps", r.maxMbps))
+                    MetricTile(tr("فقدان الحزم", "Packet Loss"), String.format(Locale.US, "%.0f%%", r.packetLossPct))
+                    MetricTile(tr("الذروة", "Peak"), String.format(Locale.US, "%.2f Mbps", r.maxMbps))
                 }
             }
 
@@ -89,12 +97,19 @@ fun TunnelSpeedStudioCard(
                 enabled = !state.speedTestRunning,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (state.speedTestRunning) "جارٍ القياس الفعلي…" else "بدء اختبار السرعة الشامل الآن")
+                Text(
+                    if (state.speedTestRunning) tr("جارٍ القياس الفعلي…", "Measuring…")
+                    else tr("بدء اختبار السرعة الشامل الآن", "Start Full Speed Test")
+                )
             }
 
             if (state.speedHistory.size >= 2) {
                 HorizontalDivider()
-                Text("مقارنة سجل اختبارات السرعة الأخيرة:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    tr("مقارنة سجل اختبارات السرعة الأخيرة:", "Recent Speed Test History:"),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
                 state.speedHistory.take(4).forEach { h ->
                     Text(
                         String.format(

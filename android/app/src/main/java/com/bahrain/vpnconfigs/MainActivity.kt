@@ -1,5 +1,5 @@
 // =====================================================================
-// MainActivity.kt — نقطة الدخول لتطبيق bahrain-vpn: Material 3 + RTL + 4 تبويبات.
+// MainActivity.kt — نقطة الدخول لتطبيق bahrain-vpn (v1): Material 3 + دعم ثنائي اللغة (العربية أساسية RTL + الإنجليزية LTR).
 // =====================================================================
 package com.bahrain.vpnconfigs
 
@@ -73,6 +73,8 @@ import com.bahrain.vpnconfigs.ui.ServerItem
 import com.bahrain.vpnconfigs.ui.ServersListScreen
 import com.bahrain.vpnconfigs.ui.SettingsAndExportScreen
 import com.bahrain.vpnconfigs.engine.Converters
+import com.bahrain.vpnconfigs.util.AppI18n
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.vpn.BahrainVpnService
 import com.bahrain.vpnconfigs.vpn.ResourceAndBatteryMonitor
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
@@ -84,12 +86,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppI18n.initFromPrefs(this)
         enableEdgeToEdge()
         scheduleRefreshIfEnabled()
 
         setContent {
+            val activeLang = AppI18n.current
             AppTheme {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                CompositionLocalProvider(LocalLayoutDirection provides activeLang.layoutDirection) {
                     AppRoot()
                 }
             }
@@ -170,7 +174,11 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
         if (res.resultCode == Activity.RESULT_OK && target != null) {
             BahrainVpnService.startConnect(ctx, target.first, target.second)
         } else if (res.resultCode != Activity.RESULT_OK) {
-            Toast.makeText(ctx, "يجب الموافقة على صلاحية الـ VPN لبدء الاتصال", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                ctx,
+                tr("يجب الموافقة على صلاحية الـ VPN لبدء الاتصال", "VPN permission is required to connect"),
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 
@@ -178,12 +186,22 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
         vm.refreshEnterpriseState()
         val acct = vm.state.accountState
         if (!acct.canConnectVpn) {
-            Toast.makeText(ctx, acct.statusDetailAr.ifBlank { "يلزم حساب فعّال لبدء الاتصال" }, Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                ctx,
+                acct.displayStatusDetail.ifBlank {
+                    tr("يلزم حساب فعّال لبدء الاتصال", "An active account is required to connect")
+                },
+                Toast.LENGTH_LONG,
+            ).show()
             tab = 7
             return
         }
         if (server == null) {
-            Toast.makeText(ctx, "لا توجد سيرفرات متاحة حاليًا — جارٍ تحديث القائمة", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                ctx,
+                tr("لا توجد سيرفرات متاحة حاليًا — جارٍ تحديث القائمة", "No servers available — refreshing list…"),
+                Toast.LENGTH_SHORT,
+            ).show()
             vm.refresh()
             return
         }
@@ -208,7 +226,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                     selected = tab == 0,
                     onClick = { tab = 0 },
                     icon = { Icon(Icons.Filled.Shield, contentDescription = null) },
-                    label = { Text("الاتصال", maxLines = 1) },
+                    label = { Text(tr("الاتصال", "Connect"), maxLines = 1) },
                 )
                 NavigationBarItem(
                     selected = tab == 1,
@@ -224,7 +242,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                             Icon(Icons.Filled.Dns, contentDescription = null)
                         }
                     },
-                    label = { Text("السيرفرات", maxLines = 1) },
+                    label = { Text(tr("السيرفرات", "Servers"), maxLines = 1) },
                 )
                 NavigationBarItem(
                     selected = tab == 2,
@@ -243,7 +261,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                             Icon(Icons.Filled.Star, contentDescription = null)
                         }
                     },
-                    label = { Text("المفضّلة", maxLines = 1) },
+                    label = { Text(tr("المفضّلة", "Favorites"), maxLines = 1) },
                 )
                 NavigationBarItem(
                     selected = tab == 3,
@@ -252,7 +270,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                         vm.refreshPersistenceSnapshotAsync()
                     },
                     icon = { Icon(Icons.Filled.History, contentDescription = null) },
-                    label = { Text("السجل", maxLines = 1) },
+                    label = { Text(tr("السجل", "History"), maxLines = 1) },
                 )
                 NavigationBarItem(
                     selected = tab == 4,
@@ -261,13 +279,13 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                         vm.refreshPersistenceSnapshotAsync()
                     },
                     icon = { Icon(Icons.Filled.Security, contentDescription = null) },
-                    label = { Text("الأمان", maxLines = 1) },
+                    label = { Text(tr("الأمان", "Security"), maxLines = 1) },
                 )
                 NavigationBarItem(
                     selected = tab in setOf(5, 6, 7),
                     onClick = { tab = 5 },
                     icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                    label = { Text("الإعدادات", maxLines = 1) },
+                    label = { Text(tr("الإعدادات", "Settings"), maxLines = 1) },
                 )
             }
         },
@@ -397,7 +415,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
         MandatoryLoginGateDialog(
             vm = vm,
             state = state,
-            onCopyDeviceId = { id -> copyToClipboard(ctx, id, "تم نسخ رمز الجهاز") },
+            onCopyDeviceId = { id -> copyToClipboard(ctx, id, tr("تم نسخ رمز الجهاز", "Device ID copied")) },
         )
     }
 
@@ -416,7 +434,11 @@ private fun readClipboardText(ctx: Context): String {
     return item?.coerceToText(ctx)?.toString() ?: ""
 }
 
-private fun copyToClipboard(ctx: Context, text: String, toastMsg: String = "تم النسخ للحافظة") {
+private fun copyToClipboard(
+    ctx: Context,
+    text: String,
+    toastMsg: String = tr("تم النسخ للحافظة", "Copied to clipboard"),
+) {
     if (text.isNotBlank()) {
         val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("bahrain-vpn", text))
@@ -427,9 +449,9 @@ private fun copyToClipboard(ctx: Context, text: String, toastMsg: String = "تم
 private fun copyFileContent(ctx: Context, file: File) {
     runCatching {
         val content = file.readText(Charsets.UTF_8)
-        copyToClipboard(ctx, content, "تم نسخ القائمة إلى الحافظة")
+        copyToClipboard(ctx, content, tr("تم نسخ القائمة إلى الحافظة", "Server list copied to clipboard"))
     }.onFailure {
-        Toast.makeText(ctx, "تعذّرت قراءة البيانات المطلوبة", Toast.LENGTH_SHORT).show()
+        Toast.makeText(ctx, tr("تعذّرت قراءة البيانات المطلوبة", "Could not read requested data"), Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -441,8 +463,8 @@ private fun shareFile(ctx: Context, file: File) {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        ctx.startActivity(Intent.createChooser(i, "مشاركة قائمة السيرفرات"))
+        ctx.startActivity(Intent.createChooser(i, tr("مشاركة قائمة السيرفرات", "Share server list")))
     }.onFailure {
-        Toast.makeText(ctx, "تعذّرت مشاركة القائمة", Toast.LENGTH_SHORT).show()
+        Toast.makeText(ctx, tr("تعذّرت مشاركة القائمة", "Could not share server list"), Toast.LENGTH_SHORT).show()
     }
 }

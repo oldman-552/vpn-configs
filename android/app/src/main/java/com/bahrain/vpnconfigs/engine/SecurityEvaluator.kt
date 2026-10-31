@@ -7,6 +7,7 @@
 package com.bahrain.vpnconfigs.engine
 
 import android.net.Uri
+import com.bahrain.vpnconfigs.util.tr
 import org.json.JSONObject
 
 data class ServerSecurityProfile(
@@ -200,10 +201,10 @@ object SecurityEvaluator {
         }
 
         val summaryAr = when {
-            isVipAttested && secAssessment == "Verified" -> "تشفير موثّق + عقدة VIP خاصة"
-            secAssessment == "Verified" -> "تشفير نقل موثّق • مشغّل عام غير موثّق"
-            secAssessment == "Partial" -> "تشفير جزئي (AEAD/TLS) • مشغّل عام"
-            else -> "أمان غير متحقق"
+            isVipAttested && secAssessment == "Verified" -> tr("تشفير موثّق + عقدة VIP خاصة", "Verified Encryption + Private VIP Node")
+            secAssessment == "Verified" -> tr("تشفير نقل موثّق • مشغّل عام غير موثّق", "Verified Transport Encryption • Unverified Public Operator")
+            secAssessment == "Partial" -> tr("تشفير جزئي (AEAD/TLS) • مشغّل عام", "Partial Encryption (AEAD/TLS) • Public Operator")
+            else -> tr("أمان غير متحقق", "Unverified Security")
         }
 
         return ServerSecurityProfile(

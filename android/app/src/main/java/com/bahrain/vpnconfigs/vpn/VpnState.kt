@@ -14,6 +14,8 @@
 // =====================================================================
 package com.bahrain.vpnconfigs.vpn
 
+import com.bahrain.vpnconfigs.util.AppI18n
+import com.bahrain.vpnconfigs.util.tr
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -85,6 +87,43 @@ data class VpnStatus(
 
     val isActive: Boolean
         get() = isTunnelVerified || isTransitioning || phase == VpnPhase.PROTECTION_ACTIVE
+
+    val displayUnderlyingNetwork: String
+        get() {
+            if (!AppI18n.isEnglish) return underlyingNetworkAr
+            return when (underlyingNetwork.uppercase(Locale.US)) {
+                "WIFI" -> "Wi-Fi"
+                "CELLULAR", "MOBILE", "MOBILE_DATA" -> "Mobile Data"
+                "ETHERNET" -> "Ethernet"
+                "NONE" -> "Offline"
+                else -> "Other Network"
+            }
+        }
+
+    val displayConnectionQuality: String
+        get() {
+            if (!AppI18n.isEnglish) return connectionQuality
+            return when (connectionQuality.trim()) {
+                "ممتاز", "ممتازة" -> "Excellent"
+                "جيد جدًا", "جيدة ومستقرة" -> "Very Good"
+                "جيد" -> "Good"
+                "متوسط" -> "Fair"
+                "ضعيف", "متراجع" -> "Degraded"
+                "حجب طوارئ (Kill Switch)" -> "Kill Switch Active"
+                else -> connectionQuality
+            }
+        }
+
+    val displaySwitchingStatus: String
+        get() {
+            if (!AppI18n.isEnglish) return switchingStatus
+            return when (switchingStatus.trim()) {
+                "مستقر", "متّصل ومستقر" -> "Connected & Stable"
+                "نجح الانتقال الذكي" -> "Smart Switch Complete"
+                "رُصد بطء في الاستجابة" -> "Latency Degradation Detected"
+                else -> switchingStatus
+            }
+        }
 }
 
 object VpnStateManager {

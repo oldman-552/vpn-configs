@@ -13,6 +13,8 @@ package com.bahrain.vpnconfigs.engine
 
 import com.bahrain.vpnconfigs.data.LocalServerTelemetry
 import com.bahrain.vpnconfigs.data.ServerHint
+import com.bahrain.vpnconfigs.util.AppI18n
+import com.bahrain.vpnconfigs.util.tr
 import org.json.JSONObject
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -75,7 +77,10 @@ enum class MeasurementConfidence(val labelAr: String, val labelEn: String) {
     HIGH("ثقة عالية (مقاس محليًا)", "High (Locally Verified)"),
     MEDIUM("ثقة متوسطة (قياسات جزئية)", "Medium (Partial Measurements)"),
     LOW("ثقة منخفضة (بيانات سحابية فقط)", "Low (Cloud Hint Only)"),
-    INSUFFICIENT("بيانات غير كافية", "Insufficient Data"),
+    INSUFFICIENT("بيانات غير كافية", "Insufficient Data");
+
+    val displayLabel: String
+        get() = tr(labelAr, labelEn)
 }
 
 data class SmartServerCandidateInput(
@@ -113,7 +118,10 @@ data class ScoredSmartCandidate(
     val reasonsAr: List<String>,
     val reasonsEn: List<String>,
     val excludedCooldown: Boolean = false,
-)
+) {
+    val displayReasons: List<String>
+        get() = if (AppI18n.isEnglish) reasonsEn.ifEmpty { reasonsAr } else reasonsAr
+}
 
 data class SmartSelectionDecision(
     val primary: ScoredSmartCandidate?,

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bahrain.vpnconfigs.engine.SmartSelectionDecision
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import com.bahrain.vpnconfigs.vpn.VpnStatus
 import java.util.Locale
@@ -89,15 +90,18 @@ fun SmartSelectionSummaryCard(
                     Spacer(Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "الاختيار الذكي للسيرفر",
+                            text = tr("الاختيار الذكي للسيرفر", "Smart Server Selection"),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
                             text = if (smartAutoEnabled) {
-                                "نشط تلقائيًا${if (preferredCountry != "ALL") " • الدولة المفضّلة: $preferredCountry" else ""}"
+                                tr(
+                                    "نشط تلقائيًا${if (preferredCountry != "ALL") " • الدولة المفضّلة: $preferredCountry" else ""}",
+                                    "Auto-active${if (preferredCountry != "ALL") " • Preferred: $preferredCountry" else ""}",
+                                )
                             } else {
-                                "وضع الاختيار اليدوي من القائمة"
+                                tr("وضع الاختيار اليدوي من القائمة", "Manual selection from list")
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -122,24 +126,27 @@ fun SmartSelectionSummaryCard(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "المتصدر: ${primary.label}",
+                            text = tr("المتصدر: ${primary.label}", "Top pick: ${primary.label}"),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "الدرجة ${primary.score}/100 • الموثوقية ${primary.recentReliabilityPct.toInt()}% • ${primary.confidenceLevel.labelAr}",
+                            text = tr(
+                                "الدرجة ${primary.score}/100 • الموثوقية ${primary.recentReliabilityPct.toInt()}% • ${primary.confidenceLevel.labelAr}",
+                                "Score ${primary.score}/100 • Reliability ${primary.recentReliabilityPct.toInt()}% • ${primary.confidenceLevel.labelEn}",
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     AssistChip(
                         onClick = onConnectBestNow,
-                        label = { Text("اتصال ذكي", fontSize = 12.sp) },
+                        label = { Text(tr("اتصال ذكي", "Smart Connect"), fontSize = 12.sp) },
                     )
                 }
 
                 Spacer(Modifier.height(6.dp))
-                primary.reasonsAr.forEach { reason ->
+                primary.displayReasons.forEach { reason ->
                     Text(
                         text = "• $reason",
                         style = MaterialTheme.typography.bodySmall,
@@ -150,7 +157,10 @@ fun SmartSelectionSummaryCard(
                 if (fallback != null) {
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "البديل الجاهز عند الطوارئ: ${fallback.label} (الدرجة ${fallback.score})",
+                        text = tr(
+                            "البديل الجاهز عند الطوارئ: ${fallback.label} (الدرجة ${fallback.score})",
+                            "Ready failover backup: ${fallback.label} (Score ${fallback.score})",
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -188,13 +198,13 @@ fun RealTimeConnectionMonitorCard(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "المراقب اللحظي لحركة النفق",
+                        text = tr("المراقب اللحظي لحركة النفق", "Live Tunnel Monitor"),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                     )
                 }
                 Text(
-                    text = vpnStatus.underlyingNetworkAr + (if (vpnStatus.isMeteredNetwork) " • محدودة" else ""),
+                    text = vpnStatus.displayUnderlyingNetwork + (if (vpnStatus.isMeteredNetwork) tr(" • محدودة", " • Metered") else ""),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -212,22 +222,22 @@ fun RealTimeConnectionMonitorCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 MonitorMetricTile(
-                    title = "مدة الجلسة",
+                    title = tr("مدة الجلسة", "Duration"),
                     value = if (vpnStatus.isTunnelVerified) VpnStateManager.formatDuration(elapsedSeconds) else "00:00:00",
                     modifier = Modifier.weight(1f),
                 )
                 MonitorMetricTile(
-                    title = "الاستجابة / التذبذب",
+                    title = tr("الاستجابة / التذبذب", "Ping / Jitter"),
                     value = if (vpnStatus.isTunnelVerified && vpnStatus.livePingMs > 0L) {
                         "${vpnStatus.livePingMs}ms / ${String.format(Locale.US, "%.0f", vpnStatus.jitterMs)}ms"
-                    } else "غير متاح",
+                    } else tr("غير متاح", "N/A"),
                     modifier = Modifier.weight(1f),
                 )
                 MonitorMetricTile(
-                    title = "فقدان الحزم",
+                    title = tr("فقدان الحزم", "Packet Loss"),
                     value = if (vpnStatus.isTunnelVerified) {
                         String.format(Locale.US, "%.1f%%", vpnStatus.packetLossPct)
-                    } else "غير متاح",
+                    } else tr("غير متاح", "N/A"),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -238,17 +248,17 @@ fun RealTimeConnectionMonitorCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 MonitorMetricTile(
-                    title = "بيانات الجلسة",
+                    title = tr("بيانات الجلسة", "Session Data"),
                     value = "↓ ${VpnStateManager.formatBytes(vpnStatus.totalDownBytes)} • ↑ ${VpnStateManager.formatBytes(vpnStatus.totalUpBytes)}",
                     modifier = Modifier.weight(1.3f),
                 )
                 MonitorMetricTile(
-                    title = "نقطة الخروج / الجودة",
+                    title = tr("نقطة الخروج / الجودة", "Exit / Quality"),
                     value = buildString {
                         if (vpnStatus.exitCountry.isNotBlank()) {
                             append("${VpnStateManager.countryFlag(vpnStatus.exitCountry)} ${vpnStatus.exitCountry} • ")
                         }
-                        append(if (vpnStatus.isTunnelVerified) vpnStatus.connectionQuality else "متوقف")
+                        append(if (vpnStatus.isTunnelVerified) vpnStatus.displayConnectionQuality else tr("متوقف", "Idle"))
                     },
                     modifier = Modifier.weight(1f),
                 )
@@ -259,7 +269,7 @@ fun RealTimeConnectionMonitorCard(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "أحدث أحداث الاتصال والحماية:",
+                    text = tr("أحدث أحداث الاتصال والحماية:", "Recent Tunnel & Protection Events:"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -301,15 +311,19 @@ private fun LiveTrafficChart(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(downColor))
                 Spacer(Modifier.width(4.dp))
-                Text("تنزيل", style = MaterialTheme.typography.labelSmall)
+                Text(tr("تنزيل", "Down"), style = MaterialTheme.typography.labelSmall)
                 Spacer(Modifier.width(12.dp))
                 Box(Modifier.size(8.dp).clip(CircleShape).background(upColor))
                 Spacer(Modifier.width(4.dp))
-                Text("رفع", style = MaterialTheme.typography.labelSmall)
+                Text(tr("رفع", "Up"), style = MaterialTheme.typography.labelSmall)
             }
             val peakBps = samples.maxOfOrNull { maxOf(it.first, it.second) } ?: 0L
             Text(
-                text = if (isConnected && peakBps > 0L) "الذروة: ${VpnStateManager.formatSpeed(peakBps)}" else "بانتظار حركة مرور حيّة",
+                text = if (isConnected && peakBps > 0L) {
+                    tr("الذروة: ${VpnStateManager.formatSpeed(peakBps)}", "Peak: ${VpnStateManager.formatSpeed(peakBps)}")
+                } else {
+                    tr("بانتظار حركة مرور حيّة", "Waiting for live traffic")
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

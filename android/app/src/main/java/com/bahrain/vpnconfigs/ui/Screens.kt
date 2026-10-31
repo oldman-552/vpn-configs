@@ -1,9 +1,10 @@
 // =====================================================================
-// Screens.kt — الواجهات الأربع لتطبيق bahrain-vpn بتصميم Material 3 و RTL:
+// Screens.kt — الواجهات الأربع لتطبيق bahrain-vpn (v1) بتصميم Material 3
+// ودعم ثنائي اللغة (العربية أساسية RTL + الإنجليزية LTR):
 //   1) ConnectHomeScreen      — زر الاتصال الدائري، العداد، السرعة الحية، السيرفر النشط
 //   2) ServersListScreen      — قائمة سيرفرات bahrain-vpn كاملة مع الفلاتر والفحص والمفضلة
 //   3) AppsSplitScreen        — استثناء التطبيقات من النفق (Split Tunneling)
-//   4) SettingsAndExportScreen — إعدادات DNS والنفق والفحص وتصدير الملفات
+//   4) SettingsAndExportScreen — إعدادات اللغة و DNS والنفق والفحص وتصدير الملفات
 // =====================================================================
 package com.bahrain.vpnconfigs.ui
 
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
@@ -93,6 +95,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -101,7 +104,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bahrain.vpnconfigs.data.LocalPoolTier
 import com.bahrain.vpnconfigs.engine.ServerSortMode
+import com.bahrain.vpnconfigs.util.AppI18n
+import com.bahrain.vpnconfigs.util.AppLang
 import com.bahrain.vpnconfigs.util.UiMessages
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.vpn.VpnPhase
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import com.bahrain.vpnconfigs.vpn.VpnStatus
@@ -123,6 +129,7 @@ fun ConnectHomeScreen(
     onOpenServersTab: () -> Unit,
     onCopy: (String, String) -> Unit,
 ) {
+    val ctx = LocalContext.current
     var elapsedSec by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(vpnStatus.phase, vpnStatus.connectedSinceMs) {
@@ -181,6 +188,7 @@ fun ConnectHomeScreen(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f),
             ) {
                 Icon(
                     Icons.Filled.Shield,
@@ -195,7 +203,7 @@ fun ConnectHomeScreen(
                         fontWeight = FontWeight.ExtraBold,
                     )
                     val homeSub = buildString {
-                        append("${state.servers.size} سيرفر متاح")
+                        append(tr("${state.servers.size} سيرفر متاح", "${state.servers.size} servers ready"))
                         if (state.lastUpdatedLabel.isNotBlank()) {
                             append(" • ").append(state.lastUpdatedLabel)
                         }
@@ -204,11 +212,45 @@ fun ConnectHomeScreen(
                         homeSub,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
 
-            StatusPill(phase = vpnStatus.phase)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.clickable {
+                        AppI18n.toggleLanguage(ctx)
+                        vm.refreshLanguageLabels()
+                    },
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.Language,
+                            contentDescription = tr("تبديل اللغة إلى الإنجليزية", "Switch language to Arabic"),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = if (AppI18n.isEnglish) "عربي" else "EN",
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                StatusPill(phase = vpnStatus.phase)
+            }
         }
 
         // ── رسائل التنبيه أو الحالة ──
@@ -260,7 +302,7 @@ fun ConnectHomeScreen(
                     } else {
                         Icon(
                             Icons.Filled.PowerSettingsNew,
-                            contentDescription = "اتصال / إيقاف",
+                            contentDescription = tr("اتصال / إيقاف", "Connect / Disconnect"),
                             tint = if (isConnected) Color.White else ringColor,
                             modifier = Modifier.size(48.dp),
                         )
@@ -268,11 +310,11 @@ fun ConnectHomeScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = when {
-                            vpnStatus.phase == VpnPhase.CONNECTION_DEGRADED -> "متّصل (بطيء)"
-                            isConnected -> "متّصل"
-                            isProtectedLock -> "حجب التسرب نشط"
-                            isBusy -> "جارٍ الربط…"
-                            else -> "اضغط للاتصال"
+                            vpnStatus.phase == VpnPhase.CONNECTION_DEGRADED -> tr("متّصل (بطيء)", "Connected (Slow)")
+                            isConnected -> tr("متّصل", "Connected")
+                            isProtectedLock -> tr("حجب التسرب نشط", "Kill Switch Active")
+                            isBusy -> tr("جارٍ الربط…", "Connecting…")
+                            else -> tr("اضغط للاتصال", "Tap to Connect")
                         },
                         style = MaterialTheme.typography.titleMedium,
                         color = if (isConnected) Color.White else MaterialTheme.colorScheme.onSurface,
@@ -320,27 +362,27 @@ fun ConnectHomeScreen(
         ) {
             TelemetryCard(
                 modifier = Modifier.weight(1f),
-                title = "سرعة التنزيل",
+                title = tr("سرعة التنزيل", "Download Speed"),
                 mainValue = VpnStateManager.formatSpeed(vpnStatus.downSpeedBps),
-                subValue = "الإجمالي: ${VpnStateManager.formatBytes(vpnStatus.totalDownBytes)}",
+                subValue = tr("الإجمالي: ${VpnStateManager.formatBytes(vpnStatus.totalDownBytes)}", "Total: ${VpnStateManager.formatBytes(vpnStatus.totalDownBytes)}"),
                 icon = Icons.Filled.ArrowDownward,
                 accent = VpnConnectedGreen,
             )
             TelemetryCard(
                 modifier = Modifier.weight(1f),
-                title = "سرعة الرفع",
+                title = tr("سرعة الرفع", "Upload Speed"),
                 mainValue = VpnStateManager.formatSpeed(vpnStatus.upSpeedBps),
                 subValue = if (vpnStatus.livePingMs > 0) {
-                    "البينغ الحيّ: ${vpnStatus.livePingMs} ms"
+                    tr("البينغ الحيّ: ${vpnStatus.livePingMs} ms", "Live Ping: ${vpnStatus.livePingMs} ms")
                 } else {
-                    "الإجمالي: ${VpnStateManager.formatBytes(vpnStatus.totalUpBytes)}"
+                    tr("الإجمالي: ${VpnStateManager.formatBytes(vpnStatus.totalUpBytes)}", "Total: ${VpnStateManager.formatBytes(vpnStatus.totalUpBytes)}")
                 },
                 icon = Icons.Filled.ArrowUpward,
                 accent = MaterialTheme.colorScheme.primary,
             )
         }
 
-        // ── لوحة الاختيار الذكي الموزون + المراقب اللحظي لحركة النفق (v3.3) ──
+        // ── لوحة الاختيار الذكي الموزون + المراقب اللحظي لحركة النفق (v1) ──
         SmartSelectionSummaryCard(
             smartAutoEnabled = state.smartAutoSelect,
             preferredCountry = state.preferredCountry,
@@ -378,7 +420,7 @@ fun ConnectHomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = if (vpnStatus.isActive) "السيرفر المتّصل حاليًا" else "السيرفر المختار للاتصال",
+                        text = if (vpnStatus.isActive) tr("السيرفر المتّصل حاليًا", "Active Server") else tr("السيرفر المختار للاتصال", "Selected Server"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary,
                     )
@@ -443,7 +485,7 @@ fun ConnectHomeScreen(
                         ) {
                             Icon(Icons.Filled.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("القائمة")
+                            Text(tr("القائمة", "Servers"))
                         }
                         if (vpnStatus.isActive) {
                             OutlinedButton(
@@ -452,7 +494,7 @@ fun ConnectHomeScreen(
                             ) {
                                 Icon(Icons.Filled.SkipNext, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("التالي")
+                                Text(tr("التالي", "Next"))
                             }
                         }
                         OutlinedButton(
@@ -466,19 +508,22 @@ fun ConnectHomeScreen(
                                 Icon(Icons.Filled.NetworkCheck, contentDescription = null, modifier = Modifier.size(18.dp))
                             }
                             Spacer(Modifier.width(4.dp))
-                            Text("فحص السرعة")
+                            Text(tr("فحص السرعة", "Ping Test"))
                         }
                         IconButton(
                             onClick = {
-                                onCopy(currentServer.exportUri, "نُسخ ${currentServer.name} للحافظة")
+                                onCopy(currentServer.exportUri, tr("نُسخ ${currentServer.name} للحافظة", "Copied ${currentServer.name}"))
                             }
                         ) {
-                            Icon(Icons.Filled.ContentCopy, contentDescription = "نسخ")
+                            Icon(Icons.Filled.ContentCopy, contentDescription = tr("نسخ", "Copy"))
                         }
                     }
                 } else {
                     Text(
-                        "${UiMessages.MSG_NO_SERVERS}. اضغط «تحديث القائمة» بالأسفل.",
+                        tr(
+                            "${UiMessages.MSG_NO_SERVERS}. اضغط «تحديث القائمة» بالأسفل.",
+                            "${UiMessages.msgNoServers()}. Tap \"Refresh List\" below.",
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -497,9 +542,12 @@ fun ConnectHomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("التبديل التلقائي عند الانقطاع", style = MaterialTheme.typography.titleMedium)
+                        Text(tr("التبديل التلقائي عند الانقطاع", "Auto-Failover on Drop"), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "ينتقل تلقائيًا إلى السيرفر التالي إن توقّف السيرفر الحالي",
+                            tr(
+                                "ينتقل تلقائيًا إلى السيرفر التالي إن توقّف السيرفر الحالي",
+                                "Automatically switches to the next verified server if the tunnel drops",
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.secondary,
                         )
@@ -523,7 +571,7 @@ fun ConnectHomeScreen(
                     ) {
                         Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(if (state.loading) "جارٍ التحديث…" else "تحديث القائمة")
+                        Text(if (state.loading) tr("جارٍ التحديث…", "Refreshing…") else tr("تحديث القائمة", "Refresh List"))
                     }
 
                     if (state.testing) {
@@ -534,7 +582,7 @@ fun ConnectHomeScreen(
                         ) {
                             Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("إيقاف الفحص")
+                            Text(tr("إيقاف الفحص", "Stop Scan"))
                         }
                     } else {
                         Button(
@@ -544,13 +592,16 @@ fun ConnectHomeScreen(
                         ) {
                             Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("فحص سريع")
+                            Text(tr("فحص سريع", "Quick Scan"))
                         }
                     }
                 }
 
                 Text(
-                    "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/50 مخصّصة • الاحتياطي المؤهّل: ${state.backupPoolCount}",
+                    tr(
+                        "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/50 مخصّصة • الاحتياطي المؤهّل: ${state.backupPoolCount}",
+                        "${state.activeNetworkProfile.labelEn}: Personalized Top ${state.top50Count}/50 • Qualified Backup: ${state.backupPoolCount}",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )
@@ -559,7 +610,7 @@ fun ConnectHomeScreen(
                     val frac = if (p.total > 0) p.done.toFloat() / p.total else 0f
                     LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth())
                     Text(
-                        "${p.stage}: ${p.done} / ${p.total}  •  شغّال: ${p.alive}",
+                        tr("${p.stage}: ${p.done} / ${p.total}  •  شغّال: ${p.alive}", "${p.stage}: ${p.done} / ${p.total}  •  Alive: ${p.alive}"),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -578,19 +629,19 @@ fun ConnectHomeScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("سجل آخر الاتصالات", style = MaterialTheme.typography.titleMedium)
+                        Text(tr("سجل آخر الاتصالات", "Recent Connections"), style = MaterialTheme.typography.titleMedium)
                         TextButton(onClick = { vm.clearConnectionHistory() }) {
-                            Text("مسح", style = MaterialTheme.typography.labelSmall)
+                            Text(tr("مسح", "Clear"), style = MaterialTheme.typography.labelSmall)
                         }
                     }
                     state.connectionHistory.take(5).forEach { entry ->
                         val flag = if (entry.country.isNotBlank()) "${VpnStateManager.countryFlag(entry.country)} ${entry.country} • " else ""
                         val agoMin = ((System.currentTimeMillis() - entry.timestampMs) / 60_000L).coerceAtLeast(0L)
                         val timeTxt = when {
-                            agoMin < 1L -> "الآن"
-                            agoMin < 60L -> "منذ ${agoMin}د"
-                            agoMin < 1440L -> "منذ ${agoMin / 60L}س"
-                            else -> "منذ ${agoMin / 1440L}ي"
+                            agoMin < 1L -> tr("الآن", "Just now")
+                            agoMin < 60L -> tr("منذ ${agoMin}د", "${agoMin}m ago")
+                            agoMin < 1440L -> tr("منذ ${agoMin / 60L}س", "${agoMin / 60L}h ago")
+                            else -> tr("منذ ${agoMin / 1440L}ي", "${agoMin / 1440L}d ago")
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -645,11 +696,14 @@ fun ServersListScreen(
     if (showImportDialog) {
         AlertDialog(
             onDismissRequest = { showImportDialog = false },
-            title = { Text("إضافة كانفيغ إلى bahrain-vpn") },
+            title = { Text(tr("إضافة كانفيغ إلى bahrain-vpn", "Import Config to bahrain-vpn")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "الصق رابط كانفيغ واحد أو عدة أسطر (vless / vmess / trojan / hy2 / ss / tuic) أو نص اشتراك Base64:",
+                        tr(
+                            "الصق رابط كانفيغ واحد أو عدة أسطر (vless / vmess / trojan / hy2 / ss / tuic) أو نص اشتراك Base64:",
+                            "Paste one or more config URIs (vless / vmess / trojan / hy2 / ss / tuic) or Base64 subscription text:",
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     OutlinedTextField(
@@ -666,7 +720,7 @@ fun ServersListScreen(
                     ) {
                         Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("جلب من الحافظة")
+                        Text(tr("جلب من الحافظة", "Paste from Clipboard"))
                     }
                 }
             },
@@ -679,12 +733,12 @@ fun ServersListScreen(
                         showImportDialog = false
                     }
                 ) {
-                    Text("إضافة")
+                    Text(tr("إضافة", "Import"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showImportDialog = false }) {
-                    Text("إلغاء")
+                    Text(tr("إلغاء", "Cancel"))
                 }
             },
         )
@@ -725,17 +779,20 @@ fun ServersListScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("قائمة سيرفرات bahrain-vpn", style = MaterialTheme.typography.titleLarge)
+                Text(tr("قائمة سيرفرات bahrain-vpn", "bahrain-vpn Server Pool"), style = MaterialTheme.typography.titleLarge)
                 val poolTotal = state.datasetQualifiedCount.takeIf { it > 0 } ?: state.configs.size
                 val updatedPart = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
                 Text(
-                    "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/50 • احتياطي ${state.backupPoolCount} • المرشّحات $poolTotal/500$updatedPart",
+                    tr(
+                        "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/50 • احتياطي ${state.backupPoolCount} • المرشّحات $poolTotal/500$updatedPart",
+                        "${state.activeNetworkProfile.labelEn}: Top ${state.top50Count}/50 • Backup ${state.backupPoolCount} • Pool $poolTotal/500$updatedPart",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )
             }
             IconButton(onClick = { vm.refresh() }, enabled = !state.loading) {
-                Icon(Icons.Filled.Refresh, contentDescription = "تحديث القائمة")
+                Icon(Icons.Filled.Refresh, contentDescription = tr("تحديث القائمة", "Refresh list"))
             }
         }
 
@@ -753,7 +810,7 @@ fun ServersListScreen(
                 ) {
                     Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("إيقاف الفحص")
+                    Text(tr("إيقاف الفحص", "Stop Scan"))
                 }
             } else {
                 Button(
@@ -764,7 +821,7 @@ fun ServersListScreen(
                 ) {
                     Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("فحص سريع (50)")
+                    Text(tr("فحص سريع (50)", "Quick Scan (50)"))
                 }
                 OutlinedButton(
                     onClick = { vm.startFullScan() },
@@ -774,7 +831,7 @@ fun ServersListScreen(
                 ) {
                     Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("فحص شامل (500)")
+                    Text(tr("فحص شامل (500)", "Full Scan (500)"))
                 }
             }
             OutlinedButton(
@@ -787,7 +844,7 @@ fun ServersListScreen(
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("إضافة")
+                Text(tr("إضافة", "Add"))
             }
         }
 
@@ -795,7 +852,7 @@ fun ServersListScreen(
             val frac = if (p.total > 0) p.done.toFloat() / p.total else 0f
             LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth())
             Text(
-                "${p.stage}: ${p.done}/${p.total} • شغّال: ${p.alive}",
+                tr("${p.stage}: ${p.done}/${p.total} • شغّال: ${p.alive}", "${p.stage}: ${p.done}/${p.total} • Alive: ${p.alive}"),
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -807,12 +864,12 @@ fun ServersListScreen(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("ابحث بالرقم (مثل 12) أو البروتوكول أو العنوان…") },
+            placeholder = { Text(tr("ابحث بالرقم (مثل 12) أو البروتوكول أو العنوان…", "Search by number, protocol, country, or host…")) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
                     IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Filled.Close, contentDescription = "مسح")
+                        Icon(Icons.Filled.Close, contentDescription = tr("مسح", "Clear"))
                     }
                 }
             },
@@ -829,7 +886,7 @@ fun ServersListScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "الترتيب:",
+                text = tr("الترتيب:", "Sort:"),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.secondary,
             )
@@ -837,18 +894,18 @@ fun ServersListScreen(
                 FilterChip(
                     selected = ServerSortMode.fromKey(state.sortMode) == mode,
                     onClick = { vm.setSortMode(mode.key) },
-                    label = { Text(mode.titleAr) },
+                    label = { Text(mode.displayTitle) },
                 )
             }
         }
 
         // ── شرائح الفلترة (أفضل 50 للشبكة + الاحتياطي + البروتوكولات + المفضلة) ──
         val chips = listOf(
-            "ALL" to "الكل (${state.servers.size})",
-            "TOP_50" to "🏆 أفضل 50 (${state.top50Count})",
-            "BACKUP" to "🛡️ الاحتياطي (${state.backupPoolCount})",
-            "FAV" to "⭐ المفضلة",
-            "STABLE" to "المستقرة",
+            "ALL" to tr("الكل (${state.servers.size})", "All (${state.servers.size})"),
+            "TOP_50" to tr("🏆 أفضل 50 (${state.top50Count})", "🏆 Top 50 (${state.top50Count})"),
+            "BACKUP" to tr("🛡️ الاحتياطي (${state.backupPoolCount})", "🛡️ Backup (${state.backupPoolCount})"),
+            "FAV" to tr("⭐ المفضلة", "⭐ Favorites"),
+            "STABLE" to tr("المستقرة", "Stable"),
             "HY2" to "HY2",
             "VLESS" to "VLESS",
             "TROJAN" to "TROJAN",
@@ -882,7 +939,7 @@ fun ServersListScreen(
                 FilterChip(
                     selected = state.filterCountry == "ALL",
                     onClick = { vm.setFilterCountry("ALL") },
-                    label = { Text("🌍 كل الدول") },
+                    label = { Text(tr("🌍 كل الدول", "🌍 All Countries")) },
                 )
                 state.availableCountries.forEach { (cc, count) ->
                     val flag = VpnStateManager.countryFlag(cc)
@@ -905,9 +962,9 @@ fun ServersListScreen(
             ) {
                 Text(
                     when {
-                        state.loading -> "${UiMessages.MSG_UPDATING}…"
-                        state.servers.isEmpty() -> "${UiMessages.MSG_NO_SERVERS}."
-                        else -> "لا توجد سيرفرات مطابقة للفلتر الحالي."
+                        state.loading -> UiMessages.msgUpdating()
+                        state.servers.isEmpty() -> "${UiMessages.msgNoServers()}."
+                        else -> tr("لا توجد سيرفرات مطابقة للفلتر الحالي.", "No servers match the selected filter.")
                     },
                     style = MaterialTheme.typography.bodyLarge,
                 )
@@ -931,9 +988,9 @@ fun ServersListScreen(
                         onPing = { vm.pingSingleServer(srv) },
                         onCopy = {
                             if (srv.isVip) {
-                                onCopy("", "عقدة VIP مشفّرة ومحمية — مخصّصة للاتصال المباشر فقط")
+                                onCopy("", tr("عقدة VIP مشفّرة ومحمية — مخصّصة للاتصال المباشر فقط", "Encrypted VIP node — direct tunnel connection only"))
                             } else {
-                                onCopy(srv.exportUri, "نُسخ ${srv.name} للحافظة")
+                                onCopy(srv.exportUri, tr("نُسخ ${srv.name} للحافظة", "Copied ${srv.name}"))
                             }
                         },
                         onDeleteCustom = if (srv.isCustom) ({ vm.removeCustomServer(srv.cfg) }) else null,
@@ -1043,7 +1100,7 @@ private fun ServerCard(
                             shape = RoundedCornerShape(6.dp),
                         ) {
                             Text(
-                                "احتياطي #${item.personalizedRank - 50}",
+                                tr("احتياطي #${item.personalizedRank - 50}", "Backup #${item.personalizedRank - 50}"),
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
@@ -1054,7 +1111,7 @@ private fun ServerCard(
                     if (item.isCustom) {
                         AssistChip(
                             onClick = onConnect,
-                            label = { Text("مخصّص", fontSize = 10.sp) },
+                            label = { Text(tr("مخصّص", "Custom"), fontSize = 10.sp) },
                             modifier = Modifier.height(24.dp),
                         )
                     }
@@ -1064,7 +1121,7 @@ private fun ServerCard(
                             shape = RoundedCornerShape(6.dp),
                         ) {
                             Text(
-                                "متّصل",
+                                tr("متّصل", "Connected"),
                                 color = Color.White,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -1104,21 +1161,21 @@ private fun ServerCard(
                         )
                     }
                     val telemetryParts = buildList {
-                        if (item.securityAssessment == "Verified") add("🔒 تشفير موثّق")
-                        else if (item.securityAssessment == "Failed") add("⚠ تحذير تشفير")
-                        if (item.privacyAssessment == "Verified") add("🛡 خصوصية موثّقة")
-                        else if (item.privacyAssessment == "Unverified") add("مشغّل عام غير موثّق")
-                        if (item.locallyTested) add("✓ فُحص على شبكتك")
-                        if (item.overallScore > 0.0) add("الإجمالي ${item.overallScore.toInt()}%")
-                        if (item.stabilityRuns >= 2) add("مستقر ×${item.stabilityRuns}")
-                        if (item.jitterMs > 0.5) add("تذبذب ±${item.jitterMs.toInt()}ms")
+                        if (item.securityAssessment == "Verified") add(tr("🔒 تشفير موثّق", "🔒 Verified TLS"))
+                        else if (item.securityAssessment == "Failed") add(tr("⚠ تحذير تشفير", "⚠ Weak TLS"))
+                        if (item.privacyAssessment == "Verified") add(tr("🛡 خصوصية موثّقة", "🛡 Verified Privacy"))
+                        else if (item.privacyAssessment == "Unverified") add(tr("مشغّل عام غير موثّق", "Unverified public operator"))
+                        if (item.locallyTested) add(tr("✓ فُحص على شبكتك", "✓ Tested locally"))
+                        if (item.overallScore > 0.0) add(tr("الإجمالي ${item.overallScore.toInt()}%", "Score ${item.overallScore.toInt()}%"))
+                        if (item.stabilityRuns >= 2) add(tr("مستقر ×${item.stabilityRuns}", "Stable ×${item.stabilityRuns}"))
+                        if (item.jitterMs > 0.5) add(tr("تذبذب ±${item.jitterMs.toInt()}ms", "Jitter ±${item.jitterMs.toInt()}ms"))
                         if (item.lastTestedAtMs > 0L) {
                             val agoMin = ((System.currentTimeMillis() - item.lastTestedAtMs) / 60_000L).coerceAtLeast(0L)
                             val testedLbl = when {
-                                agoMin < 1L -> "اختُبر الآن"
-                                agoMin < 60L -> "اختُبر منذ ${agoMin}د"
-                                agoMin < 1440L -> "اختُبر منذ ${agoMin / 60L}س"
-                                else -> "اختُبر منذ ${agoMin / 1440L}ي"
+                                agoMin < 1L -> tr("اختُبر الآن", "Tested now")
+                                agoMin < 60L -> tr("اختُبر منذ ${agoMin}د", "Tested ${agoMin}m ago")
+                                agoMin < 1440L -> tr("اختُبر منذ ${agoMin / 60L}س", "Tested ${agoMin / 60L}h ago")
+                                else -> tr("اختُبر منذ ${agoMin / 1440L}ي", "Tested ${agoMin / 1440L}d ago")
                             }
                             add(testedLbl)
                         }
@@ -1138,7 +1195,7 @@ private fun ServerCard(
                     IconButton(onClick = onToggleFav, modifier = Modifier.size(34.dp)) {
                         Icon(
                             imageVector = if (item.isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            contentDescription = "مفضلة",
+                            contentDescription = tr("مفضلة", "Favorite"),
                             tint = if (item.isFavorite) VpnConnectingAmber else MaterialTheme.colorScheme.secondary,
                             modifier = Modifier.size(19.dp),
                         )
@@ -1149,7 +1206,7 @@ private fun ServerCard(
                         } else {
                             Icon(
                                 Icons.Filled.NetworkCheck,
-                                contentDescription = "فحص البينغ",
+                                contentDescription = tr("فحص البينغ", "Ping test"),
                                 modifier = Modifier.size(18.dp),
                             )
                         }
@@ -1157,7 +1214,7 @@ private fun ServerCard(
                     IconButton(onClick = onCopy, modifier = Modifier.size(34.dp)) {
                         Icon(
                             Icons.Filled.ContentCopy,
-                            contentDescription = "نسخ",
+                            contentDescription = tr("نسخ", "Copy"),
                             modifier = Modifier.size(17.dp),
                         )
                     }
@@ -1165,7 +1222,7 @@ private fun ServerCard(
                         IconButton(onClick = onDeleteCustom, modifier = Modifier.size(34.dp)) {
                             Icon(
                                 Icons.Filled.Delete,
-                                contentDescription = "حذف",
+                                contentDescription = tr("حذف", "Delete"),
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(18.dp),
                             )
@@ -1213,9 +1270,12 @@ fun AppsSplitScreen(
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("التحكم بالتطبيقات (Split Tunneling)", style = MaterialTheme.typography.titleLarge)
+        Text(tr("التحكم بالتطبيقات (Split Tunneling)", "Per-App Split Tunneling"), style = MaterialTheme.typography.titleLarge)
         Text(
-            "استثنِ تطبيقات البنوك والخدمات المحلية لتعمل على شبكتك العادية بينما يعمل الـ VPN لبقية التطبيقات.",
+            tr(
+                "استثنِ تطبيقات البنوك والخدمات المحلية لتعمل على شبكتك العادية بينما يعمل الـ VPN لبقية التطبيقات.",
+                "Exclude banking and local apps so they use your direct network while VPN protects all other apps.",
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary,
         )
@@ -1233,14 +1293,14 @@ fun AppsSplitScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "تغيّرت قائمة التطبيقات أثناء الاتصال",
+                        tr("تغيّرت قائمة التطبيقات أثناء الاتصال", "Split-tunnel app list changed while connected"),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f),
                     )
                     Button(onClick = { vm.applyTunnelReload() }) {
                         Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("تطبيق الآن")
+                        Text(tr("تطبيق الآن", "Apply Now"))
                     }
                 }
             }
@@ -1254,19 +1314,19 @@ fun AppsSplitScreen(
             FilterChip(
                 selected = !state.splitIncludeOnly,
                 onClick = { vm.setSplitIncludeOnly(false) },
-                label = { Text("استثناء المحدد من VPN") },
+                label = { Text(tr("استثناء المحدد من VPN", "Bypass VPN for Selected")) },
             )
             FilterChip(
                 selected = state.splitIncludeOnly,
                 onClick = { vm.setSplitIncludeOnly(true) },
-                label = { Text("تشغيل VPN للمحدد فقط") },
+                label = { Text(tr("تشغيل VPN للمحدد فقط", "VPN Only for Selected")) },
             )
         }
 
         OutlinedTextField(
             value = search,
             onValueChange = { search = it },
-            placeholder = { Text("ابحث عن تطبيق (واتساب، يوتيوب، البنك…)…") },
+            placeholder = { Text(tr("ابحث عن تطبيق (واتساب، يوتيوب، البنك…)…", "Search installed apps (WhatsApp, YouTube, Banking…)…")) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -1279,11 +1339,11 @@ fun AppsSplitScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = showSystem, onCheckedChange = { showSystem = it })
-                Text("إظهار تطبيقات النظام", style = MaterialTheme.typography.bodyMedium)
+                Text(tr("إظهار تطبيقات النظام", "Show System Apps"), style = MaterialTheme.typography.bodyMedium)
             }
             if (state.splitApps.isNotEmpty()) {
                 TextButton(onClick = { vm.clearAppSplit() }) {
-                    Text("إلغاء تحديد الكل (${state.splitApps.size})")
+                    Text(tr("إلغاء تحديد الكل (${state.splitApps.size})", "Clear Selection (${state.splitApps.size})"))
                 }
             }
         }
@@ -1293,7 +1353,7 @@ fun AppsSplitScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator()
                     Spacer(Modifier.height(8.dp))
-                    Text("جارٍ قراءة التطبيقات المثبّتة…")
+                    Text(tr("جارٍ قراءة التطبيقات المثبّتة…", "Loading installed apps…"))
                 }
             }
         } else {
@@ -1372,6 +1432,7 @@ fun SettingsAndExportScreen(
     onOpenSplitApps: () -> Unit = {},
     onOpenEnterpriseHub: () -> Unit = {},
 ) {
+    val ctx = LocalContext.current
     val p = vm.settings()
     var dnsServer by remember { mutableStateOf(p.dnsServer) }
     var dnsDoh by remember { mutableStateOf(p.dnsDoh) }
@@ -1392,14 +1453,17 @@ fun SettingsAndExportScreen(
     if (showLicensesDialog) {
         AlertDialog(
             onDismissRequest = { showLicensesDialog = false },
-            title = { Text("الإشعارات القانونية والتراخيص مفتوحة المصدر") },
+            title = { Text(tr("الإشعارات القانونية والتراخيص مفتوحة المصدر", "Open-Source Licenses & Legal Notices")) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        "يستخدم تطبيق bahrain-vpn المكوّنات مفتوحة المصدر التالية وفق تراخيصها القانونية المعتمدة:",
+                        tr(
+                            "يستخدم تطبيق bahrain-vpn المكوّنات مفتوحة المصدر التالية وفق تراخيصها القانونية المعتمدة:",
+                            "bahrain-vpn includes the following open-source components under their respective licenses:",
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
@@ -1418,7 +1482,7 @@ fun SettingsAndExportScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showLicensesDialog = false }) {
-                    Text("إغلاق")
+                    Text(tr("إغلاق", "Close"))
                 }
             },
         )
@@ -1431,7 +1495,59 @@ fun SettingsAndExportScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("إعدادات bahrain-vpn", style = MaterialTheme.typography.titleLarge)
+        Text(tr("إعدادات bahrain-vpn", "bahrain-vpn Settings"), style = MaterialTheme.typography.titleLarge)
+
+        // ── بطاقة اختيار لغة التطبيق (اللغة العربية هي الأساسية افتراضيًا + الإنجليزية) ──
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Language,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        tr("لغة التطبيق (App Language)", "App Language (لغة التطبيق)"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Text(
+                    tr(
+                        "اللغة العربية هي اللغة الأساسية والافتراضية للتطبيق، ويمكنك التبديل الفوري للإنجليزية في أي وقت.",
+                        "Arabic is the primary default language; switch between Arabic (RTL) and English (LTR) anytime.",
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = AppI18n.current == AppLang.AR,
+                        onClick = {
+                            AppI18n.setLanguage(ctx, AppLang.AR)
+                            vm.refreshLanguageLabels()
+                        },
+                        label = { Text("العربية (الأساسية)") },
+                    )
+                    FilterChip(
+                        selected = AppI18n.current == AppLang.EN,
+                        onClick = {
+                            AppI18n.setLanguage(ctx, AppLang.EN)
+                            vm.refreshLanguageLabels()
+                        },
+                        label = { Text("English") },
+                    )
+                }
+            }
+        }
 
         // ── الوصول السريع لاستثناء التطبيقات والمركز المؤسسي (فحص السرعة والحساب) ──
         Row(
@@ -1442,13 +1558,13 @@ fun SettingsAndExportScreen(
                 onClick = onOpenSplitApps,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("استثناء التطبيقات (${state.splitApps.size})")
+                Text(tr("استثناء التطبيقات (${state.splitApps.size})", "Split Tunnel (${state.splitApps.size})"))
             }
             OutlinedButton(
                 onClick = onOpenEnterpriseHub,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("المركز المؤسسي والسرعة")
+                Text(tr("المركز المؤسسي والسرعة", "Account & Speed Studio"))
             }
         }
 
@@ -1458,10 +1574,13 @@ fun SettingsAndExportScreen(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("تفضيلات الاختيار الذكي والسجل", style = MaterialTheme.typography.titleMedium)
+                Text(tr("تفضيلات الاختيار الذكي والسجل", "Smart Selection Preferences"), style = MaterialTheme.typography.titleMedium)
                 SettingToggleRow(
-                    title = "الاختيار التلقائي الذكي للسيرفر",
-                    subtitle = "يختار أفضل سيرفر موثوق حسب الموثوقية والتأخير والسرعة وفقدان الحزم",
+                    title = tr("الاختيار التلقائي الذكي للسيرفر", "Automatic Smart Server Selection"),
+                    subtitle = tr(
+                        "يختار أفضل سيرفر موثوق حسب الموثوقية والتأخير والسرعة وفقدان الحزم",
+                        "Selects the best verified server by reliability, latency, throughput, and packet loss",
+                    ),
                     checked = state.smartAutoSelect,
                     onCheckedChange = { vm.setSmartAutoSelect(it) },
                 )
@@ -1474,7 +1593,7 @@ fun SettingsAndExportScreen(
                     FilterChip(
                         selected = state.preferredCountry == "ALL",
                         onClick = { vm.setPreferredCountry("ALL") },
-                        label = { Text("أي دولة (تلقائي)") },
+                        label = { Text(tr("أي دولة (تلقائي)", "Any Country (Auto)")) },
                     )
                     state.availableCountries.take(8).forEach { (cc, _) ->
                         FilterChip(
@@ -1493,7 +1612,7 @@ fun SettingsAndExportScreen(
         // ── إعدادات النفق و DNS ──
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("إعدادات النفق و DNS", style = MaterialTheme.typography.titleMedium)
+                Text(tr("إعدادات النفق و DNS", "Tunnel & DNS Settings"), style = MaterialTheme.typography.titleMedium)
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("1.1.1.1" to "Cloudflare", "8.8.8.8" to "Google", "9.9.9.9" to "Quad9").forEach { (ip, name) ->
@@ -1508,26 +1627,35 @@ fun SettingsAndExportScreen(
                 OutlinedTextField(
                     value = dnsServer,
                     onValueChange = { dnsServer = it },
-                    label = { Text("خادم DNS الأساسي") },
+                    label = { Text(tr("خادم DNS الأساسي", "Primary DNS Resolver")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
                 SettingToggleRow(
-                    title = "DNS مشفّر عبر HTTPS (DoH)",
-                    subtitle = "مفيد إذا كان مزوّد الخدمة يحجب أو يتلاعب بـ UDP 53",
+                    title = tr("DNS مشفّر عبر HTTPS (DoH)", "Encrypted DNS-over-HTTPS (DoH)"),
+                    subtitle = tr(
+                        "مفيد إذا كان مزوّد الخدمة يحجب أو يتلاعب بـ UDP 53",
+                        "Recommended if your ISP intercepts or tampers with UDP port 53",
+                    ),
                     checked = dnsDoh,
                     onCheckedChange = { dnsDoh = it },
                 )
                 SettingToggleRow(
-                    title = "مفتاح الإيقاف الصارم (Kill Switch)",
-                    subtitle = "يحجب مرور بيانات التطبيقات خارج النفق أثناء الربط أو عند انقطاع السيرفر",
+                    title = tr("مفتاح الإيقاف الصارم (Kill Switch)", "Fail-Closed Kill Switch"),
+                    subtitle = tr(
+                        "يحجب مرور بيانات التطبيقات خارج النفق أثناء الربط أو عند انقطاع السيرفر",
+                        "Blocks unprotected app traffic while connecting or if the VPN server drops",
+                    ),
                     checked = killSwitch,
                     onCheckedChange = { killSwitch = it },
                 )
                 SettingToggleRow(
-                    title = "التبديل التلقائي عند انقطاع السيرفر",
-                    subtitle = "ينتقل تلقائيًا لأفضل سيرفر بديل دون قطع نفق الـ VPN",
+                    title = tr("التبديل التلقائي عند انقطاع السيرفر", "Auto-Failover on Server Drop"),
+                    subtitle = tr(
+                        "ينتقل تلقائيًا لأفضل سيرفر بديل دون قطع نفق الـ VPN",
+                        "Seamlessly switches to the best backup server without tearing down TUN",
+                    ),
                     checked = autoFailover,
                     onCheckedChange = {
                         autoFailover = it
@@ -1535,14 +1663,20 @@ fun SettingsAndExportScreen(
                     },
                 )
                 SettingToggleRow(
-                    title = "تمرير UDP عبر TCP (UDP-in-TCP)",
-                    subtitle = "فعّله فقط إن كانت الشبكة تحظر حزم UDP",
+                    title = tr("تمرير UDP عبر TCP (UDP-in-TCP)", "Encapsulate UDP over TCP"),
+                    subtitle = tr(
+                        "فعّله فقط إن كانت الشبكة تحظر حزم UDP",
+                        "Enable only on restrictive networks that block raw UDP packets",
+                    ),
                     checked = udpInTcp,
                     onCheckedChange = { udpInTcp = it },
                 )
                 SettingToggleRow(
-                    title = "تفعيل توجيه IPv6 داخل النفق",
-                    subtitle = "يُفضّل إبقاؤه مغلقًا إلا إذا كان السيرفر يدعم IPv6 كاملًا",
+                    title = tr("تفعيل توجيه IPv6 داخل النفق", "Route IPv6 Inside Tunnel"),
+                    subtitle = tr(
+                        "يُفضّل إبقاؤه مغلقًا إلا إذا كان السيرفر يدعم IPv6 كاملًا",
+                        "Keep disabled unless your selected server supports full dual-stack IPv6",
+                    ),
                     checked = enableIpv6,
                     onCheckedChange = { enableIpv6 = it },
                 )
@@ -1552,14 +1686,14 @@ fun SettingsAndExportScreen(
         // ── إعدادات الفحص والترتيب والتحديث التلقائي ──
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("معاملات الفحص والترتيب والتحديث", style = MaterialTheme.typography.titleMedium)
-                NumField(testTop, { testTop = it }, "عدد السيرفرات المفحوصة في الفحص الشامل")
-                NumField(speedTop, { speedTop = it }, "عدد السيرفرات المقاسة سرعة تنزيلها عبر النفق")
-                NumField(conc, { conc = it }, "التوازي أثناء الفحص (1–12)")
-                NumField(timeout, { timeout = it }, "مهلة اختبار كل سيرفر بالثواني")
-                NumField(bestN, { bestN = it }, "عدد أفضل السيرفرات المحفوظة للتصدير")
+                Text(tr("معاملات الفحص والترتيب والتحديث", "Scan, Ranking & Sync Parameters"), style = MaterialTheme.typography.titleMedium)
+                NumField(testTop, { testTop = it }, tr("عدد السيرفرات المفحوصة في الفحص الشامل", "Max servers tested in Full Scan"))
+                NumField(speedTop, { speedTop = it }, tr("عدد السيرفرات المقاسة سرعة تنزيلها عبر النفق", "Max servers speed-tested through tunnel"))
+                NumField(conc, { conc = it }, tr("التوازي أثناء الفحص (1–12)", "Pre-filter concurrency (1–12)"))
+                NumField(timeout, { timeout = it }, tr("مهلة اختبار كل سيرفر بالثواني", "Per-server probe timeout (seconds)"))
+                NumField(bestN, { bestN = it }, tr("عدد أفضل السيرفرات المحفوظة للتصدير", "Top verified servers saved for export"))
 
-                Text("معيار الترتيب الافتراضي للقائمة", style = MaterialTheme.typography.labelSmall)
+                Text(tr("معيار الترتيب الافتراضي للقائمة", "Default Server List Sort Mode"), style = MaterialTheme.typography.labelSmall)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1570,20 +1704,23 @@ fun SettingsAndExportScreen(
                         FilterChip(
                             selected = ServerSortMode.fromKey(defaultSort) == mode,
                             onClick = { defaultSort = mode.key },
-                            label = { Text(mode.titleAr) },
+                            label = { Text(mode.displayTitle) },
                         )
                     }
                 }
 
                 SettingToggleRow(
-                    title = "تحديث قائمة السيرفرات تلقائيًا في الخلفية",
-                    subtitle = "يجلب أحدث سيرفرات bahrain-vpn دوريًا دون استهلاك بطارية",
+                    title = tr("تحديث قائمة السيرفرات تلقائيًا في الخلفية", "Background Server Pool Auto-Sync"),
+                    subtitle = tr(
+                        "يجلب أحدث سيرفرات bahrain-vpn دوريًا دون استهلاك بطارية",
+                        "Fetches updated bahrain-vpn candidate lists periodically with minimal battery impact",
+                    ),
                     checked = autoRef,
                     onCheckedChange = { autoRef = it },
                 )
 
                 HorizontalDivider()
-                Text("نمط التغذية المفضّل", style = MaterialTheme.typography.labelSmall)
+                Text(tr("نمط التغذية المفضّل", "Preferred Candidate Feed Profile"), style = MaterialTheme.typography.labelSmall)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1591,11 +1728,11 @@ fun SettingsAndExportScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     listOf(
-                        "smart" to "الذكي الشامل",
-                        "reliable" to "الأكثر استقرارًا",
-                        "low_latency" to "الأقل تأخيرًا",
-                        "high_throughput" to "الأعلى سرعة",
-                        "privacy_aware" to "الأعلى أمانًا",
+                        "smart" to tr("الذكي الشامل", "Smart Balanced"),
+                        "reliable" to tr("الأكثر استقرارًا", "Most Reliable"),
+                        "low_latency" to tr("الأقل تأخيرًا", "Low Latency"),
+                        "high_throughput" to tr("الأعلى سرعة", "High Throughput"),
+                        "privacy_aware" to tr("الأعلى أمانًا", "Privacy-Aware"),
                     ).forEach { (key, title) ->
                         FilterChip(
                             selected = state.feedProfile == key,
@@ -1628,31 +1765,34 @@ fun SettingsAndExportScreen(
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("حفظ الإعدادات وتطبيقها")
+            Text(tr("حفظ الإعدادات وتطبيقها", "Save & Apply Settings"))
         }
 
         // ── التصدير والمشاركة المحلية بدون كشف المصدر ──
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("تصدير ومشاركة قوائم bahrain-vpn", style = MaterialTheme.typography.titleMedium)
+                Text(tr("تصدير ومشاركة قوائم bahrain-vpn", "Export & Share bahrain-vpn Lists"), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "يمكنك نسخ أو مشاركة القوائم المولّدة محليًا على جهازك بالاسم الموحّد bahrain-vpn.",
+                    tr(
+                        "يمكنك نسخ أو مشاركة القوائم المولّدة محليًا على جهازك بالاسم الموحّد bahrain-vpn.",
+                        "Copy or share locally verified server lists formatted under the unified bahrain-vpn name.",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )
-                ExportFileRow("قائمة أفضل السيرفرات المفحوصة", state.bestFile, onCopyFile, onShareFile)
-                ExportFileRow("حزمة الاشتراك المحلية (Base64)", state.subFile, onCopyFile, onShareFile)
-                ExportFileRow("قائمة جميع السيرفرات المتاحة", state.allFile, onCopyFile, onShareFile)
+                ExportFileRow(tr("قائمة أفضل السيرفرات المفحوصة", "Top Verified Servers List"), state.bestFile, onCopyFile, onShareFile)
+                ExportFileRow(tr("حزمة الاشتراك المحلية (Base64)", "Local Subscription Bundle (Base64)"), state.subFile, onCopyFile, onShareFile)
+                ExportFileRow(tr("قائمة جميع السيرفرات المتاحة", "Full Candidate Pool List"), state.allFile, onCopyFile, onShareFile)
             }
         }
 
         // ── حول التطبيق والإشعارات القانونية المطلوبة ──
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("حول التطبيق والتراخيص القانونية", style = MaterialTheme.typography.titleMedium)
+                Text(tr("حول التطبيق والتراخيص القانونية", "About & Open-Source Licenses"), style = MaterialTheme.typography.titleMedium)
                 val aboutUpdated = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
                 Text(
-                    "bahrain-vpn v3.5$aboutUpdated",
+                    "bahrain-vpn v1$aboutUpdated",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )
@@ -1660,7 +1800,7 @@ fun SettingsAndExportScreen(
                     onClick = { showLicensesDialog = true },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("عرض تراخيص المكوّنات مفتوحة المصدر")
+                    Text(tr("عرض تراخيص المكوّنات مفتوحة المصدر", "View Open-Source Component Licenses"))
                 }
             }
         }
@@ -1673,17 +1813,17 @@ fun SettingsAndExportScreen(
 @Composable
 private fun StatusPill(phase: VpnPhase) {
     val (bg, fg, label) = when (phase) {
-        VpnPhase.CONNECTED -> Triple(VpnConnectedGreen.copy(alpha = 0.16f), VpnConnectedGreen, "● متّصل ومحمي")
-        VpnPhase.CONNECTION_DEGRADED -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, "● متّصل (تذبذب)")
-        VpnPhase.CONNECTING -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, "● جارٍ الاتصال…")
-        VpnPhase.RECONNECTING -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, "● استعادة المسار…")
-        VpnPhase.SWITCHING_SERVER -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, "● جارٍ التبديل…")
-        VpnPhase.PROTECTION_ACTIVE -> Triple(VpnConnectingAmber.copy(alpha = 0.18f), VpnConnectingAmber, "🛡 Kill Switch نشط")
-        VpnPhase.CONNECTION_FAILED -> Triple(VpnDangerRed.copy(alpha = 0.16f), VpnDangerRed, "● تعذّر الاتصال")
+        VpnPhase.CONNECTED -> Triple(VpnConnectedGreen.copy(alpha = 0.16f), VpnConnectedGreen, tr("● متّصل ومحمي", "● Connected"))
+        VpnPhase.CONNECTION_DEGRADED -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, tr("● متّصل (تذبذب)", "● Degraded"))
+        VpnPhase.CONNECTING -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, tr("● جارٍ الاتصال…", "● Connecting…"))
+        VpnPhase.RECONNECTING -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, tr("● استعادة المسار…", "● Reconnecting…"))
+        VpnPhase.SWITCHING_SERVER -> Triple(VpnConnectingAmber.copy(alpha = 0.16f), VpnConnectingAmber, tr("● جارٍ التبديل…", "● Switching…"))
+        VpnPhase.PROTECTION_ACTIVE -> Triple(VpnConnectingAmber.copy(alpha = 0.18f), VpnConnectingAmber, tr("🛡 Kill Switch نشط", "🛡 Kill Switch"))
+        VpnPhase.CONNECTION_FAILED -> Triple(VpnDangerRed.copy(alpha = 0.16f), VpnDangerRed, tr("● تعذّر الاتصال", "● Failed"))
         VpnPhase.DISCONNECTED -> Triple(
             MaterialTheme.colorScheme.surfaceVariant,
             MaterialTheme.colorScheme.secondary,
-            "○ غير متّصل",
+            tr("○ غير متّصل", "○ Disconnected"),
         )
     }
     Surface(color = bg, shape = RoundedCornerShape(50)) {
@@ -1758,9 +1898,19 @@ private fun phoneSpeedColor(speedKbps: Double): Color = when {
 }
 
 private fun formatPhoneSpeedLabel(speedKbps: Double): String = when {
-    speedKbps >= 1024.0 -> String.format(java.util.Locale.US, "سرعة الاختبار على جهازك: %.2f MB/s", speedKbps / 1024.0)
-    speedKbps >= 250.0 -> "سرعة الاختبار على جهازك: ${speedKbps.toInt()} KB/s"
-    else -> "سرعة الاختبار على جهازك: ${speedKbps.toInt()} KB/s (ضعيف)"
+    speedKbps >= 1024.0 -> String.format(
+        java.util.Locale.US,
+        tr("سرعة الاختبار على جهازك: %.2f MB/s", "Tested speed on your device: %.2f MB/s"),
+        speedKbps / 1024.0,
+    )
+    speedKbps >= 250.0 -> tr(
+        "سرعة الاختبار على جهازك: ${speedKbps.toInt()} KB/s",
+        "Tested speed on your device: ${speedKbps.toInt()} KB/s",
+    )
+    else -> tr(
+        "سرعة الاختبار على جهازك: ${speedKbps.toInt()} KB/s (ضعيف)",
+        "Tested speed on your device: ${speedKbps.toInt()} KB/s (Weak)",
+    )
 }
 
 @Composable
@@ -1779,10 +1929,10 @@ private fun LatencyBadge(
         else -> VpnWeakPurple
     }
     val label = when {
-        isDisconnected -> "منقطع"
-        isUntested -> "لم يُفحص"
+        isDisconnected -> tr("منقطع", "Offline")
+        isUntested -> tr("لم يُفحص", "Untested")
         ms <= 500L -> "⚡ $ms ms"
-        else -> "⚡ $ms ms • ضعيف"
+        else -> tr("⚡ $ms ms • ضعيف", "⚡ $ms ms • Weak")
     }
     Surface(
         color = color.copy(alpha = 0.14f),
@@ -1867,17 +2017,17 @@ private fun ExportFileRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(
-                if (ready) "${file!!.length() / 1024} KB" else "يُولّد بعد التحديث أو الفحص",
+                if (ready) "${file!!.length() / 1024} KB" else tr("يُولّد بعد التحديث أو الفحص", "Generated after refresh or scan"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.secondary,
             )
         }
         Row {
             IconButton(onClick = { file?.let(onCopyFile) }, enabled = ready) {
-                Icon(Icons.Filled.ContentCopy, contentDescription = "نسخ")
+                Icon(Icons.Filled.ContentCopy, contentDescription = tr("نسخ", "Copy"))
             }
             IconButton(onClick = { file?.let(onShareFile) }, enabled = ready) {
-                Icon(Icons.Filled.Share, contentDescription = "مشاركة")
+                Icon(Icons.Filled.Share, contentDescription = tr("مشاركة", "Share"))
             }
         }
     }

@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — VPN Configs Platform (`bahrain-vpn` v3.5)
+# ARCHITECTURE.md — VPN Configs Platform (`bahrain-vpn` v1)
 
 ## 1. Architectural Overview (100% Pure-GitHub)
 `bahrain-vpn` is an automated VPN intelligence, security evaluation, encrypted enterprise licensing, and Android client platform operating **100% within GitHub infrastructure** (`GitHub Actions`, `@data` branch via `jsDelivr`, `GitHub Pages` on `gh-pages`, and `GitHub Releases`).
@@ -38,7 +38,7 @@
 - **`collector.py` & `scoring.py`**: Conditional HTTP (`ETag`/`Last-Modified`), SHA-256 source change detection, automated source quarantine (`SourceHealthRegistry`), EMA longitudinal node history (`NodeHistoryStore`), and 5 ranking profiles (`BALANCED`, `LOW_LATENCY`, `HIGH_SPEED`, `HIGH_RELIABILITY`, `PRIVACY_AWARE`).
 - **`public_api.py`**: Exports static `/api/v1/*` JSON endpoints + OpenAPI 3.1.0 specification + longitudinal `state/pipeline_history.json`, and provides a rate-limited/ETag Python HTTP server (`python public_api.py --dist dist --port 8080`).
 
-### 2.2 Android User Application (`android/app` — `v3.2`)
+### 2.2 Android User Application (`android/app` — `v1`, Bilingual AR Primary + EN)
 - **Tunnel Stack**: `BahrainVpnService` (`VpnService`) → `hev-socks5-tunnel` (`tun0` + MapDNS `198.18.0.2`) → `sing-box` local SOCKS5/Mixed inbound (`127.0.0.1:20808`).
 - **Leak Protection (`LeakProtectionEngine.kt` & `SingBox.kt`)**:
   - Splits DNS into direct `"bootstrap"` (strictly for outbound proxy server hostname resolution) and `"tunnel-dns"` (`"detour": "proxy"`, set as `dns.final` and `route.default_domain_resolver`).
