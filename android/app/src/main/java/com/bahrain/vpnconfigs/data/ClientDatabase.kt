@@ -976,7 +976,7 @@ class ClientDatabase private constructor(ctx: Context) :
         }
     }
 
-    // ─────────────── 5) Personalized Network Intelligence & Append-Only Scan History (v3.4) ───────────────
+    // ─────────────── 5) Personalized Network Intelligence & Append-Only Scan History (v1) ───────────────
 
     /**
      * يضيف قراءة فحص جديدة دون استبدال القراءات التاريخية السابقة (Append-Only)،

@@ -163,6 +163,11 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("udp_in_tcp", false)
         set(v) = sp.edit { putBoolean("udp_in_tcp", v) }
 
+    /** استثناء نطاقات .ir و .ایران من الـ VPN وتمريرها مباشرة عبر الإنترنت المحلي (مفعّل افتراضياً). */
+    var bypassIrDomains: Boolean
+        get() = sp.getBoolean("bypass_ir_domains", true)
+        set(v) = sp.edit { putBoolean("bypass_ir_domains", v) }
+
     var splitIncludeOnly: Boolean
         get() = sp.getBoolean("split_include_only", false)
         set(v) = sp.edit { putBoolean("split_include_only", v) }

@@ -11,15 +11,16 @@ The Android application (`:app`, `com.bahrain.vpnconfigs`, `versionCode = 1`, `v
 com.bahrain.vpnconfigs
 ├── MainActivity.kt                 # 6-destination NavigationBar + Lifecycle foreground observer + VPN permission flow
 ├── data/
-│   ├── Repo.kt                     # Sole network/CDN boundary (ETag/304 cache, promo sync, bundle fetch)
-│   ├── Prefs.kt                    # Lightweight user settings & flags
-│   └── ClientDatabase.kt           # WAL SQLite v2 (connection_history, favorite_servers, local_server_telemetry, protection_events)
+│   ├── Repo.kt                     # Sole network/CDN boundary (ETag/304, Top-500 SHA-256 delta sync, promo, bundle)
+│   ├── Prefs.kt                    # User settings & flags (Arabic primary default "ar", bypassIrDomains = true default)
+│   └── ClientDatabase.kt           # WAL SQLite v3 (network rankings, scan history, sessions, favorites, telemetry)
 ├── engine/
 │   ├── Converters.kt               # Multi-protocol URI parser, sing-box config builder, stableServerId(), maskedEndpointLabel()
+│   ├── LocalServerIntelligence.kt  # Sequential VPN tunnel scanner (concurrency=1) & Wi-Fi vs Mobile Data Top-50 engine
 │   ├── SecurityEvaluator.kt        # Pre-connect TLS/Reality/cipher audit & quarantine gate
-│   ├── ServerRanker.kt             # List sorting modes (DEFAULT, FASTEST_DOWNLOAD, LOWEST_PING, FAVORITES)
+│   ├── ServerRanker.kt             # List sorting modes (FASTEST_DOWNLOAD, LOWEST_LATENCY, MOST_STABLE, PRIVACY_AWARE, ...)
 │   ├── SmartServerSelector.kt      # Weighted 7-factor explainable selector + cooldown + confidence + fallback
-│   ├── SingBox.kt & Socks.kt       # Native daemon lifecycle & real HTTP/SOCKS5 delay/throughput probes
+│   ├── SingBox.kt & Socks.kt       # Native daemon lifecycle, .ir/.ایران direct bypass routing, & real HTTP/SOCKS5 probes
 │   └── Tester.kt                   # Bounded-concurrency batch & single-server verifier
 ├── vpn/
 │   ├── BahrainVpnService.kt        # Foreground VpnService, TUN builder, parallel failover, session & telemetry recorder

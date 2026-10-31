@@ -1,53 +1,64 @@
-# ARCHITECTURE.md — VPN Configs Platform (`bahrain-vpn` v1)
+# ARCHITECTURE.md — Unified Platform Architecture (`bahrain-vpn` Official `v1`)
 
-## 1. Architectural Overview (100% Pure-GitHub)
-`bahrain-vpn` is an automated VPN intelligence, security evaluation, encrypted enterprise licensing, and Android client platform operating **100% within GitHub infrastructure** (`GitHub Actions`, `@data` branch via `jsDelivr`, `GitHub Pages` on `gh-pages`, and `GitHub Releases`).
+## 1. Architectural Overview (100% Pure-GitHub — Release `v1`)
+`bahrain-vpn` (`v1`, `versionName = "1.0"`, `versionCode = 1`) is an end-to-end VPN intelligence, security classification, encrypted enterprise licensing, and bilingual Android client platform operating **100% within GitHub infrastructure** (`GitHub Actions`, `@data` branch via `jsDelivr`, `GitHub Pages` on `gh-pages`, and `GitHub Releases` tag **`v1`**).
 
 ```
-[277 Telegram Channels + 26 GitHub Feeds]
+[277 Telegram Channels + 26 Curated GitHub Feeds]
             │  (SSRF-guarded HTTPS + ETag/Last-Modified + SHA-256 delta)
             ▼
    collector.py + security_intelligence.py (Pre-Probe Quarantine)
             │
             ▼
-   dedupe.py (5-Layer Canonical Protocol & /24-/48 Subnet Deduplication)
+   dedupe.py (5-Layer Canonical Protocol, Server ID & /24-/48 Subnet Deduplication)
             │
             ▼
    tester.py (Multi-stage Xray-core + sing-box SOCKS5h TLS/DNS/HTTP-204 + Throughput)
             │
             ▼
-   scoring.py + security_intelligence.py (Post-Probe Redirect/TLS Audit + 5 Ranking Profiles)
+   scoring.py + central_top500.py + historical_db.py (SQLite WAL 24h/7d/30d/90d)
             │
             ▼
    server/build_data.py + public_api.py + enterprise/publisher.py
             │
-            ├──► @data branch: alive.json, sub.txt, privacy_aware.txt, quarantined.json,
+            ├──► @data branch: top500.{manifest,delta,json,txt}, alive.json, sub.txt, best100.txt,
+            │                  privacy_aware.txt, reliable_sub.txt, servers-{current,history,performance,statistics}.json,
             │                  api/v1/{servers,statistics,countries,protocols,sources,health,openapi}.json,
-            │                  enterprise/bundle.json (ECDSA P-256 signed + AES-256-GCM VIP nodes)
-            ├──► gh-pages:     web-admin/index.html (17-page Console) + web-admin/monitor.html (Live Monitor)
-            └──► Android APKs: User APK (:app, com.bahrain.vpnconfigs) + Admin APK (:admin, com.bahrain.vpnadmin)
+            │                  enterprise/bundle.json (v1 / "1.0" — ECDSA P-256 signed + AES-256-GCM VIP nodes)
+            ├──► gh-pages:     web-admin/index.html (17-page Encrypted Console v1) + monitor.html (Live Monitor v1)
+            └──► GitHub Releases (v1 ONLY):
+                               • User APK (:app, com.bahrain.vpnconfigs, versionCode = 1, Bilingual AR Primary + EN)
+                               • Admin APK (:admin, com.bahrain.vpnadmin, versionCode = 1, Bilingual AR Primary + EN)
+                               • SHA256SUMS.txt (RSA-4096 APK Signature Scheme v1 + v2 + v3)
 ```
 
 ---
 
-## 2. Core Subsystems
+## 2. Core Subsystems (`v1`)
 
-### 2.1 Cloud Collection, Security Intelligence & Ranking Pipeline
-- **`pipeline_security.py`**: Public-IP DNS pinning, SSRF/redirect defense, SHA-256 binary verification, Zip/Tar-Slip protection, secret redaction.
-- **`security_intelligence.py`**: Multi-dimensional security & privacy assessment (`SecurityReport`, `MultiDimensionalScore`, `QuarantineRegistry`, `ThreatIntelIndicators`), explicitly separating transport security (`Verified / Partial / Unknown / Failed`) and operator privacy (`Verified / Unverified / Unknown / High Risk`) from speed (`Performance 0–100`, `Reliability 0–100`).
-- **`collector.py` & `scoring.py`**: Conditional HTTP (`ETag`/`Last-Modified`), SHA-256 source change detection, automated source quarantine (`SourceHealthRegistry`), EMA longitudinal node history (`NodeHistoryStore`), and 5 ranking profiles (`BALANCED`, `LOW_LATENCY`, `HIGH_SPEED`, `HIGH_RELIABILITY`, `PRIVACY_AWARE`).
-- **`public_api.py`**: Exports static `/api/v1/*` JSON endpoints + OpenAPI 3.1.0 specification + longitudinal `state/pipeline_history.json`, and provides a rate-limited/ETag Python HTTP server (`python public_api.py --dist dist --port 8080`).
+### 2.1 Cloud Candidate Pool (`Top 500`), Historical Intelligence & Security Pipeline
+- **`central_top500.py`**: Publishes **up to 500 qualified untrusted candidate servers** (`top500.json`, `top500.txt`, `top500.manifest.json`, `top500.delta.json`) with SHA-256 checksums without padding, explicitly enforcing `"personalized_top50_authority": "ANDROID_LOCAL_ONLY"`.
+- **`historical_db.py`**: Persistent SQLite WAL longitudinal intelligence database (`state/history.sqlite3`, `migrations/history/001..002.sql`) computing `24h`, `7d`, `30d`, and `90d` availability and performance percentiles with explicit `OBSERVED / ESTIMATED / UNKNOWN` basis and 10 failure categories.
+- **`pipeline_security.py` & `security_intelligence.py`**: Public-IP DNS pinning, SSRF/redirect defense, SHA-256 binary verification, Zip/Tar-Slip protection, secret redaction, and independent transport security vs. operator privacy classification (`QuarantineRegistry`).
+- **`collector.py`, `dedupe.py` & `scoring.py`**: Conditional HTTP (`ETag`/`Last-Modified`), source quarantine (`SourceHealthRegistry`), 5-layer canonical deduplication, and 5 ranking profiles (`BALANCED`, `LOW_LATENCY`, `HIGH_SPEED`, `HIGH_RELIABILITY`, `PRIVACY_AWARE`).
+- **`public_api.py`**: Exports static anonymized `/api/v1/*` JSON endpoints + `OpenAPI 3.1.0` specification (`api/v1/openapi.json`) + optional local rate-limited HTTP server.
 
-### 2.2 Android User Application (`android/app` — `v1`, Bilingual AR Primary + EN)
-- **Tunnel Stack**: `BahrainVpnService` (`VpnService`) → `hev-socks5-tunnel` (`tun0` + MapDNS `198.18.0.2`) → `sing-box` local SOCKS5/Mixed inbound (`127.0.0.1:20808`).
-- **Leak Protection (`LeakProtectionEngine.kt` & `SingBox.kt`)**:
-  - Splits DNS into direct `"bootstrap"` (strictly for outbound proxy server hostname resolution) and `"tunnel-dns"` (`"detour": "proxy"`, set as `dns.final` and `route.default_domain_resolver`).
-  - Always captures `0.0.0.0/0` and `::/0` into `tun0`; when `enableIpv6` is off, `::/0` is sinkholed inside `tun0` and `sing-box` enforces `ipv4_only` domain strategy to prevent dual-stack IPv6 leaks.
-- **Fail-Closed Kill Switch (`KillSwitchController.kt` & `BootRestoreReceiver.kt`)**:
-  - Locks `tun0` *before* daemon probing on connect, holds `tun0` in `PROTECTION_ACTIVE` on unexpected failure so traffic never falls back to physical Wi-Fi/cellular, handles seamless network handovers via `ConnectivityManager.NetworkCallback` (`RECONNECTING`), and detects Android OS `isLockdownEnabled`.
-- **Proactive Failover (`SmartFailoverEngine.kt` & `VpnState.kt`)**:
-  - Policies `OFF`, `SMART`, `AGGRESSIVE` with rolling latency/jitter/loss degradation detection, 25s dwell hysteresis, 120s cooldown isolation, background candidate pre-verification on ports `20901..20904`, adaptive battery-friendly polling (`8s → 15s → 24s`), and 8 verified tunnel states.
+### 2.2 Android User Application (`android/app` — Official `v1`, `versionCode = 1`)
+- **Bilingual UI (`AppI18n.kt` + `res/xml/locales_config.xml`)**:
+  - **Arabic (`ar`, `LayoutDirection.Rtl`)** is strictly the primary default language on fresh install (`Prefs.appLanguage = "ar"`), with instant one-tap live switching to **English (`en`, `LayoutDirection.Ltr`)** across all screens, foreground notifications, and Quick Settings Tile without restarting.
+- **Local Personalized Top-50 Engine (`LocalServerIntelligence.kt` & `ClientDatabase.kt` WAL SQLite v3)**:
+  - Verifies `top500.manifest.json` / `top500.delta.json` (`ETag` + `SHA-256` + rollback protection + last-known-valid recovery), runs sequential real-tunnel scans (`concurrency = 1`), and maintains strictly isolated **Wi-Fi (`WIFI`)** vs **Mobile Data (`MOBILE_DATA`)** `TOP_50` + `BACKUP_POOL` rankings and append-only scan history.
+- **Tunnel Stack & Automatic `.ir` Direct Domain Bypass (`BahrainVpnService.kt` & `SingBox.kt`)**:
+  - `BahrainVpnService` (`VpnService`) → `hev-socks5-tunnel` (`tun0` + `MapDNS 198.18.0.2`) → `sing-box 1.14.4` local `mixed` inbound (`127.0.0.1:20808`).
+  - **Automatic `.ir` / `.ایران` Direct Routing (`Prefs.bypassIrDomains = true` by default + Settings toggle)**: Configures `sing-box` with protocol sniffing (`{"action": "sniff"}`), `domain_suffix: [".ir", ".xn--mgba3a4f16a"]` routed directly via `"outbound": "direct"` and resolved via `"direct-dns"` (outside the VPN proxy), while keeping 100% of non-`.ir` traffic and DNS detoured inside the encrypted VPN tunnel.
+  - **Per-App Split Tunneling (`AppsSplitScreen` & `InstalledApps.kt`)**: Supports both *Bypass VPN for Selected Apps* and *VPN Only for Selected Apps*.
+- **Zero-Leak DNS/IPv6, Fail-Closed Kill Switch & 9-State Security (`LeakProtectionEngine.kt`, `KillSwitchController.kt`, `ConnectionSecurityClassifier.kt`)**:
+  - Splits DNS into `"bootstrap"` (VPN endpoint resolution), `"tunnel-dns"` (`"detour": "proxy"`, set as `dns.final`), and optional `.ir`-scoped `"direct-dns"`.
+  - Always captures `0.0.0.0/0` and `::/0` into `tun0`, locks `tun0` before daemon probing, holds `PROTECTION_ACTIVE` on unexpected drops, and honestly distinguishes App-level TUN block from Android OS `isLockdownEnabled` across 9 explicit security states.
+- **Google Play Protect Compliance & `RSA-4096` Release Signing (`AppUpdateManager.kt` & `apk.yml`)**:
+  - Zero `REQUEST_INSTALL_PACKAGES` permission and zero internal `.apk` installer code; delegates verified `HTTPS` ABI-specific updates (`arm64-v8a`, `x86_64`, `universal`) to the system browser with `SHA-256` clipboard copy, signed with `PKCS12 RSA-4096` (`APK Signature Scheme v1 + v2 + v3`).
 
-### 2.3 Enterprise Licensing, Admin APK & Web Dashboards
-- **`enterprise/`**: 24-table normalized SQLite vault (`migrations/001..003`), `Argon2id` + `TOTP 2FA`, `AES-256-GCM` VIP node encryption (`AAD = bahrain-vpn-vip-nodes-v31`), `ECDSA P-256` bundle signing, and honest statistical anomaly detection (`Z-Score`).
-- **`web-admin/`**: 17-page encrypted Web Admin (`index.html`) + public read-only Live Infrastructure Monitor (`monitor.html` + `monitor.js`) with 60s caching and zero secret exposure.
+### 2.3 Pure-GitHub Enterprise Licensing, Admin APK & Web Dashboards (`v1`)
+- **`enterprise/`**: 24-table normalized SQLite vault (`enterprise/migrations/001..003`), `Argon2id` + `TOTP 2FA`, `AES-256-GCM` VIP node encryption, `ECDSA P-256` signed `enterprise/bundle.json` (`bundle_release = "1.0"`), and `Z-Score` anomaly detection.
+- **`android/admin/` (`com.bahrain.vpnadmin`, `versionCode = 1`)**: Standalone bilingual (`AR` primary + `EN`) R8-shrunk Admin APK managing subscribers, devices, and encrypted `VIP` nodes over `api.github.com`.
+- **`web-admin/`**: 17-page browser-encrypted Web Admin Console (`index.html`) + public read-only Live Infrastructure Monitor (`monitor.html` + `monitor.js`) hosted on `gh-pages`.

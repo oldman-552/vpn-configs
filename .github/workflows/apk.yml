@@ -297,23 +297,22 @@ jobs:
           else
             VER_TAG="v${VER_NAME}"
           fi
-          NOTES="الإصدار الرسمي المعتمد **bahrain-vpn (${VER_TAG})** — يدعم اللغتين **العربية (اللغة الأساسية RTL) والإنجليزية (LTR)** مع التبديل الفوري الحي، ومعمارية **Central GitHub Top 500 + Local Android Personalized Top 50** المنفصلة لشبكتي \`Wi-Fi\` و\`Mobile Data\`، والتوافق الأمني الكامل مع **Google Play Protect** (توقيع رسمي \`RSA-4096 APK Signature v1/v2/v3\` وبدون صلاحيات \`Dropper\`)، والفحص التسلسلي عبر النفق الحقيقي (\`Quick Scan\` / \`Full Scan\`)، وتقليص الحجم عبر \`R8\`، وعُقد **VIP المشفّرة (\`AES-256-GCM\`)**، ومفتاح الإيقاف الصارم، وتطبيق الإدارة المستقل \`app-admin-release.apk\`."
+          NOTES="الإصدار الرسمي المعتمد **bahrain-vpn (${VER_TAG})** — يدعم اللغتين **العربية (اللغة الأساسية RTL) والإنجليزية (LTR)** مع التبديل الفوري الحي، وميزة **استثناء نطاقات \`.ir\` و \`.ایران\` من الـ VPN تلقائياً (مفعّلة افتراضياً مع زر تحكم في الإعدادات)**، ومعمارية **Central GitHub Top 500 + Local Android Personalized Top 50** المنفصلة لشبكتي \`Wi-Fi\` و\`Mobile Data\`، والتوافق الأمني الكامل مع **Google Play Protect** (توقيع رسمي \`RSA-4096 APK Signature v1/v2/v3\` وبدون صلاحيات \`Dropper\`)، والفحص التسلسلي عبر النفق الحقيقي (\`Quick Scan\` / \`Full Scan\`)، وتقليص الحجم عبر \`R8\`، وعُقد **VIP المشفّرة (\`AES-256-GCM\`)**، ومفتاح الإيقاف الصارم، وتطبيق الإدارة المستقل \`app-admin-release.apk\`."
 
           publish_release() {
             local tag="$1"
             local title="$2"
             local latest_flag="$3"
-            if gh release view "$tag" >/dev/null 2>&1; then
-              gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" -f sha="${GITHUB_SHA}" -F force=true >/dev/null 2>&1 || true
-              gh release upload "$tag" out/*.apk out/SHA256SUMS.txt --clobber
-              gh release edit "$tag" --title "$title" --notes "$NOTES" "$latest_flag"
-            else
-              gh release create "$tag" out/*.apk out/SHA256SUMS.txt \
-                --target "${GITHUB_SHA}" \
-                --title "$title" \
-                --notes "$NOTES" \
-                "$latest_flag"
-            fi
+            # Purge all existing releases & tags so ONLY this fresh official v1 release remains
+            for old_rel in $(gh release list --limit 50 --json tagName --jq '.[].tagName' 2>/dev/null || true); do
+              gh release delete "$old_rel" --cleanup-tag --yes || true
+            done
+            git push --delete origin "$tag" >/dev/null 2>&1 || true
+            gh release create "$tag" out/*.apk out/SHA256SUMS.txt \
+              --target "${GITHUB_SHA}" \
+              --title "$title" \
+              --notes "$NOTES" \
+              "$latest_flag"
           }
 
           if [ "${GITHUB_REF}" = "refs/heads/main" ]; then

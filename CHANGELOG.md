@@ -9,6 +9,8 @@
   - Added `AppI18n.kt` (`:app`), `AdminI18n` (`:admin`), `res/xml/locales_config.xml`, and `res/values-en/strings.xml` across both Android modules.
   - **Arabic (`ar`)** is strictly preserved as the primary default language (`LayoutDirection.Rtl`) on fresh installation, with instant one-tap switching to **English (`en`, `LayoutDirection.Ltr`)** from the top bar (`EN / عربي`) or Settings without restarting the app.
   - Localized all screens (`Home`, `Top 50 / Servers`, `Favorites`, `History`, `Security`, `Enterprise Hub`, `Settings`), foreground VPN notifications, Quick Settings Tile, diagnostics, and rotating promo dialogs.
+- **Automatic `.ir` / `.ایران` Direct Domain Bypass (Enabled by Default + Settings Toggle)**:
+  - Enabled by default (`Prefs.bypassIrDomains = true`), routing all `.ir` and `.xn--mgba3a4f16a` (`.ایران`) domains and TLS/HTTP SNI targets directly over the user's physical network (`direct` outbound + `direct-dns` + `sniff` in `SingBox.kt`) without passing through the VPN server, controllable live from both **Settings** and **Split Tunneling**.
 - **Central GitHub Top-500 Pool + Local Android Personalized Top-50 Engine**:
   - GitHub (`central_top500.py`) validates, deduplicates (5 layers), evaluates transport security, and publishes up to 500 untrusted candidate configurations (`top500.{manifest,delta,json,txt}`) with SHA-256 checksums without padding.
   - Android (`LocalServerIntelligence.kt` + `ClientDatabase.kt` WAL SQLite) performs sequential real-tunnel verification (`concurrency = 1`), maintaining strictly isolated **Wi-Fi** (`WIFI`) vs **Mobile Data** (`MOBILE_DATA`) rankings (`TOP_50` + `BACKUP_POOL`) and append-only scan history.
