@@ -1,6 +1,6 @@
 /**
  * modules/state_and_sync.js — Core State, i18n, Audit Chain, Encrypted Vault Sync,
- * Encrypted VIP Private Nodes Sealing, and ECDSA Bundle Publisher (v1).
+ * Encrypted VIP Private Nodes Sealing, and ECDSA Bundle Publisher (v2).
  */
 
 const SUBSCRIPTION_HOURS = {
@@ -55,7 +55,7 @@ function createEmptyDb() {
   const now = new Date().toISOString();
   return {
     schema_version: 3,
-    bundle_release: "1.0",
+    bundle_release: "2.0",
     signing_keys: null,
     vip_key_hex: EnterpriseWebCrypto.randomHex(32),
     vip_servers: [],
@@ -79,43 +79,43 @@ function createEmptyDb() {
     connection_logs: [],
     app_versions: [
       {
-        id: "ver_user_1_0",
+        id: "ver_user_2_0",
         target_app: "USER",
-        version_code: 1,
-        version_name: "1.0",
-        release_notes: "bahrain-vpn v1 Official Release — Bilingual AR (Primary) + EN, Central Top 500 + Local Personalized Top 50, Play Protect Hardened & RSA-4096 v1/v2/v3 Signed",
+        version_code: 2,
+        version_name: "2.0",
+        release_notes: "bahrain-vpn v2 Official Release — Rootless VPN Hotspot (HTTP/SOCKS5/PAC + Fail-Closed), Opt-In Iran (IR) Community Verification, .ir Direct Bypass, Bilingual AR (Primary) + EN & RSA-4096 v1/v2/v3 Signed",
         release_date: now,
         mandatory: false,
         min_supported_code: 1,
-        apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-arm64-v8a-release.apk",
+        apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v2/app-arm64-v8a-release.apk",
         apk_sha256: "",
         signing_cert_sha256: "",
         abi_assets: {
           "arm64-v8a": {
-            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-arm64-v8a-release.apk",
+            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v2/app-arm64-v8a-release.apk",
             apk_sha256: "",
           },
           x86_64: {
-            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-x86_64-release.apk",
+            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v2/app-x86_64-release.apk",
             apk_sha256: "",
           },
           universal: {
-            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-release.apk",
+            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v2/app-release.apk",
             apk_sha256: "",
           },
         },
         is_active: true,
       },
       {
-        id: "ver_admin_1_0",
+        id: "ver_admin_2_0",
         target_app: "ADMIN",
-        version_code: 1,
-        version_name: "1.0",
-        release_notes: "bahrain-vpn Admin v1 Official Release — Bilingual AR (Primary) + EN, Encrypted VIP Private Nodes & RSA-4096 v1/v2/v3 Signed",
+        version_code: 2,
+        version_name: "2.0",
+        release_notes: "bahrain-vpn Admin v2 Official Release — Bilingual AR (Primary) + EN, Encrypted VIP Private Nodes & RSA-4096 v1/v2/v3 Signed",
         release_date: now,
         mandatory: false,
         min_supported_code: 1,
-        apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-admin-release.apk",
+        apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v2/app-admin-release.apk",
         apk_sha256: "",
         signing_cert_sha256: "",
         abi_assets: {},
@@ -139,7 +139,7 @@ function createEmptyDb() {
 
 function ensureVaultV31Defaults(db) {
   if (!db) return createEmptyDb();
-  db.bundle_release = "1.0";
+  db.bundle_release = "2.0";
   if (!db.vip_key_hex || db.vip_key_hex.length !== 64) {
     db.vip_key_hex = EnterpriseWebCrypto.randomHex(32);
   }
@@ -149,12 +149,12 @@ function ensureVaultV31Defaults(db) {
     db.remote_config.auto_failover_enabled = {
       value: true,
       sensitive: false,
-      desc: "Proactive Smart Auto-Failover v1 to fastest verified backup server",
+      desc: "Proactive Smart Auto-Failover v2 to fastest verified backup server",
     };
   }
   if (Array.isArray(db.app_versions)) {
-    db.app_versions = db.app_versions.filter((v) => v.version_name === "1.0" || Number(v.version_code || 0) <= 5);
-    if (!db.app_versions.some((v) => v.version_name === "1.0")) {
+    db.app_versions = db.app_versions.filter((v) => v.version_name === "2.0" || Number(v.version_code || 0) >= 2);
+    if (!db.app_versions.some((v) => v.version_name === "2.0")) {
       db.app_versions = createEmptyDb().app_versions;
     }
   } else {
@@ -259,7 +259,7 @@ async function syncFromGitHub() {
     if (!AppState.db.signing_keys) {
       AppState.db.signing_keys = await EnterpriseWebCrypto.generateEcdsaP256KeyPair();
     }
-    if (statusEl) statusEl.textContent = t("متصل بـ GitHub (v1) ✓", "Synced with GitHub (v1) ✓");
+    if (statusEl) statusEl.textContent = t("متصل بـ GitHub (v2) ✓", "Synced with GitHub (v2) ✓");
     renderAll();
   } catch (err) {
     alert(t("خطأ في فك تشفير الخزنة أو اتصال GitHub: ", "Vault/GitHub error: ") + err.message);
@@ -345,7 +345,7 @@ async function saveAndPublishToGitHub(commitReason = "Update enterprise state") 
 
     const bundleBody = {
       schema_version: 3,
-      bundle_release: "1.0",
+      bundle_release: "2.0",
       generated_at: new Date().toISOString(),
       public_key_spki_b64: AppState.db.signing_keys.publicSpkiB64,
       remote_config: rcFlat,
@@ -367,11 +367,11 @@ async function saveAndPublishToGitHub(commitReason = "Update enterprise state") 
       "enterprise/bundle.json",
       signedBundle,
       AppState.bundleSha,
-      `chore(bundle): sign & publish v1 client bundle`
+      `chore(bundle): sign & publish v2 client bundle`
     );
     AppState.bundleSha = bundlePut.content?.sha || AppState.bundleSha;
 
-    if (statusEl) statusEl.textContent = t("تم الحفظ والتوقيع على GitHub (v1) ✓", "Encrypted & Signed on GitHub (v1) ✓");
+    if (statusEl) statusEl.textContent = t("تم الحفظ والتوقيع على GitHub (v2) ✓", "Encrypted & Signed on GitHub (v2) ✓");
     renderAll();
   } catch (err) {
     alert(t("تعذّر النشر على GitHub: ", "Publish failed: ") + err.message);

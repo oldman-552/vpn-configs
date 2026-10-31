@@ -1,4 +1,4 @@
-# Database Schema Reference (`v1`)
+# Database Schema Reference (`v2`)
 
 Both the GitHub Cloud Intelligence Pipeline and the Android Client use embedded **SQLite in WAL (`Write-Ahead Logging`) mode** with explicit schema migration tracking, `FOREIGN KEY` enforcement, indexed time-range queries, and strict zero-credential storage.
 

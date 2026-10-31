@@ -103,10 +103,10 @@ class EnterpriseAndroidTest {
                 JSONArray().put(
                     JSONObject()
                         .put("target_app", "USER")
-                        .put("version_code", 2)
-                        .put("version_name", "1.1")
+                        .put("version_code", 3)
+                        .put("version_name", "2.1")
                         .put("mandatory", true)
-                        .put("min_supported_code", 2)
+                        .put("min_supported_code", 3)
                         .put("apk_url", "https://example.com/update.apk")
                         .put("apk_sha256", "a".repeat(64))
                         .put("is_active", true)
@@ -138,7 +138,7 @@ class EnterpriseAndroidTest {
         val upd = AppUpdateManager.evaluateAvailableUpdate(ctx, guard.getVerifiedAppUpdates())
         assertNotNull(upd)
         assertTrue(upd!!.mandatory)
-        assertEquals("1.1", upd.versionName)
+        assertEquals("2.1", upd.versionName)
 
         // Wrong password rejected
         assertTrue(guard.loginWithBundle("ahmed_bh", "WrongPass!", true).isFailure)
@@ -248,8 +248,8 @@ class EnterpriseAndroidTest {
         // 1. ABI-aware APK selection (arm64-v8a vs x86_64 vs universal fallback)
         val updateObj = JSONObject()
             .put("target_app", "USER")
-            .put("version_code", 3)
-            .put("version_name", "1.2")
+            .put("version_code", 4)
+            .put("version_name", "2.2")
             .put("is_active", true)
             .put("apk_url", "https://example.com/fallback-universal.apk")
             .put("apk_sha256", "f".repeat(64))
@@ -316,7 +316,7 @@ class EnterpriseAndroidTest {
         val lookup = EnterpriseCrypto.computeUserLookupId("noor_vip")
         val bundle = JSONObject()
             .put("schema_version", 3)
-            .put("bundle_release", "1.0")
+            .put("bundle_release", "2.0")
             .put("generated_at", java.time.Instant.ofEpochMilli(t0Ms).toString())
             .put("public_key_spki_b64", pubSpkiB64)
             .put("remote_config", JSONObject().put("auto_failover_enabled", true))
@@ -374,12 +374,12 @@ class EnterpriseAndroidTest {
             requested.contains("android.permission.REQUEST_INSTALL_PACKAGES")
         )
 
-        // Official v1 version verification
-        assertEquals(1, AppUpdateManager.currentVersionCode(ctx))
-        assertEquals("1.0", AppUpdateManager.currentVersionName(ctx))
+        // Official v2 version verification
+        assertEquals(2, AppUpdateManager.currentVersionCode(ctx))
+        assertEquals("2.0", AppUpdateManager.currentVersionName(ctx))
 
         // Safe HTTPS URLs accepted; HTTP, file://, loopback, LAN, and embedded credentials rejected
-        assertNotNull(AppUpdateManager.validateSafeUpdateHttpsUrl("https://releases.example.org/v1/app-arm64-v8a-release.apk"))
+        assertNotNull(AppUpdateManager.validateSafeUpdateHttpsUrl("https://releases.example.org/v2/app-arm64-v8a-release.apk"))
         assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("http://releases.example.org/app.apk") == null)
         assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("file:///sdcard/Download/app.apk") == null)
         assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("content://com.example.provider/app.apk") == null)
@@ -388,12 +388,12 @@ class EnterpriseAndroidTest {
         assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("https://admin:secret@releases.example.org/app.apk") == null)
 
         val safeInfo = com.bahrain.vpnconfigs.enterprise.AppUpdateInfo(
-            versionCode = 2,
-            versionName = "1.1",
+            versionCode = 3,
+            versionName = "2.1",
             releaseNotes = "Security update",
             mandatory = false,
             minSupportedCode = 1,
-            apkUrl = "https://releases.example.org/v1.1/app-arm64-v8a-release.apk",
+            apkUrl = "https://releases.example.org/v2.1/app-arm64-v8a-release.apk",
             apkSha256 = "b".repeat(64),
             signingCertSha256 = "",
             selectedAbi = "arm64-v8a",

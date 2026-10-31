@@ -283,7 +283,7 @@ def test_v31_encrypted_vip_private_nodes_and_abi_updates(tmp_path: Path) -> None
 
     bundle = exported["bundle"]
     assert verify_ecdsa_b64(pub_b64, canonical_json_bytes(bundle), exported["signature_b64"]) is True
-    assert bundle["bundle_release"] == "1.0"
+    assert bundle["bundle_release"] == "2.0"
     assert bundle["vip_nodes_enc_b64"] != ""
 
     lookup = compute_user_lookup_id("vip_sara")

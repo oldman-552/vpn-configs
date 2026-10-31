@@ -1,6 +1,6 @@
-# `community-worker/` — Free-Tier Privacy-Minimal Community Verification Gateway (`v1`)
+# `community-worker/` — Free-Tier Privacy-Minimal Community Verification Gateway (`v2`)
 
-This optional free-tier **Cloudflare Worker + D1** gateway receives **zero-secret, anonymized VPN connectivity observations** from opted-in `bahrain-vpn v1` Android users (`POST /v1/reports`) and exposes an authenticated incremental export (`GET /v1/export`) consumed by `.github/workflows/community_rankings.yml` and `.github/workflows/data.yml`.
+This optional free-tier **Cloudflare Worker + D1** gateway receives **zero-secret, anonymized VPN connectivity observations** from opted-in `bahrain-vpn v2` Android users (`POST /v1/reports`) and exposes an authenticated incremental export (`GET /v1/export`) consumed by `.github/workflows/community_rankings.yml` and `.github/workflows/data.yml`.
 
 ## Security & Anti-Abuse Guarantees
 - **Zero GitHub Secrets in APK:** Android clients talk only to `POST /v1/reports` (configured via signed `enterprise/bundle.json` -> `remote_config.community_ingest_url`) and hold zero GitHub PATs or tokens. If no Worker URL is configured yet, Android queues reports locally and operates 100% offline-safe.

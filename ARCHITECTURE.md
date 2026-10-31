@@ -1,7 +1,7 @@
-# ARCHITECTURE.md — Unified Platform Architecture (`bahrain-vpn` Official `v1`)
+# ARCHITECTURE.md — Unified Platform Architecture (`bahrain-vpn` Official `v2`)
 
-## 1. Architectural Overview (100% Pure-GitHub — Release `v1`)
-`bahrain-vpn` (`v1`, `versionName = "1.0"`, `versionCode = 1`) is an end-to-end VPN intelligence, security classification, encrypted enterprise licensing, and bilingual Android client platform operating **100% within GitHub infrastructure** (`GitHub Actions`, `@data` branch via `jsDelivr`, `GitHub Pages` on `gh-pages`, and `GitHub Releases` tag **`v1`**).
+## 1. Architectural Overview (100% Pure-GitHub — Release `v2`)
+`bahrain-vpn` (`v2`, `versionName = "2.0"`, `versionCode = 2`) is an end-to-end VPN intelligence, security classification, encrypted enterprise licensing, and bilingual Android client platform operating **100% within GitHub infrastructure** (`GitHub Actions`, `@data` branch via `jsDelivr`, `GitHub Pages` on `gh-pages`, and `GitHub Releases` tag **`v2`**).
 
 ```
 [277 Telegram Channels + 26 Curated GitHub Feeds]
@@ -16,25 +16,26 @@
    tester.py (Multi-stage Xray-core + sing-box SOCKS5h TLS/DNS/HTTP-204 + Throughput)
             │
             ▼
-   scoring.py + central_top500.py + historical_db.py (SQLite WAL 24h/7d/30d/90d)
+   scoring.py + central_top500.py + community_ranking.py + historical_db.py
             │
             ▼
    server/build_data.py + public_api.py + enterprise/publisher.py
             │
-            ├──► @data branch: top500.{manifest,delta,json,txt}, alive.json, sub.txt, best100.txt,
-            │                  privacy_aware.txt, reliable_sub.txt, servers-{current,history,performance,statistics}.json,
+            ├──► @data branch: top500.{manifest,delta,json,txt}, iran-top500.{json,txt}, iran-results.json,
+            │                  alive.json, sub.txt, best100.txt, privacy_aware.txt, reliable_sub.txt,
+            │                  servers-{current,history,performance,statistics}.json,
             │                  api/v1/{servers,statistics,countries,protocols,sources,health,openapi}.json,
-            │                  enterprise/bundle.json (v1 / "1.0" — ECDSA P-256 signed + AES-256-GCM VIP nodes)
-            ├──► gh-pages:     web-admin/index.html (17-page Encrypted Console v1) + monitor.html (Live Monitor v1)
-            └──► GitHub Releases (v1 ONLY):
-                               • User APK (:app, com.bahrain.vpnconfigs, versionCode = 1, Bilingual AR Primary + EN)
-                               • Admin APK (:admin, com.bahrain.vpnadmin, versionCode = 1, Bilingual AR Primary + EN)
+            │                  enterprise/bundle.json (v2 / "2.0" — ECDSA P-256 signed + AES-256-GCM VIP nodes)
+            ├──► gh-pages:     web-admin/index.html (17-page Encrypted Console v2) + monitor.html (Live Monitor v2)
+            └──► GitHub Releases (v2 ONLY):
+                               • User APK (:app, com.bahrain.vpnconfigs, versionCode = 2, Bilingual AR Primary + EN)
+                               • Admin APK (:admin, com.bahrain.vpnadmin, versionCode = 2, Bilingual AR Primary + EN)
                                • SHA256SUMS.txt (RSA-4096 APK Signature Scheme v1 + v2 + v3)
 ```
 
 ---
 
-## 2. Core Subsystems (`v1`)
+## 2. Core Subsystems (`v2`)
 
 ### 2.1 Cloud Candidate Pool (`Top 500`), Historical Intelligence & Security Pipeline
 - **`central_top500.py`**: Publishes **up to 500 qualified untrusted candidate servers** (`top500.json`, `top500.txt`, `top500.manifest.json`, `top500.delta.json`) with SHA-256 checksums without padding, explicitly enforcing `"personalized_top50_authority": "ANDROID_LOCAL_ONLY"`.
@@ -43,7 +44,7 @@
 - **`collector.py`, `dedupe.py` & `scoring.py`**: Conditional HTTP (`ETag`/`Last-Modified`), source quarantine (`SourceHealthRegistry`), 5-layer canonical deduplication, and 5 ranking profiles (`BALANCED`, `LOW_LATENCY`, `HIGH_SPEED`, `HIGH_RELIABILITY`, `PRIVACY_AWARE`).
 - **`public_api.py`**: Exports static anonymized `/api/v1/*` JSON endpoints + `OpenAPI 3.1.0` specification (`api/v1/openapi.json`) + optional local rate-limited HTTP server.
 
-### 2.2 Android User Application (`android/app` — Official `v1`, `versionCode = 1`)
+### 2.2 Android User Application (`android/app` — Official `v2`, `versionCode = 2`)
 - **Bilingual UI (`AppI18n.kt` + `res/xml/locales_config.xml`)**:
   - **Arabic (`ar`, `LayoutDirection.Rtl`)** is strictly the primary default language on fresh install (`Prefs.appLanguage = "ar"`), with instant one-tap live switching to **English (`en`, `LayoutDirection.Ltr`)** across all screens, foreground notifications, and Quick Settings Tile without restarting.
 - **Local Personalized Top-50 Engine (`LocalServerIntelligence.kt` & `ClientDatabase.kt` WAL SQLite v3)**:
@@ -61,7 +62,7 @@
 - **Google Play Protect Compliance & `RSA-4096` Release Signing (`AppUpdateManager.kt` & `apk.yml`)**:
   - Zero `REQUEST_INSTALL_PACKAGES` permission and zero internal `.apk` installer code; delegates verified `HTTPS` ABI-specific updates (`arm64-v8a`, `x86_64`, `universal`) to the system browser with `SHA-256` clipboard copy, signed with `PKCS12 RSA-4096` (`APK Signature Scheme v1 + v2 + v3`).
 
-### 2.3 Pure-GitHub Enterprise Licensing, Admin APK & Web Dashboards (`v1`)
-- **`enterprise/`**: 24-table normalized SQLite vault (`enterprise/migrations/001..003`), `Argon2id` + `TOTP 2FA`, `AES-256-GCM` VIP node encryption, `ECDSA P-256` signed `enterprise/bundle.json` (`bundle_release = "1.0"`), and `Z-Score` anomaly detection.
-- **`android/admin/` (`com.bahrain.vpnadmin`, `versionCode = 1`)**: Standalone bilingual (`AR` primary + `EN`) R8-shrunk Admin APK managing subscribers, devices, and encrypted `VIP` nodes over `api.github.com`.
+### 2.3 Pure-GitHub Enterprise Licensing, Admin APK & Web Dashboards (`v2`)
+- **`enterprise/`**: 24-table normalized SQLite vault (`enterprise/migrations/001..003`), `Argon2id` + `TOTP 2FA`, `AES-256-GCM` VIP node encryption, `ECDSA P-256` signed `enterprise/bundle.json` (`bundle_release = "2.0"`), and `Z-Score` anomaly detection.
+- **`android/admin/` (`com.bahrain.vpnadmin`, `versionCode = 2`)**: Standalone bilingual (`AR` primary + `EN`) R8-shrunk Admin APK managing subscribers, devices, and encrypted `VIP` nodes over `api.github.com`.
 - **`web-admin/`**: 17-page browser-encrypted Web Admin Console (`index.html`) + public read-only Live Infrastructure Monitor (`monitor.html` + `monitor.js`) hosted on `gh-pages`.

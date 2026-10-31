@@ -1,5 +1,5 @@
 // =====================================================================
-// AppUpdateManager.kt — نظام إشعارات التحديث الذكي المتوافق مع Play Protect (v1).
+// AppUpdateManager.kt — نظام إشعارات التحديث الذكي المتوافق مع Play Protect (v2).
 // يختار تلقائيًا حزمة المعالج المناسبة (arm64-v8a / x86_64 / universal)،
 // يتحقق من أمان رابط HTTPS الرسمي، ويعرض/ينسخ بصمة SHA-256، ثم يفوّض التحميل
 // لمتصفح النظام الرسمي بدل تنزيل أو تثبيت ملفات APK داخليًا (Zero Dropper Behavior).
@@ -38,8 +38,8 @@ object AppUpdateManager {
     }.getOrDefault(13)
 
     fun currentVersionName(ctx: Context): String = runCatching {
-        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1.0"
-    }.getOrDefault("1.0")
+        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "2.0"
+    }.getOrDefault("2.0")
 
     /**
      * يحسم الحزمة الأنسب لمعمارية معالج الهاتف (مثل arm64-v8a لتوفير ~50% من الحجم)
