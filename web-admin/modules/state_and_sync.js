@@ -1,6 +1,6 @@
 /**
  * modules/state_and_sync.js — Core State, i18n, Audit Chain, Encrypted Vault Sync,
- * Encrypted VIP Private Nodes Sealing, and ECDSA Bundle Publisher (v3.2).
+ * Encrypted VIP Private Nodes Sealing, and ECDSA Bundle Publisher (v1).
  */
 
 const SUBSCRIPTION_HOURS = {

@@ -1,5 +1,5 @@
 // =====================================================================
-// BahrainVpnService.kt — خدمة نفق الـ VPN المتكاملة لتطبيق bahrain-vpn (v3.2):
+// BahrainVpnService.kt — خدمة نفق الـ VPN المتكاملة لتطبيق bahrain-vpn (v1):
 //   • حماية صارمة من تسرب IPv6 و DNS (التقاط ::/0 دائمًا + tunnel-dns داخل النفق)
 //   • مفتاح إيقاف حقيقي (Fail-Closed Kill Switch): يقفل واجهة TUN قبل الفحص،
 //     ويحتفظ بالحجب في وضع PROTECTION_ACTIVE عند انقطاع جميع السيرفرات لمنع التسرب
@@ -454,6 +454,7 @@ class BahrainVpnService : VpnService() {
         daemon = null
 
         val establishStartMs = System.currentTimeMillis()
+        val physicalDns = netAwareness.snapshot.value.systemDnsServers.firstOrNull()
         val newDaemon = singBox.startDaemon(
             cfg = chosenCfg,
             port = SingBox.VPN_SOCKS_PORT,
@@ -461,6 +462,8 @@ class BahrainVpnService : VpnService() {
             useDoh = prefs.dnsDoh,
             tag = "vpn",
             enableIpv6 = prefs.enableIpv6,
+            bypassIrDomains = prefs.bypassIrDomains,
+            physicalDnsServer = physicalDns,
         )
 
         val initialPing = if (newDaemon != null) {
@@ -1145,6 +1148,7 @@ class BahrainVpnService : VpnService() {
                                     )
                                     singBox.stopDaemon(daemon)
                                     daemon = null
+                                    val physicalDns = netAwareness.snapshot.value.systemDnsServers.firstOrNull()
                                     val started = singBox.startDaemon(
                                         cfg = alt.first.cfg,
                                         port = SingBox.VPN_SOCKS_PORT,
@@ -1152,6 +1156,8 @@ class BahrainVpnService : VpnService() {
                                         useDoh = prefs.dnsDoh,
                                         tag = "vpn",
                                         enableIpv6 = prefs.enableIpv6,
+                                        bypassIrDomains = prefs.bypassIrDomains,
+                                        physicalDnsServer = physicalDns,
                                     )
                                     if (started != null) {
                                         connectWithVerifiedDaemon(
@@ -1308,6 +1314,7 @@ class BahrainVpnService : VpnService() {
         if (winner != null) {
             singBox.stopDaemon(daemon)
             daemon = null
+            val physicalDns = netAwareness.snapshot.value.systemDnsServers.firstOrNull()
             val started = singBox.startDaemon(
                 cfg = winner.first.cfg,
                 port = SingBox.VPN_SOCKS_PORT,
@@ -1315,6 +1322,8 @@ class BahrainVpnService : VpnService() {
                 useDoh = prefs.dnsDoh,
                 tag = "vpn",
                 enableIpv6 = prefs.enableIpv6,
+                bypassIrDomains = prefs.bypassIrDomains,
+                physicalDnsServer = physicalDns,
             )
             if (started != null) {
                 return Triple(winner.first, started, winner.second)

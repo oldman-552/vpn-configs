@@ -1,16 +1,14 @@
-# TESTING.md — Automated Verification & QA Guide
+# TESTING.md — Automated Verification & QA Guide (`v1`)
 
 ## 1. Test Suites Overview
 
-### 1.1 Python Backend, Security, Enterprise & API Suite (`pytest`)
-42 deterministic tests across 3 test modules (zero live internet dependency during tests):
+### 1.1 Python Backend, Top-500, Historical Intelligence, Security, Enterprise & API Suite (`pytest`)
+**51 deterministic tests across 5 test modules** (zero live internet dependency during tests):
 - **`tests/test_all.py` (29 tests)**: SSRF & redirect validation, SHA-256 verification, safe archive extraction, secret redaction, 5-layer deduplication, `/24` & `/48` diversity, EMA node scoring, longitudinal source health, and Last-Known-Good (`LKG`) build fallback.
-- **`tests/test_enterprise_platform.py` (7 tests)**: 24-table SQLite migrations, `Argon2id` + `TOTP 2FA`, brute-force lockout, hash-chained audit log integrity, 48h anti-tamper trial lifecycle, encrypted `VIP 💎` node isolation, encrypted backups, and `Z-Score` anomaly engine.
-- **`tests/test_security_ranking_and_api.py` (6 tests)**:
-  - Phase 2 security vs speed separation, `allowInsecure=1` penalty, broken cipher/port quarantine (`QuarantineRegistry`).
-  - Phase 5 multi-profile ranking (`HIGH_SPEED`, `LOW_LATENCY`, `HIGH_RELIABILITY`, `BALANCED`, `PRIVACY_AWARE`) and freshness decay.
-  - Phase 7 source-level quarantine on excessive invalid/suspicious ratio + SHA-256 content change tracking.
-  - Phase 10 static `/api/v1/*` export, live HTTP server filtering/pagination, `ETag`/`304`, `400` validation, `429` token-bucket rate limiting, and zero secret/raw-URI leakage.
+- **`tests/test_enterprise_platform.py` (7 tests)**: 24-table SQLite migrations, `Argon2id` + `TOTP 2FA`, brute-force lockout, hash-chained audit log integrity, 48h anti-tamper trial lifecycle, `bundle_release == "1.0"` ECDSA bundle verification, encrypted `VIP 💎` node isolation, encrypted backups, and `Z-Score` anomaly engine.
+- **`tests/test_security_ranking_and_api.py` (6 tests)**: Transport security vs. speed separation, `allowInsecure=1` penalty, broken cipher/port quarantine (`QuarantineRegistry`), 5 ranking profiles (`HIGH_SPEED`, `LOW_LATENCY`, `HIGH_RELIABILITY`, `BALANCED`, `PRIVACY_AWARE`), source quarantine, and `/api/v1/*` (`OpenAPI 3.1.0`, `ETag`/`304`, `400`, `429`, zero secret leakage).
+- **`tests/test_historical_intelligence.py` (5 tests)**: Persistent `history.sqlite3` migrations (`001..002`), canonical `server_id` stability across remark edits, `24h`/`7d`/`30d`/`90d` availability & latency percentiles, `OBSERVED`/`ESTIMATED`/`UNKNOWN` honesty, source-operator independence, and auto-suppression recovery.
+- **`tests/test_top500_architecture.py` (4 tests)**: Central Top-500 cap without padding (`<= 500`), `ANDROID_LOCAL_ONLY` authority boundary, SHA-256 manifest + incremental `top500.delta.json` verification, and deterministic ranking order.
 
 Run locally:
 ```bash
@@ -18,18 +16,16 @@ Run locally:
 ```
 
 ### 1.2 Web Dashboards Syntax & Secret Audit (`node --check`)
-Verifies all JavaScript modules in `web-admin/` (including `monitor.js` and `modules/*.js`):
+Verifies all JavaScript modules in `web-admin/` (including `app.js`, `monitor.js`, and `modules/*.js`):
 ```bash
 for jsf in web-admin/*.js web-admin/modules/*.js; do node --check "$jsf"; done
 ```
 
-### 1.3 Android Robolectric & Unit Test Suites (`apk.yml`)
-Executed automatically on every Android PR/push/tag via `./gradlew testReleaseUnitTest`:
-- **`AndroidVpnAuditTest.kt`**: Default `FASTEST_DOWNLOAD` sort, 5 sort modes without inventing speed from ping, staleness decay, active-session preservation on re-sort, ETag/304 + offline cache fallback in `Repo`, multi-protocol `SingBox` outbound generation, OpSec redaction, and 5-ad promo rotation.
-- **`EnterpriseAndroidTest.kt`**: ECDSA P-256 signature verification, zero-knowledge PBKDF2+AES-GCM login, 48h monotonic clock trial expiry, daily quota enforcement, real speed test engine, Split-ABI updater, encrypted `VIP 💎` lifecycle, and `SmartFailoverEngine` ranking/cooldown.
-- **`LeakKillSwitchAndSecurityTest.kt`**:
-  - Phase 2 `SecurityEvaluator` honesty (`Unverified` public privacy vs `Verified` VIP, `allowInsecure=1` `Failed`/`HIGH`, SSH port quarantine).
-  - Phase 3 `SingBox` detoured `"tunnel-dns"` (`"detour": "proxy"`), private-DNS sanitization (`192.168.1.1` → `1.1.1.1`), mandatory `::/0` IPv6 sinkhole capture, and honest WebRTC split-tunnel/browser exposure guidance.
-  - Phase 4 `KillSwitchController` fail-closed pre-probe lock, `PROTECTION_ACTIVE` hold on unexpected tunnel drop, and all 8 `VpnPhase` state flags.
-  - Phase 5 & 6 `PRIVACY_AWARE` ranking, `OFF`/`SMART`/`AGGRESSIVE` failover modes, 25s dwell hysteresis anti-oscillation, `CRITICAL`-risk candidate exclusion, and adaptive polling intervals.
-- **`AdminAppUnitTest.kt`**: Admin APK crypto, TOTP, and vault envelope verification.
+### 1.3 Android Robolectric & JUnit Test Suites (`30 tests` in `.github/workflows/apk.yml`)
+Executed automatically on every Android PR and `main` build via `./gradlew testReleaseUnitTest :admin:testReleaseUnitTest`:
+- **`AndroidVpnAuditTest.kt` (6 tests)**: Default `FASTEST_DOWNLOAD` sort, 5 sort modes without inventing speed from ping, staleness decay, active-session preservation, ETag/304 + offline fallback in `Repo`, multi-protocol `SingBox` outbound generation, OpSec redaction, and 5-ad promo rotation.
+- **`EnterpriseAndroidTest.kt` (6 tests)**: Official `v1` (`versionCode = 1`, `versionName = "1.0"`) Play Protect Zero-Dropper & safe HTTPS browser updater, **Arabic-primary (`RTL`) default + live English (`LTR`) language toggle verification**, ECDSA P-256 signature verification, zero-knowledge PBKDF2+AES-GCM login, 48h monotonic clock trial expiry, daily quota enforcement, encrypted `VIP 💎` lifecycle, and `SmartFailoverEngine`.
+- **`LeakKillSwitchAndSecurityTest.kt` (5 tests)**: `SecurityEvaluator` honesty, detoured `"tunnel-dns"` (`"detour": "proxy"`) + mandatory `::/0` IPv6 sinkhole capture, **automatic `.ir` / `.ایران` direct domain bypass (`Prefs.bypassIrDomains = true` default + `direct-dns` + `sniff` + Settings toggle disable)**, fail-closed `KillSwitchController` states, and dwell-guarded proactive failover.
+- **`SmartVpnUpgradeTest.kt` (6 tests)**: WAL SQLite `ClientDatabase` migrations, `server_id`-anchored Favorites & custom groups, searchable/paginated session history, 7-factor explainable `SmartServerSelector`, 9-state `ConnectionSecurityClassifier`, and battery-aware adaptive probe intervals.
+- **`Top500AndPersonalizedTop50Test.kt` (5 tests)**: Top-500 manifest/delta SHA-256 verification, rollback protection, last-known-valid dataset recovery, strict **Wi-Fi (`WIFI`) vs Mobile Data (`MOBILE_DATA`)** personalized `TOP_50` + `BACKUP_POOL` isolation, and append-only scan measurement history.
+- **`AdminAppUnitTest.kt` (2 tests)**: Admin APK `v1` (`bundle_release == "1.0"`) crypto, TOTP 2FA, and encrypted vault verification.

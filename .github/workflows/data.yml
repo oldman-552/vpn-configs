@@ -169,26 +169,36 @@ jobs:
           cp -r dist/. "$OUT"/
 
           cat > "$OUT/README.md" <<EOF
-          # data — مخرجات مولّدة ومُدقَّقة آليًا (bahrain-vpn)
+          # bahrain-vpn v1 (@data) — مخرجات البيانات السحابية الرسمية المولّدة آليًا
 
-          لا تعدّل هذا الفرع يدويًا. يُعاد بناؤه والتحقّق منه كل 30 دقيقة عبر \`.github/workflows/data.yml\`.
+          هذا الفرع (\`data\`) يتبع الإصدار الرسمي الموحّد **\`bahrain-vpn v1\`** ويُعاد بناؤه والتحقق التشفيري منه آليًا كل 30 دقيقة عبر \`.github/workflows/data.yml\` — لا تعدّله يدويًا.
 
-          | الملف | الوصف | الرابط المباشر |
+          - **الإصدار الرسمي لتطبيق الأندرويد والمشرف (\`bahrain-vpn v1\` — العربية أساسية + الإنجليزية):** https://github.com/${GITHUB_REPOSITORY}/releases/tag/v1
+
+          | الملف | الوصف الهندسي (\`v1\`) | الرابط المباشر (\`jsDelivr CDN\`) |
           |---|---|---|
-          | \`top500.json\` | حزمة المرشّحات المركزية المؤهّلة (حتى 500 سيرفر بدون حشو — الترتيب الشخصي Top 50 محلي على أندرويد فقط) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.json |
-          | \`top500.manifest.json\` | بيان الإصدار وبصمات SHA-256 وحالة التحديث التفاضلي لحزمة الـ Top 500 | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.manifest.json |
-          | \`top500.txt\` | الروابط الخام لحزمة الـ Top 500 المركزية | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.txt |
-          | \`alive.txt\` | جميع العُقد الحيّة مرتّبة حسب الدرجة المركّبة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/alive.txt |
-          | \`best100.txt\` | أفضل 100 عقدة متنوّعة المضيفين والشبكات الفرعية | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/best100.txt |
-          | \`sub.txt\` | اشتراك Base64 جاهز لجميع تطبيقات العميل | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/sub.txt |
-          | \`reliable.txt\` | الأعلى استقرارًا واعتمادية عبر الدورات المتتالية | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/reliable.txt |
-          | \`low_latency.txt\` | الأقلّ زمن استجابة وتذبذبًا (Low Jitter/RTT) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/low_latency.txt |
-          | \`high_throughput.txt\` | الأعلى سرعة تنزيل موثّقة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/high_throughput.txt |
-          | \`alive.json\` | القائمة الكاملة مع الدولة والدرجة والاستقرار لتطبيق bahrain-vpn | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/alive.json |
+          | \`top500.manifest.json\` | بيان الإصدار وبصمات SHA-256 وحالة التحديث التفاضلي لحزمة المرشّحات المركزية | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.manifest.json |
+          | \`top500.json\` | حزمة المرشّحات المركزية المؤهّلة (حتى 500 سيرفر بدون حشو — اختيار Top 50 محلي على أندرويد فقط) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.json |
+          | \`top500.delta.json\` | التحديث التفاضلي الموقّع بـ SHA-256 بين آخر إصدارين لحزمة Top 500 | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.delta.json |
+          | \`top500.txt\` | الروابط الخام المطبّعة لحزمة المرشّحات المركزية Top 500 | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.txt |
+          | \`sub.txt\` | اشتراك Base64 الشامل لجميع العُقد الحيّة بوسم \`bahrain-vpn\` | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/sub.txt |
+          | \`best100.txt\` | أفضل 100 عقدة متنوّعة المضيفين والشبكات الفرعية (/24) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/best100.txt |
+          | \`privacy_aware.txt\` | الأعلى أمانًا في طبقة النقل (Verified TLS/Reality فقط بدون allowInsecure) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/privacy_aware.txt |
+          | \`reliable.txt\` / \`reliable_sub.txt\` | الأعلى استقرارًا واعتمادية عبر الجولات المتتالية (نصي + Base64) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/reliable_sub.txt |
+          | \`low_latency.txt\` | الأقلّ زمن استجابة وتذبذبًا (Median RTT + Jitter) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/low_latency.txt |
+          | \`high_throughput.txt\` | الأعلى سرعة تنزيل موثّقة عبر النفق الفعلي | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/high_throughput.txt |
+          | \`alive.json\` / \`alive.txt\` | البيانات الكاملة والروابط الحيّة مع الدولة والدرجة والتقييم الأمني | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/alive.json |
+          | \`servers-current.json\` | الحالة الحالية لجميع السيرفرات بهويات \`server_id\` معماة خالية من بيانات الاعتماد | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/servers-current.json |
+          | \`servers-history.json\` | السجل التاريخي للجاهزية (24h/7d/30d/90d) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/servers-history.json |
+          | \`servers-performance.json\` | تحليلات الأداء النافذية (avg/median/p95 للتأخير والتذبذب والسرعة) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/servers-performance.json |
+          | \`servers-statistics.json\` | الإحصاءات الشاملة والجاهزية وفئات الأعطال الـ 10 | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/servers-statistics.json |
+          | \`api/v1/statistics.json\` | واجهة الإحصاءات العامة القرائية المعماة (\`OpenAPI 3.1.0\`) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/api/v1/statistics.json |
+          | \`enterprise/bundle.json\` | حزمة التراخيص الموقّعة (\`ECDSA P-256\` — \`v1\` / \`1.0\`) وعُقد VIP المشفّرة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/enterprise/bundle.json |
+          | \`promo/ads.json\` | البطاقات الترويجية الخمس الدوّارة والصور المرافقة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/promo/ads.json |
           | \`countries.json\` | فهرس الدول المُحقّقة عبر النفق الفعلي | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/countries.json |
-          | \`source_health.json\` | تقرير صحّة وتفرّد وتداخل المصادر (بدون أسرار) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/source_health.json |
+          | \`source_health.json\` | تقرير صحّة وتفرّد المصادر وعزلها (بدون أسرار) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/source_health.json |
           | \`all.txt.gz\` | المجمع البنيوي النظيف الكامل مضغوطًا | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/all.txt.gz |
-          | \`meta.json\` | إحصاءات ومؤشرات الجودة الشاملة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/meta.json |
+          | \`meta.json\` | ملخص الدورة الشامل ومؤشرات الصحّة والأمان (\`v1\`) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/meta.json |
           EOF
 
           cd "$OUT"

@@ -42,6 +42,7 @@ class SingBox(private val ctx: Context) {
         const val SPEED_URL = "https://speed.cloudflare.com/__down?bytes=600000"
         const val VPN_SOCKS_PORT = 20808
         private const val SPEED_BYTES = 600_000L
+        val IR_DOMAIN_SUFFIXES: List<String> = listOf(".ir", ".xn--mgba3a4f16a")
     }
 
     /** مسار النواة داخل مجلد المكتبات الأصلية (قابل للتنفيذ). */
@@ -64,10 +65,34 @@ class SingBox(private val ctx: Context) {
     }
 
     /**
-     * بناء ملف إعداد كامل متوافق مع sing-box 1.14.4 مع حماية صارمة من تسرب DNS و IPv6:
+     * يختار عنوان IPv4 صالح ومباشر لمحلّل `direct-dns` الخاص بنطاقات `.ir` (يتجنب عناوين النفق الوهمية أو Loopback).
+     */
+    fun resolveDirectDnsServer(physicalDnsServer: String?): String {
+        val cand = physicalDnsServer?.trim().orEmpty()
+        if (ipv4LiteralRe.matches(cand)) {
+            val parts = cand.split('.').mapNotNull { it.toIntOrNull() }
+            if (parts.size == 4 && parts.all { it in 0..255 }) {
+                val p0 = parts[0]
+                val p1 = parts[1]
+                val isLoopbackOrZero = p0 == 0 || p0 == 127
+                val isLinkLocal = p0 == 169 && p1 == 254
+                val isTunSynthetic = (p0 == 198 && (p1 == 18 || p1 == 19)) || p0 >= 224
+                if (!isLoopbackOrZero && !isLinkLocal && !isTunSynthetic) {
+                    return cand
+                }
+            }
+        }
+        return "1.1.1.1"
+    }
+
+    /**
+     * بناء ملف إعداد كامل متوافق مع sing-box 1.14.4 مع حماية صارمة من تسرب DNS و IPv6
+     * وتوجيه مباشر اختياري (مفعّل افتراضيًا في النفق) لنطاقات `.ir` و `.ایران`:
      *   • خادم `bootstrap` (1.1.1.1 مباشر) يُستخدم حصريًا لحل اسم نطاق سيرفر البروكسي نفسه.
      *   • خادم `tunnel-dns` يحمل `"detour": "proxy"` ويُعيّن كـ `dns.final` و`default_domain_resolver`
-     *     بحيث تمرّ 100% من استعلامات DNS الخاصة بالتطبيقات داخل النفق المشفّر ولا تتسرب لمزوّد الإنترنت.
+     *     بحيث تمرّ استعلامات DNS داخل النفق المشفّر ولا تتسرب لمزوّد الإنترنت.
+     *   • عند تفعيل `bypassIrDomains`: تُحلّ نطاقات `.ir` و `.xn--mgba3a4f16a` عبر `direct-dns` وتُوجَّه
+     *     مباشرة عبر `direct` مع تفعيل `sniff` لكشف `TLS SNI / HTTP Host` حتى للاتصالات المباشرة بالـ IP.
      */
     fun buildConfig(
         cfg: String,
@@ -75,6 +100,8 @@ class SingBox(private val ctx: Context) {
         dnsServer: String = "1.1.1.1",
         useDoh: Boolean = false,
         enableIpv6: Boolean = false,
+        bypassIrDomains: Boolean = false,
+        physicalDnsServer: String? = null,
     ): String? {
         val out = Converters.toOutbound(cfg) ?: return null
         val safeDns = com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.sanitizeDnsServer(dnsServer)
@@ -104,16 +131,60 @@ class SingBox(private val ctx: Context) {
         out.put("tag", "proxy")
         out.put("domain_resolver", "bootstrap")
 
+        val dnsObj = JSONObject()
+            .put("servers", dnsServers)
+            .put("final", "tunnel-dns")
+            .put("strategy", domainStrategy)
+
+        val routeObj = JSONObject()
+            .put("final", "proxy")
+            .put("default_domain_resolver", "tunnel-dns")
+
+        val outboundsArr = JSONArray().put(out)
+
+        if (bypassIrDomains) {
+            val irSuffixArr = JSONArray().apply {
+                IR_DOMAIN_SUFFIXES.forEach { put(it) }
+            }
+            val directDnsIp = resolveDirectDnsServer(physicalDnsServer)
+            dnsServers.put(
+                JSONObject()
+                    .put("type", "udp")
+                    .put("tag", "direct-dns")
+                    .put("server", directDnsIp)
+            )
+            dnsObj.put(
+                "rules",
+                JSONArray().put(
+                    JSONObject()
+                        .put("domain_suffix", irSuffixArr)
+                        .put("action", "route")
+                        .put("server", "direct-dns")
+                )
+            )
+            routeObj.put(
+                "rules",
+                JSONArray()
+                    .put(JSONObject().put("action", "sniff"))
+                    .put(
+                        JSONObject()
+                            .put("domain_suffix", JSONArray().apply { IR_DOMAIN_SUFFIXES.forEach { put(it) } })
+                            .put("action", "route")
+                            .put("outbound", "direct")
+                    )
+            )
+            outboundsArr.put(
+                JSONObject()
+                    .put("type", "direct")
+                    .put("tag", "direct")
+                    .put("domain_resolver", "direct-dns")
+            )
+        }
+
         val conf = JSONObject()
             .put("log", JSONObject().put("level", "error").put("timestamp", false))
-            .put(
-                "dns",
-                JSONObject()
-                    .put("servers", dnsServers)
-                    .put("final", "tunnel-dns")
-                    .put("strategy", domainStrategy)
-            )
-            .put("route", JSONObject().put("default_domain_resolver", "tunnel-dns"))
+            .put("dns", dnsObj)
+            .put("route", routeObj)
             .put(
                 "inbounds",
                 JSONArray().put(
@@ -124,7 +195,7 @@ class SingBox(private val ctx: Context) {
                         .put("listen_port", port)
                 ),
             )
-            .put("outbounds", JSONArray().put(out))
+            .put("outbounds", outboundsArr)
         return conf.toString()
     }
 
@@ -139,9 +210,19 @@ class SingBox(private val ctx: Context) {
         tag: String = "vpn",
         waitMs: Long = 3500L,
         enableIpv6: Boolean = false,
+        bypassIrDomains: Boolean = true,
+        physicalDnsServer: String? = null,
     ): RunningDaemon? {
         if (!isAvailable) return null
-        val json = buildConfig(cfg, port, dnsServer, useDoh, enableIpv6) ?: return null
+        val json = buildConfig(
+            cfg = cfg,
+            port = port,
+            dnsServer = dnsServer,
+            useDoh = useDoh,
+            enableIpv6 = enableIpv6,
+            bypassIrDomains = bypassIrDomains,
+            physicalDnsServer = physicalDnsServer,
+        ) ?: return null
         val confFile = File(tmpDir, "cfg-$tag-$port.json")
         confFile.writeText(json, Charsets.UTF_8)
 

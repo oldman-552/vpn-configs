@@ -211,4 +211,88 @@ class LeakKillSwitchAndSecurityTest {
         assertEquals(3_500L, SmartFailoverEngine.computeAdaptiveCheckIntervalMs(0, isDegraded = true))
         assertEquals(24_000L, SmartFailoverEngine.computeAdaptiveCheckIntervalMs(9, isDegraded = false))
     }
+
+    @Test
+    fun irDomainDirectBypassEnabledByDefaultAndConfigurableInSingBox() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        val prefs = com.bahrain.vpnconfigs.data.Prefs(ctx)
+
+        // 1. Enabled by default on fresh install
+        assertTrue("Expected .ir direct bypass to be enabled by default", prefs.bypassIrDomains)
+
+        val sb = SingBox(ctx)
+        val sampleUri = "vless://11111111-1111-1111-1111-111111111111@198.51.100.11:443?security=tls&sni=edge.example.com"
+
+        // Physical resolver sanitization for direct-dns
+        assertEquals("192.168.1.1", sb.resolveDirectDnsServer("192.168.1.1"))
+        assertEquals("1.1.1.1", sb.resolveDirectDnsServer("198.18.0.2"))
+        assertEquals("1.1.1.1", sb.resolveDirectDnsServer("127.0.0.1"))
+        assertEquals("1.1.1.1", sb.resolveDirectDnsServer("240.0.0.5"))
+
+        // 2. When bypassIrDomains = true, .ir and .xn--mgba3a4f16a route directly via direct + direct-dns + sniff
+        val enabledCfg = JSONObject(
+            sb.buildConfig(
+                cfg = sampleUri,
+                port = 20808,
+                dnsServer = "1.1.1.1",
+                useDoh = false,
+                enableIpv6 = false,
+                bypassIrDomains = true,
+                physicalDnsServer = "192.168.1.1",
+            )!!
+        )
+        val dnsObj = enabledCfg.getJSONObject("dns")
+        assertEquals("tunnel-dns", dnsObj.getString("final"))
+        val dnsServers = dnsObj.getJSONArray("servers")
+        var sawDirectDns = false
+        for (i in 0 until dnsServers.length()) {
+            val s = dnsServers.getJSONObject(i)
+            if (s.getString("tag") == "direct-dns") {
+                sawDirectDns = true
+                assertFalse("direct-dns must NOT detour through proxy", s.has("detour"))
+                assertEquals("192.168.1.1", s.getString("server"))
+            }
+        }
+        assertTrue(sawDirectDns)
+
+        val dnsRules = dnsObj.getJSONArray("rules")
+        assertEquals(1, dnsRules.length())
+        assertEquals("direct-dns", dnsRules.getJSONObject(0).getString("server"))
+        assertEquals(".ir", dnsRules.getJSONObject(0).getJSONArray("domain_suffix").getString(0))
+
+        val routeObj = enabledCfg.getJSONObject("route")
+        assertEquals("proxy", routeObj.getString("final"))
+        val routeRules = routeObj.getJSONArray("rules")
+        assertEquals(2, routeRules.length())
+        assertEquals("sniff", routeRules.getJSONObject(0).getString("action"))
+        assertEquals("route", routeRules.getJSONObject(1).getString("action"))
+        assertEquals("direct", routeRules.getJSONObject(1).getString("outbound"))
+        assertEquals(".ir", routeRules.getJSONObject(1).getJSONArray("domain_suffix").getString(0))
+        assertEquals(".xn--mgba3a4f16a", routeRules.getJSONObject(1).getJSONArray("domain_suffix").getString(1))
+
+        val outbounds = enabledCfg.getJSONArray("outbounds")
+        assertEquals(2, outbounds.length())
+        assertEquals("proxy", outbounds.getJSONObject(0).getString("tag"))
+        assertEquals("direct", outbounds.getJSONObject(1).getString("tag"))
+        assertEquals("direct-dns", outbounds.getJSONObject(1).getString("domain_resolver"))
+
+        // 3. When user disables toggle in Settings, .ir bypass rules & direct outbound are omitted
+        prefs.bypassIrDomains = false
+        assertFalse(prefs.bypassIrDomains)
+        val disabledCfg = JSONObject(
+            sb.buildConfig(
+                cfg = sampleUri,
+                port = 20808,
+                dnsServer = "1.1.1.1",
+                useDoh = false,
+                enableIpv6 = false,
+                bypassIrDomains = false,
+            )!!
+        )
+        assertFalse(disabledCfg.getJSONObject("dns").has("rules"))
+        assertFalse(disabledCfg.getJSONObject("route").has("rules"))
+        assertEquals(1, disabledCfg.getJSONArray("outbounds").length())
+        prefs.bypassIrDomains = true
+    }
 }

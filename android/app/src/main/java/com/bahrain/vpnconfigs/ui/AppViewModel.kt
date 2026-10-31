@@ -148,6 +148,7 @@ data class UiState(
     val installedApps: List<AppEntry> = emptyList(),
     val splitApps: Set<String> = emptySet(),
     val splitIncludeOnly: Boolean = false,
+    val bypassIrDomains: Boolean = true,
     val tunnelNeedsReload: Boolean = false,
     val activePromo: ResolvedPromoBanner? = null,
     // ── مؤشرات ULTIMATE VPN ENTERPRISE (حساب، تجربة 48 ساعة، سرعة، تشخيص، تحديثات) ──
@@ -166,7 +167,7 @@ data class UiState(
     val appHealth: AppHealthSnapshot = AppHealthSnapshot(20L, 0.0, 0, 0, 0, false, emptyList()),
     val availableUpdate: AppUpdateInfo? = null,
     val updatingApk: Boolean = false,
-    // ── v3.3 الذكاء التاريخي والمفضّلة المتقدمة والاختيار الذكي ──
+    // ── الذكاء التاريخي والمفضّلة المتقدمة والاختيار الذكي (v1) ──
     val smartAutoSelect: Boolean = true,
     val preferredCountry: String = "ALL",
     val smartDecision: SmartSelectionDecision = SmartSelectionDecision(null, null, emptyList()),
@@ -183,7 +184,7 @@ data class UiState(
     val historyRetentionDays: Int = 30,
     val telemetryById: Map<String, LocalServerTelemetry> = emptyMap(),
     val protectionEvents: List<ProtectionEventRecord> = emptyList(),
-    // ── v3.4 Central Top 500 + Local Personalized Top 50 (Wi-Fi vs Mobile Data) ──
+    // ── Central Top 500 + Local Personalized Top 50 (Wi-Fi vs Mobile Data — v1) ──
     val activeNetworkProfile: ScanNetworkProfile = ScanNetworkProfile.WIFI,
     val datasetVersion: Long = 0L,
     val datasetQualifiedCount: Int = 0,
@@ -233,6 +234,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             killSwitch = prefs.killSwitch,
             splitApps = prefs.splitApps,
             splitIncludeOnly = prefs.splitIncludeOnly,
+            bypassIrDomains = prefs.bypassIrDomains,
             accountState = licenseGuard.currentState(),
             speedHistory = diagnosticsEngine.loadSpeedHistory(),
             latestSpeedRecord = diagnosticsEngine.loadSpeedHistory().firstOrNull(),
@@ -683,7 +685,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    // ─────────────────── v3.3 الذكاء التاريخي والاختيار الذكي والمفضّلة ───────────────────
+    // ─────────────────── الذكاء التاريخي والاختيار الذكي والمفضّلة (v1) ───────────────────
 
     private fun computeSmartDecisionFor(items: List<ServerItem>): SmartSelectionDecision {
         val telMap = clientDb.getAllServerTelemetryMap()
@@ -1371,6 +1373,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    /** تفعيل أو إيقاف استثناء نطاقات `.ir` و `.ایران` من الـ VPN وتطبيق التغيير فورًا على النفق النشط. */
+    fun setBypassIrDomains(enabled: Boolean) {
+        val changed = prefs.bypassIrDomains != enabled
+        prefs.bypassIrDomains = enabled
+        val isActive = VpnStateManager.status.value.isActive
+        if (changed && isActive) {
+            BahrainVpnService.reloadTunnelIfConnected(getApplication())
+        }
+        state = state.copy(
+            bypassIrDomains = enabled,
+            error = null,
+            info = if (enabled) {
+                tr(
+                    "تم تفعيل استثناء نطاقات .ir — ستمرّ جميع مواقع وسيرفرات .ir مباشرة بدون VPN",
+                    "Enabled .ir direct bypass — all .ir domains/servers now bypass the VPN",
+                )
+            } else {
+                tr(
+                    "تم إيقاف استثناء نطاقات .ir — ستمرّ مواقع .ir عبر سيرفر الـ VPN",
+                    "Disabled .ir direct bypass — .ir domains now route through the VPN server",
+                )
+            },
+        )
+    }
+
     fun applyTunnelReload() {
         BahrainVpnService.reloadTunnelIfConnected(getApplication())
         state = state.copy(
@@ -1395,18 +1422,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         autoRefresh: Boolean,
         killSwitch: Boolean = prefs.killSwitch,
         failoverMode: String = prefs.failoverMode,
+        bypassIrDomains: Boolean = prefs.bypassIrDomains,
     ) {
         val dnsOrTunChanged =
             prefs.dnsServer != dnsServer ||
                 prefs.dnsDoh != dnsDoh ||
                 prefs.enableIpv6 != enableIpv6 ||
-                prefs.udpInTcp != udpInTcp
+                prefs.udpInTcp != udpInTcp ||
+                prefs.bypassIrDomains != bypassIrDomains
 
         val normalizedSort = ServerSortMode.fromKey(defaultSortMode)
         prefs.dnsServer = dnsServer
         prefs.dnsDoh = dnsDoh
         prefs.enableIpv6 = enableIpv6
         prefs.udpInTcp = udpInTcp
+        prefs.bypassIrDomains = bypassIrDomains
         prefs.killSwitch = killSwitch
         prefs.failoverMode = if (!autoFailover) "OFF" else if (failoverMode == "OFF") "SMART" else failoverMode
         prefs.testTop = testTop
@@ -1441,6 +1471,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             autoFailover = prefs.autoFailover,
             failoverMode = prefs.failoverMode,
             killSwitch = prefs.killSwitch,
+            bypassIrDomains = prefs.bypassIrDomains,
         )
     }
 

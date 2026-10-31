@@ -1280,6 +1280,23 @@ fun AppsSplitScreen(
             color = MaterialTheme.colorScheme.secondary,
         )
 
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                SettingToggleRow(
+                    title = tr(
+                        "استثناء نطاقات .ir من الـ VPN تلقائياً",
+                        "Bypass .ir Domains Directly (No VPN)",
+                    ),
+                    subtitle = tr(
+                        "مفعّل افتراضياً — أي اتصال لدومين أو سيرفر ينتهي بـ .ir أو .ایران يمرّ مباشرة بدون سيرفر الـ VPN",
+                        "Enabled by default — routes all .ir and .ایران domains/servers directly without passing through the VPN server",
+                    ),
+                    checked = state.bypassIrDomains,
+                    onCheckedChange = { vm.setBypassIrDomains(it) },
+                )
+            }
+        }
+
         if (state.tunnelNeedsReload) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -1438,6 +1455,7 @@ fun SettingsAndExportScreen(
     var dnsDoh by remember { mutableStateOf(p.dnsDoh) }
     var enableIpv6 by remember { mutableStateOf(p.enableIpv6) }
     var udpInTcp by remember { mutableStateOf(p.udpInTcp) }
+    var bypassIrDomains by remember(state.bypassIrDomains) { mutableStateOf(state.bypassIrDomains) }
     var autoFailover by remember { mutableStateOf(p.autoFailover) }
     var killSwitch by remember { mutableStateOf(p.killSwitch) }
     var failoverMode by remember { mutableStateOf(p.failoverMode) }
@@ -1609,10 +1627,27 @@ fun SettingsAndExportScreen(
         state.info?.let { BannerCard(text = it, isError = false) }
         state.error?.let { BannerCard(text = it, isError = true) }
 
-        // ── إعدادات النفق و DNS ──
+        // ── إعدادات النفق و DNS والتوجيه المباشر لنطاقات .ir ──
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(tr("إعدادات النفق و DNS", "Tunnel & DNS Settings"), style = MaterialTheme.typography.titleMedium)
+                Text(tr("إعدادات النفق والتوجيه و DNS", "Tunnel, Routing & DNS Settings"), style = MaterialTheme.typography.titleMedium)
+
+                SettingToggleRow(
+                    title = tr(
+                        "استثناء نطاقات .ir من الـ VPN تلقائياً",
+                        "Bypass .ir Domains Directly (No VPN)",
+                    ),
+                    subtitle = tr(
+                        "مفعّل افتراضياً — يمرّر جميع مواقع وسيرفرات .ir و .ایران مباشرة عبر إنترنت جهازك دون المرور على سيرفر الـ VPN",
+                        "Enabled by default — routes all .ir and .ایران domains/servers directly via your local internet without passing through the VPN server",
+                    ),
+                    checked = bypassIrDomains,
+                    onCheckedChange = {
+                        bypassIrDomains = it
+                        vm.setBypassIrDomains(it)
+                    },
+                )
+                HorizontalDivider()
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("1.1.1.1" to "Cloudflare", "8.8.8.8" to "Google", "9.9.9.9" to "Quad9").forEach { (ip, name) ->
@@ -1761,6 +1796,7 @@ fun SettingsAndExportScreen(
                     autoRefresh = autoRef,
                     killSwitch = killSwitch,
                     failoverMode = failoverMode,
+                    bypassIrDomains = bypassIrDomains,
                 )
             },
             modifier = Modifier.fillMaxWidth(),
