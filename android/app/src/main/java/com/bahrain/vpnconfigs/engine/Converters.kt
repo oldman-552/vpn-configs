@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap
 object Converters {
 
     /** البروتوكولات التي يستطيع التطبيق فحصها وتشغيلها عبر sing-box. */
-    val SUPPORTED = setOf("vless", "vmess", "trojan", "ss", "hysteria2", "hy2", "tuic")
+    val SUPPORTED = setOf("vless", "vmess", "trojan", "ss", "hysteria2", "hy2", "tuic", "socks", "socks5", "http", "https")
 
     private val INVISIBLE_RE = Regex("[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF]+")
     private val WS_ED_RE = Regex("^(.*?)\\?ed=(\\d+)$")
@@ -89,6 +89,8 @@ object Converters {
             "ss" -> shadowsocks(cleaned)
             "hysteria2", "hy2" -> hysteria2(cleaned)
             "tuic" -> tuic(cleaned)
+            "socks", "socks5" -> socks(cleaned)
+            "http", "https" -> httpProxy(cleaned)
             else -> null
         }
     } catch (_: Exception) {
@@ -505,6 +507,61 @@ object Converters {
             .put("tls", tlsBlock(host, q, listOf("h3")))
     }
 
+    // ───────────────────────── socks / socks5 ─────────────────────────
+    private fun extractUserPass(rawUserInfo: String?): Pair<String, String> {
+        val raw = rawUserInfo?.trim().orEmpty()
+        if (raw.isEmpty()) return "" to ""
+        if (!raw.contains(':')) {
+            runCatching {
+                val decoded = String(b64(dec(raw)), Charsets.UTF_8)
+                if (decoded.contains(':')) {
+                    return decoded.substringBefore(':') to decoded.substringAfter(':', "")
+                }
+            }
+            return dec(raw) to ""
+        }
+        return dec(raw.substringBefore(':')) to dec(raw.substringAfter(':', ""))
+    }
+
+    private fun socks(cfg: String): JSONObject? {
+        val u = Uri.parse(cfg)
+        val host = stripBrackets(u.host)
+        val port = u.port
+        if (host.isBlank() || !validPort(port)) return null
+        val (user, pass) = extractUserPass(u.encodedUserInfo)
+        val ob = JSONObject()
+            .put("type", "socks")
+            .put("version", "5")
+            .put("server", host)
+            .put("server_port", port)
+        if (user.isNotBlank()) ob.put("username", user)
+        if (pass.isNotEmpty()) ob.put("password", pass)
+        return ob
+    }
+
+    // ───────────────────────── http / https proxy ─────────────────────────
+    private fun httpProxy(cfg: String): JSONObject? {
+        val u = Uri.parse(cfg)
+        val q = q(u)
+        val host = stripBrackets(u.host)
+        // نشترط منفذًا صريحًا وصالحًا مع مسار فارغ/جذري لتمييز بروكسي HTTP عن روابط المواقع العادية
+        val port = u.port
+        val rawPath = u.encodedPath.orEmpty()
+        if (host.isBlank() || !validPort(port)) return null
+        if (rawPath.isNotEmpty() && rawPath != "/") return null
+        val (user, pass) = extractUserPass(u.encodedUserInfo)
+        val ob = JSONObject()
+            .put("type", "http")
+            .put("server", host)
+            .put("server_port", port)
+        if (user.isNotBlank()) ob.put("username", user)
+        if (pass.isNotEmpty()) ob.put("password", pass)
+        if (schemeOf(cfg) == "https" || q["security"]?.equals("tls", ignoreCase = true) == true) {
+            ob.put("tls", tlsBlock(host, q))
+        }
+        return ob
+    }
+
     /** استخراج اسم المضيف لتنويع النتائج (مع كاش سريع). */
     fun hostOf(cfg: String): String = metaOf(cfg).host
 
@@ -552,6 +609,11 @@ object Converters {
                 append(ob.optString("password", ""))
                 append('|')
                 append(ob.optString("method", "").lowercase())
+                val uname = ob.optString("username", "")
+                if (uname.isNotEmpty()) {
+                    append('|')
+                    append(uname)
+                }
             }
             val credDigest = sha256Hex("bahrain-vpn:cred:v2|$rawCred")
             val tlsObj = ob.optJSONObject("tls")
@@ -607,6 +669,9 @@ object Converters {
         "trojan" -> "TROJAN"
         "ss" -> "SS"
         "tuic" -> "TUIC"
+        "socks", "socks5" -> "SOCKS5"
+        "http" -> "HTTP"
+        "https" -> "HTTPS"
         else -> schemeOf(cfg).uppercase().ifBlank { "VPN" }
     }
 

@@ -115,6 +115,10 @@ def canonical_protocol(scheme: str) -> str:
     s = scheme.strip().lower()
     if s in ("hy2", "hysteria2"):
         return "hysteria2"
+    if s in ("socks", "socks5"):
+        return "socks"
+    if s in ("http", "https"):
+        return "http"
     return s
 
 
@@ -216,7 +220,7 @@ def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIden
     scheme_raw, _, rest = u.partition("://")
     scheme = scheme_raw.lower()
     cproto = canonical_protocol(scheme)
-    if cproto not in ("vmess", "vless", "trojan", "ss", "ssr", "hysteria2", "tuic"):
+    if cproto not in ("vmess", "vless", "trojan", "ss", "ssr", "hysteria2", "tuic", "socks", "http"):
         return None
 
     no_frag = rest.split("#", 1)[0].strip()
@@ -311,6 +315,36 @@ def parse_identity(uri: str, *, reject_private_hosts: bool = True) -> ParsedIden
         legacy_material = f"ss|{host}|{port}|{method}|{password}|{q_pairs}"
         cred_h = _hash_credential_secret_safe(f"{method}:{password}")
         v2_material = f"v2|ss|{host}|{port}|{method}|{cred_h}|{q_pairs}"
+
+    elif cproto in ("socks", "http"):
+        main_part, _, q_str = no_frag.partition("?")
+        if "/" in main_part:
+            authority_part, _, path_part = main_part.partition("/")
+            if path_part.strip():
+                return None
+        else:
+            authority_part = main_part
+        if "@" in authority_part:
+            userinfo, _, hp_str = authority_part.rpartition("@")
+            dec_u = _b64_decode(unquote(userinfo))
+            cred = dec_u if (dec_u and ":" in dec_u) else unquote(userinfo.strip())
+        else:
+            cred = ""
+            hp_str = authority_part
+        # Require explicit port for socks/http so ordinary web URLs are never mistaken for proxies
+        if ":" not in hp_str.rsplit("]", 1)[-1]:
+            return None
+        hp = _split_host_port(hp_str, default_port=None)
+        if not hp:
+            return None
+        host, port = hp
+        q_pairs = _canonical_query(q_str)
+        q_map = dict(q_pairs)
+        sni = q_map.get("sni") or q_map.get("peer") or q_map.get("host") or ""
+        tls_flag = "tls" if (scheme == "https" or q_map.get("security", "").lower() == "tls") else "plain"
+        legacy_material = f"{cproto}|{host}|{port}|{cred}|{tls_flag}|{q_pairs}"
+        cred_h = _hash_credential_secret_safe(cred)
+        v2_material = f"v2|{cproto}|{host}|{port}|{cred_h}|{tls_flag}|{q_pairs}"
 
     else:
         # vless, trojan, hysteria2/hy2, tuic

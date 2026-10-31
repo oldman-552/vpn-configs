@@ -135,7 +135,7 @@ object SecurityEvaluator {
             )
         }
 
-        if (scheme in setOf("vless", "vmess") && !tlsEnabled) {
+        if (scheme in setOf("vless", "vmess", "socks", "socks5", "http") && !tlsEnabled) {
             return ServerSecurityProfile(
                 securityAssessment = "Failed",
                 privacyAssessment = "High Risk",

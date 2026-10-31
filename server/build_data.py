@@ -37,6 +37,7 @@ from dedupe import MultiLayerDeduplicator, canonical_protocol, parse_identity  #
 from historical_db import HistoricalServerDB, parse_iso_epoch  # noqa: E402
 from pipeline_security import redact_text  # noqa: E402
 from public_api import export_static_api_v1  # noqa: E402
+from server.sync_community_rankings import sync_and_export as sync_community_rankings  # noqa: E402
 from scoring import (  # noqa: E402
     NodeHistoryStore,
     ScoredNode,
@@ -127,6 +128,13 @@ def _preserve_last_known_good(prev_dir: Path, out_dir: Path) -> bool:
         "top500.txt",
         "top500.manifest.json",
         "top500.delta.json",
+        "iran-top500.json",
+        "iran-top500.txt",
+        "iran-results.json",
+        "germany-top500.json",
+        "france-top500.json",
+        "turkey-top500.json",
+        "russia-top500.json",
     ):
         src = prev_dir / fname
         if src.is_file():
@@ -585,6 +593,14 @@ def main(argv: list[str] | None = None) -> int:
                 "degraded_reason": f"alive_below_min:{len(scored_nodes)}<{max(1, eff_min_alive)}",
                 "source_health_summary": registry.summary_counts(),
             })
+            if not (out_dir / "iran-top500.json").is_file():
+                sync_community_rankings(
+                    data_dir=out_dir,
+                    prev_dir=prev_dir,
+                    worker_url=os.environ.get("COMMUNITY_WORKER_URL", ""),
+                    export_token=os.environ.get("COMMUNITY_EXPORT_TOKEN", ""),
+                    now_epoch=parse_iso_epoch(now_iso),
+                )
             write_atomic(out_dir / "meta.json", json.dumps(prev_meta, ensure_ascii=False, indent=2) + "\n")
             return 0
         if not scored_nodes:
@@ -703,6 +719,15 @@ def main(argv: list[str] | None = None) -> int:
         generated_at=now_iso,
     )
 
+    # تصدير قوائم الفحص المجتمعي الموثّقة لإيران وبقية الدول (مع الحفاظ على حالة التقارير السابقة)
+    community_counts = sync_community_rankings(
+        data_dir=out_dir,
+        prev_dir=prev_dir,
+        worker_url=os.environ.get("COMMUNITY_WORKER_URL", ""),
+        export_token=os.environ.get("COMMUNITY_EXPORT_TOKEN", ""),
+        now_epoch=parse_iso_epoch(now_iso),
+    )
+
     # ── 5) meta.json المتوافق رجعيًا والغني بالمؤشرات ──
     meta = {
         "schema_version": 2,
@@ -768,9 +793,13 @@ def main(argv: list[str] | None = None) -> int:
             "top500_txt": _file_url("top500.txt"),
             "top500_manifest_json": _file_url("top500.manifest.json"),
             "top500_delta_json": _file_url("top500.delta.json"),
+            "iran_top500_json": _file_url("iran-top500.json"),
+            "iran_top500_txt": _file_url("iran-top500.txt"),
+            "iran_results_json": _file_url("iran-results.json"),
             "all_gz": _file_url("all.txt.gz"),
             "protocols": proto_files_meta,
         },
+        "community_verified_counts": community_counts,
     }
     write_atomic(out_dir / "meta.json", json.dumps(meta, ensure_ascii=False, indent=2) + "\n")
 

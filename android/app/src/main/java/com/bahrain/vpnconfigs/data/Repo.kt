@@ -352,6 +352,22 @@ class Repo(
                 return top500OutcomeToLoadResult(localTop500, meta, forceCacheSource = true)
             }
         }
+        communityProfileCountrySlug(feedProfile)?.let { slug ->
+            val commJson = File(dir, "$slug-top500.json")
+            if (commJson.exists()) {
+                val (cCfgs, cHints) = parseCommunityTop500Json(runCatching { commJson.readText(Charsets.UTF_8) }.getOrDefault(""))
+                if (cCfgs.isNotEmpty()) {
+                    return LoadResult(
+                        configs = cCfgs,
+                        serverLatencies = cHints.mapValues { it.value.latencyMs }.filterValues { it > 0L },
+                        meta = meta,
+                        source = "cache",
+                        serverHints = cHints,
+                        fromCacheFallback = true,
+                    )
+                }
+            }
+        }
 
         val jsonFile = File(dir, "alive.json")
         val jsonPair = if (jsonFile.exists()) {
@@ -402,11 +418,65 @@ class Repo(
         )
     }
 
+    private fun communityProfileCountrySlug(profile: String): String? = when (profile) {
+        "iran_community" -> "iran"
+        "germany_community" -> "germany"
+        "france_community" -> "france"
+        "turkey_community" -> "turkey"
+        "russia_community" -> "russia"
+        else -> null
+    }
+
+    private fun parseCommunityTop500Json(rawJson: String): Pair<List<String>, Map<String, ServerHint>> {
+        val cfgs = LinkedHashSet<String>()
+        val hints = HashMap<String, ServerHint>()
+        runCatching {
+            val root = JSONObject(rawJson.trim())
+            val countryIso = root.optString("country_code", "").uppercase().let {
+                if (it.length == 2 && it != "XX") it else ""
+            }
+            val arr = root.optJSONArray("servers") ?: JSONArray()
+            for (i in 0 until minOf(arr.length(), MAX_TOP500_CAPACITY)) {
+                val item = arr.optJSONObject(i) ?: continue
+                val rawUri = item.optString("cfg").ifBlank { item.optString("uri") }
+                if (!rawUri.contains("://")) continue
+                val cleaned = Converters.cleanUri(rawUri)
+                if (!cleaned.contains("://") || !Converters.isSupported(cleaned)) continue
+                cfgs.add(cleaned)
+                val srvCc = item.optString("exit_country", countryIso).uppercase().let {
+                    if (it.length == 2 && it != "XX") it else countryIso
+                }
+                hints.putIfAbsent(
+                    cleaned,
+                    ServerHint(
+                        latencyMs = item.optLong("median_latency_ms", item.optLong("latency_ms", 0L)).coerceAtLeast(0L),
+                        speedKbps = item.optDouble("median_speed_kbps", item.optDouble("speed_kbps", 0.0)).coerceAtLeast(0.0),
+                        score = item.optDouble("trust_score", item.optDouble("score", 0.0)).coerceAtLeast(0.0),
+                        performanceScore = item.optDouble("trust_score", 0.0).coerceAtLeast(0.0),
+                        reliabilityScore = (item.optDouble("success_rate", 0.0) * 100.0).coerceIn(0.0, 100.0),
+                        securityAssessment = item.optString("security_assessment", ""),
+                        privacyAssessment = item.optString("privacy_assessment", ""),
+                        riskLevel = item.optString("risk_level", ""),
+                        country = srvCc,
+                        stabilityRuns = item.optInt("distinct_reporters", 1).coerceAtLeast(1),
+                        verifiedAt = item.optString("last_verified_at", root.optString("generated_at", "")),
+                    ),
+                )
+            }
+        }
+        return cfgs.toList() to hints
+    }
+
     private fun profileFileName(profile: String): String = when (profile) {
         "reliable" -> "reliable.txt"
         "low_latency" -> "low_latency.txt"
         "high_throughput" -> "high_throughput.txt"
         "privacy_aware" -> "privacy_aware.txt"
+        "iran_community" -> "iran-top500.txt"
+        "germany_community" -> "germany-top500.json"
+        "france_community" -> "france-top500.json"
+        "turkey_community" -> "turkey-top500.json"
+        "russia_community" -> "russia-top500.json"
         else -> "alive.json"
     }
 
@@ -419,6 +489,23 @@ class Repo(
             val top500 = syncTop500Dataset()
             if (top500 != null && top500.servers.isNotEmpty()) {
                 return top500OutcomeToLoadResult(top500, meta, forceCacheSource = false)
+            }
+        }
+        communityProfileCountrySlug(feedProfile)?.let { slug ->
+            val commRaw = fetch("$slug-top500.json")
+            if (commRaw != null) {
+                val (cCfgs, cHints) = parseCommunityTop500Json(commRaw.body)
+                if (cCfgs.isNotEmpty()) {
+                    return LoadResult(
+                        configs = cCfgs,
+                        serverLatencies = cHints.mapValues { it.value.latencyMs }.filterValues { it > 0L },
+                        meta = meta,
+                        source = if (commRaw.liveSuccess) "remote" else "cache",
+                        error = if (commRaw.liveSuccess) null else UiMessages.MSG_UPDATE_FAILED,
+                        serverHints = cHints,
+                        fromCacheFallback = !commRaw.liveSuccess,
+                    )
+                }
             }
         }
 

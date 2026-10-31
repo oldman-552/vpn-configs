@@ -15,8 +15,8 @@
 │ 1) قاعدة بيانات GitHub المركزية (Top 500)      │ 2) تطبيق المشترك الذكي للأندرويد (User APK v1)  │
 │ • 277 قناة تلغرام + 26 تغذية GitHub منتقاة     │ • ثنائي اللغة: العربية أساسية (RTL) + الإنجليزية│
 │ • فحص بنيوي + إزالة تكرار 5 طبقات + حجر صحي    │ • استثناء تلقائي لنطاقات .ir مباشرة (زر تحكم)  │
-│ • اختيار حتى 500 مرشح مؤهّل فقط بدون أي حشو    │ • اختيار Top 50 + احتياطي محليًا لكل شبكة       │
-│ • نشر top500.{manifest,delta,json,txt} بـ SHA256│ • عزل كامل بين Wi-Fi وبيانات الجوال Mobile Data │
+│ • اختيار حتى 500 مرشح مؤهّل فقط بدون أي حشو    │ • هوتسبوت VPN بدون روت (HTTP/SOCKS5/PAC آمن)    │
+│ • قوائم إيران والدول الموثّقة مجتمعيًا (IR)    │ • فحص مجتمعي طوعي موثّق + Top 50 محلي لكل شبكة  │
 │ • قاعدة ذكاء تاريخي SQLite (24h/7d/30d/90d)     │ • متوافق مع Play Protect (Zero Dropper + v2/v3) │
 │   + واجهة إحصاءات عامة (/api/v1/* + OAS 3.1)   │   + منع تسرب DNS/IPv6 + Kill Switch + عقد VIP💎 │
 ├────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
@@ -75,7 +75,15 @@
    - يوقّع `.github/workflows/apk.yml` حزم المشترك والمشرف بشهادة إصدار `RSA-4096` تدعم مخططات التوقيع `v1 + v2 + v3` ويتحقق آليًا عبر `apksigner` من غياب شهادة `CN=Android Debug` ومن غياب `REQUEST_INSTALL_PACKAGES`.
    - يدعم ربط شهادة إنتاج ثابتة خاصة بك عبر أسرار المستودع (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`) لتراكم سمعة التوقيع عبر الإصدارات القادمة.
 
-### د) منع تسرب `DNS/IPv6`، مفتاح الإيقاف الصارم، والذكاء التاريخي
+### د) مشاركة الـ VPN عبر الهوتسبوت بدون روت (`Rootless VPN Hotspot`) والفحص المجتمعي الموثّق لإيران (`IR`)
+1. **مشاركة اتصال الـ VPN عبر الهوتسبوت بدون روت (`VpnHotspotManager.kt` + `VpnHotspotScreen.kt`):**
+   - واجهة مستقلة (`نقطة اتصال الـ VPN / VPN Hotspot`) تميّز بصدق تام بين **`الوضع A: توجيه نظام كامل موثّق`**، و**`الوضع B: مشاركة عبر بروكسي الشبكة المحلية بدون روت`** (مستمع محلي مربوط حصريًا بعنوان الشبكة الخاصة مثل `192.168.43.1` يقدّم `HTTP/HTTPS CONNECT` + `SOCKS5 TCP/UDP` + ملف إعداد تلقائي `/proxy.pac` + مصادقة اختيارية باسم مستخدم وكلمة مرور)، و**`الوضع C: غير متاح`**.
+   - **حماية إغلاق آمن صارمة (`Fail-Closed`):** مستحيل أن يستمع على `0.0.0.0` أو الشبكة العامة، وعند انقطاع نفق الـ VPN تُغلق جميع الجلسات فورًا (`HTTP 503` / قطع التدفقات) دون تمرير أي حزمة إلى الإنترنت غير المحمي أبدًا.
+2. **الفحص المجتمعي الطوعي وترتيب سيرفرات إيران الموثّقة (`CommunityTestingManager.kt` + `community_ranking.py`):**
+   - **طوعي 100% ومعطّل افتراضيًا (`OFF by default`):** يتطلب موافقة صريحة مع زر إلغاء فوري وتدوير المعرّف العشوائي؛ يُجري الهاتف فحصًا تسلسليًا محليًا فقط (`127.0.0.1`) عبر بروتوكولات `VLESS / VMess / Trojan / Shadowsocks / Hysteria2 / TUIC / SOCKS5 / HTTP(S)` **ولا يعمل أبدًا كبروكسي عام أو نقطة عبور**، ولا يعمل أثناء اتصال الـ VPN أو تشغيل `VPN Hotspot`.
+   - **تحقق صادق من الشبكة الإيرانية (`IR`) ومقاومة التلاعب:** يتحقق من غياب أي `TRANSPORT_VPN` ومن عنوان الخروج المباشر (وعبر حافة `Cloudflare Worker + D1` المجانية عند تفعيلها)، ويشترط تأكيد **جهازين مستقلين على الأقل (`min_distinct_reporters = 2`)** مع حساب الوسيط (`Median Latency/Speed`) وتناقص الحداثة وعزل نتائج `IR` في `iran-top500.json` و`iran-top500.txt` و`iran-results.json`.
+
+### هـ) منع تسرب `DNS/IPv6`، مفتاح الإيقاف الصارم، والذكاء التاريخي
 - **عزل `DNS` و`IPv6` (`LeakProtectionEngine`):** توجيه `tunnel-dns` إجباريًا داخل النفق (`detour="proxy"`) والتقاط المسار `::/0` دائمًا داخل واجهة `tun0`.
 - **مفتاح الإيقاف من مستويين (`KillSwitchController` + `ConnectionSecurityClassifier`):** فصل صريح وصادق بين حجب `tun0` على مستوى التطبيق (`PROTECTION_ACTIVE`) وبين قفل النظام الكامل (`OS Always-On VPN Lockdown` عبر `VpnService.isLockdownEnabled`) ضمن 9 حالات أمان موثّقة.
 - **قاعدة الذكاء التاريخي السحابية (`historical_db.py` — `state/history.sqlite3`):** تحليلات جاهزية وأداء نافذية (`24h/7d/30d/90d`) بأساس صريح (`OBSERVED / ESTIMATED / UNKNOWN`)، وعزل مشغّلي المصادر المستقلين، و10 فئات لتشخيص الأعطال.
@@ -91,6 +99,9 @@
 | **`top500.json`** | حزمة المرشّحات المركزية المؤهّلة (حتى 500 سيرفر بدون حشو — اختيار الـ `Top 50` محلي على أندرويد فقط) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.json` |
 | **`top500.delta.json`** | ملف التحديث التفاضلي بين آخر إصدارين لحزمة `Top 500` لتوفير استهلاك البيانات | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.delta.json` |
 | **`top500.txt`** | الروابط الخام المطبّعة لحزمة المرشّحات المركزية `Top 500` | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.txt` |
+| **`iran-top500.json`** | قائمة السيرفرات الموثّقة مجتمعيًا من داخل شبكات إيران المباشرة (`IR` — تقييم متعدد الأجهزة بدون حشو) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/iran-top500.json` |
+| **`iran-top500.txt`** | الروابط الخام المطبّعة لقائمة سيرفرات إيران الموثّقة مجتمعيًا (`IR`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/iran-top500.txt` |
+| **`iran-results.json`** | السجل التحليلي المعمّى لقياسات الفحص المجتمعي الموثّق من داخل إيران (`IR`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/iran-results.json` |
 | **`sub.txt`** | اشتراك `Base64` الشامل لجميع العُقد العامة الحيّة بوسم `bahrain-vpn` | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/sub.txt` |
 | **`best100.txt`** | أفضل 100 عقدة مرتّبة بالدرجة المركّبة مع تنويع المضيفين والشبكات الفرعية (`/24`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/best100.txt` |
 | **`privacy_aware.txt`** | الأعلى أمانًا في طبقة النقل (`Verified TLS/Reality` فقط وبدون `allowInsecure`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/privacy_aware.txt` |
@@ -114,6 +125,7 @@
 | المسار | الوظيفة الهندسية |
 |---|---|
 | `central_top500.py` | محرك اختيار وتصدير حزمة المرشّحات المركزية (`Top 500` بدون حشو) مع بصمات `SHA-256` وفرق `top500.delta.json` |
+| `community_ranking.py` / `community-worker/` | محرك التقييم المجتمعي متعدد الأجهزة المقاوم للتلاعب (`iran-top500.{json,txt}`, `iran-results.json`, وقوائم الدول) + بوابة الاستقبال المجانية (`Cloudflare Worker + D1`) |
 | `historical_db.py` | قاعدة بيانات الذكاء التاريخي `SQLite` (`migrations/history/001..002.sql`) وتحليلات `24h/7d/30d/90d` |
 | `pipeline_security.py` / `security_intelligence.py` | حراسة SSRF، التحقق من بصمات `SHA-256`، تقييم الأمان المستقل عن السرعة، وسجل الحجر الصحي (`QuarantineRegistry`) |
 | `dedupe.py` / `scoring.py` | إزالة التكرار خماسية الطبقات والهوية المعماة `server_id` + التقييم متعدد الأبعاد و5 ملفات ترتيب |
@@ -169,8 +181,8 @@ pytest -v
 ```
 
 - **تغطية الاختبارات الآلية المستمرة (`CI Green`):**
-  - **`51/51` اختبار `pytest`** (`tests/test_all.py` + `tests/test_enterprise_platform.py` + `tests/test_security_ranking_and_api.py` + `tests/test_historical_intelligence.py` + `tests/test_top500_architecture.py`).
-  - **`30/30` اختبار `JUnit / Robolectric`** (`:app` + `:admin` شاملةً `AndroidVpnAuditTest`، `EnterpriseAndroidTest` مع التحقق من اللغة العربية الأساسية وتبديل الإنجليزية، `LeakKillSwitchAndSecurityTest` مع التحقق من الاستثناء التلقائي لنطاقات `.ir`، `SmartVpnUpgradeTest`، `Top500AndPersonalizedTop50Test`، و`AdminAppUnitTest`).
+  - **`54/54` اختبار `pytest`** (`tests/test_all.py` + `tests/test_community_and_protocols.py` + `tests/test_enterprise_platform.py` + `tests/test_security_ranking_and_api.py` + `tests/test_historical_intelligence.py` + `tests/test_top500_architecture.py`).
+  - **`34/34` اختبار `JUnit / Robolectric`** (`:app` + `:admin` شاملةً `AndroidVpnAuditTest`، `CommunityAndHotspotTest` للتحقق من هوتسبوت الـ VPN بدون روت والفحص المجتمعي الموثّق لإيران وبروتوكولَي `SOCKS5`/`HTTP`، `EnterpriseAndroidTest`، `LeakKillSwitchAndSecurityTest`، `SmartVpnUpgradeTest`، `Top500AndPersonalizedTop50Test`، و`AdminAppUnitTest`).
 
 ---
 

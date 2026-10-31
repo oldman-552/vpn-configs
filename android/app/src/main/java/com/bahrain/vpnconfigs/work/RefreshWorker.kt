@@ -7,12 +7,15 @@ package com.bahrain.vpnconfigs.work
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.bahrain.vpnconfigs.community.CommunityTestingManager
 import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.data.Repo
 import com.bahrain.vpnconfigs.data.ResultLine
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.ServerSortMode
 import com.bahrain.vpnconfigs.engine.Tester
+import com.bahrain.vpnconfigs.hotspot.VpnHotspotManager
+import com.bahrain.vpnconfigs.vpn.VpnStateManager
 
 class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
 
@@ -57,6 +60,21 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
                         prefs.bestN,
                     )
                 }
+            }
+        }
+
+        // الفحص المجتمعي الطوعي في الخلفية (يعمل فقط بموافقة صريحة وعند خمول الـ VPN والهوتسبوت)
+        if (prefs.communityTestingEnabled &&
+            prefs.communityBackgroundScheduleEnabled &&
+            !VpnStateManager.status.value.isActive &&
+            !VpnHotspotManager.state.value.isSharingActive
+        ) {
+            runCatching {
+                CommunityTestingManager.runCommunityTestBatch(
+                    ctx = applicationContext,
+                    candidateConfigs = res.configs,
+                    isBackgroundRun = true,
+                )
             }
         }
 
