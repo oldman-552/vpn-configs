@@ -1127,6 +1127,17 @@ class Repo(
             return localValid.copy(liveSuccess = true, notModified304 = true, checksumVerified = true)
         }
 
+        if (manifestResp != null && !manifestResp.body.isNullOrBlank() &&
+            !ManifestSignature.isTrusted(manifestResp.body) { fetchFreshMirrorBody("top500.manifest.json.sig")?.body }
+        ) {
+            AppDiag.w("Repo", "Rejected Top500 manifest: missing or invalid signature")
+            return localValid?.copy(
+                liveSuccess = false,
+                recoveredFromLastValid = true,
+                error = UiMessages.MSG_UPDATE_FAILED,
+            )
+        }
+
         if (manifestResp != null && !manifestResp.body.isNullOrBlank()) {
             val manifestParsed = runCatching { JSONObject(manifestResp.body) }.getOrNull()
             if (manifestParsed != null) {

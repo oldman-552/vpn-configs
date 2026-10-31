@@ -115,6 +115,11 @@ class Prefs(ctx: Context) {
             }
         }
 
+    /** One-time acknowledgement that servers are public, third-party and untrusted. */
+    var publicServerNoticeAcked: Boolean
+        get() = sp.getBoolean("public_server_notice_v1", false)
+        set(v) = sp.edit { putBoolean("public_server_notice_v1", v) }
+
     var killSwitch: Boolean
         get() = sp.getBoolean("kill_switch_v32", true)
         set(v) = sp.edit { putBoolean("kill_switch_v32", v) }

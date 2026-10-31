@@ -11,6 +11,11 @@ android {
     defaultConfig {
         applicationId = "com.bahrain.vpnconfigs"
         minSdk = 29
+        // ECDSA P-256 SPKI public key (base64) that verifies top500.manifest.json.sig.
+        // Empty = transition mode (unsigned manifests accepted). Set via gradle property or env.
+        val top500Pub = (project.findProperty("top500PublicKeyB64") as String?)
+            ?: System.getenv("TOP500_PUBLIC_KEY_B64") ?: ""
+        buildConfigField("String", "TOP500_PUBLIC_KEY_B64", "\"${top500Pub.trim()}\"")
         targetSdk = 34
         versionCode = 2
         versionName = "2.0"
@@ -66,7 +71,10 @@ android {
         )
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     composeCompiler {
         includeSourceInformation = false

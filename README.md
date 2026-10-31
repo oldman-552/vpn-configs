@@ -4,9 +4,9 @@
 [![Languages](https://img.shields.io/badge/APK%20Languages-Arabic%20(Primary)%20%2B%20English-0ea5e9?style=for-the-badge)](android/README.md)
 [![Architecture](https://img.shields.io/badge/Architecture-Central%20Top%20500%20%2B%20Local%20Top%2050-blue?style=for-the-badge)](docs/ANDROID_ARCHITECTURE.md)
 [![Play Protect](https://img.shields.io/badge/Play%20Protect-Zero%20Dropper%20%2B%20RSA--4096%20v2%2Fv3-brightgreen?style=for-the-badge)](SECURITY.md)
-[![Infrastructure](https://img.shields.io/badge/100%25%20GitHub-Zero%20External%20VPS-24292f?style=for-the-badge)](DEPLOYMENT.md)
+[![Infrastructure](https://img.shields.io/badge/GitHub%20%2B%20Cloudflare%20Worker-No%20VPS-24292f?style=for-the-badge)](DEPLOYMENT.md)
 
-منظومة VPN مؤسسية وسحابية متكاملة تعمل آليًا بالكامل **100% داخل بيئة GitHub دون أي خوادم خارجية (`Zero VPS / Zero Third-Party Cloud`)** تحت الهوية الموحّدة **`bahrain-vpn`** والإصدار الرسمي المعتمد **`v2`**:
+منظومة VPN تعمل آليًا **داخل GitHub بدون خوادم VPS** (Actions + Pages + Releases)، باستثناء ميزة **الفحص المجتمعي الاختيارية** التي تعتمد على **Cloudflare Worker + D1** (`community-worker/`) تحت الهوية الموحّدة **`bahrain-vpn`** والإصدار الرسمي المعتمد **`v2`**:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -28,6 +28,17 @@
 │ • توقيع ECDSA P-256 ومزامنة عبر api.github     │ • مخططات تاريخية 24h/7d/30d/90d وتقارير شاملة   │
 └────────────────────────────────────────────────┴─────────────────────────────────────────────────┘
 ```
+
+
+> ⚠️ **تنبيه أمني:** السيرفرات مجمّعة من قنوات ومصادر عامة يديرها أشخاص مجهولون. صاحب السيرفر يستطيع رؤية وجهات اتصالك وأي بيانات غير مشفّرة. التطبيق مخصّص لتجاوز الحجب وليس لإخفاء الهوية، ويعرض هذا التنبيه للمستخدم عند أول تشغيل.
+
+### توقيع بيانات Top 500
+يُوقَّع `top500.manifest.json` بتوقيع **ECDSA P-256** في الملف `top500.manifest.json.sig`، ويتحقق التطبيق منه قبل قبول أي تحديث.
+1. شغّل محليًا: `python scripts/gen_manifest_signing_key.py`
+2. أضف القيمة الخاصة كسر في المستودع باسم `TOP500_SIGNING_KEY_B64` (لا تضعها في الكود أبدًا).
+3. ضع القيمة العامة في `android/gradle.properties`: `top500PublicKeyB64=...`
+
+بدون المفتاح العام يعمل التطبيق في **وضع انتقالي** يقبل البيانات غير الموقّعة، حتى لا تتعطل النسخ الحالية.
 
 ---
 

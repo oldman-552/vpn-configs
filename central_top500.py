@@ -21,6 +21,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import base64
+import os
+
 import collector
 from dedupe import parse_identity
 from scoring import ScoredNode, country_flag, diversify_scored_nodes
@@ -313,4 +316,31 @@ def export_central_top500_dataset(
     }
     manifest_bytes = (json.dumps(manifest_doc, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     _write_atomic_bytes(out / "top500.manifest.json", manifest_bytes)
+    sign_manifest_file(out / "top500.manifest.json", manifest_bytes)
     return manifest_doc
+
+
+MANIFEST_SIGNING_KEY_ENV = "TOP500_SIGNING_KEY_B64"
+
+
+def sign_manifest_file(manifest_path: Path, manifest_bytes: bytes, key_b64: str | None = None) -> str | None:
+    """Write `<manifest>.sig` = base64(ECDSA P-256/SHA-256 DER signature over the exact manifest bytes).
+
+    The private key (PKCS#8 DER, base64) comes from the `TOP500_SIGNING_KEY_B64` secret.
+    When it is absent the manifest is published unsigned (transition mode) and any stale
+    signature file is removed so clients never see a mismatched pair.
+    """
+    sig_path = manifest_path.with_name(manifest_path.name + ".sig")
+    key_b64 = (key_b64 if key_b64 is not None else os.environ.get(MANIFEST_SIGNING_KEY_ENV, "")).strip()
+    if not key_b64:
+        sig_path.unlink(missing_ok=True)
+        return None
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    priv = serialization.load_der_private_key(base64.b64decode(key_b64), password=None)
+    if not isinstance(priv, ec.EllipticCurvePrivateKey) or priv.curve.name != "secp256r1":
+        raise ValueError("TOP500_SIGNING_KEY_B64 must be an ECDSA P-256 PKCS#8 key")
+    sig_b64 = base64.b64encode(priv.sign(manifest_bytes, ec.ECDSA(hashes.SHA256()))).decode("ascii")
+    _write_atomic_bytes(sig_path, (sig_b64 + "\n").encode("ascii"))
+    return sig_b64
