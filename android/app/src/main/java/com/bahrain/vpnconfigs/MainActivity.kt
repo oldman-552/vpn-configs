@@ -78,9 +78,8 @@ import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.vpn.BahrainVpnService
 import com.bahrain.vpnconfigs.vpn.ResourceAndBatteryMonitor
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
-import com.bahrain.vpnconfigs.work.RefreshWorker
+import com.bahrain.vpnconfigs.work.WorkScheduler
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
 
@@ -101,13 +100,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun scheduleRefreshIfEnabled() {
-        val wm = WorkManager.getInstance(this)
-        if (Prefs(this).autoRefresh) {
-            val req = PeriodicWorkRequestBuilder<RefreshWorker>(1, TimeUnit.HOURS).build()
-            wm.enqueueUniquePeriodicWork("refresh", ExistingPeriodicWorkPolicy.KEEP, req)
-        } else {
-            wm.cancelUniqueWork("refresh")
-        }
+        WorkScheduler.syncSchedule(this)
     }
 }
 

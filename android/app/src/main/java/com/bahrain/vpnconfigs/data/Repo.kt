@@ -18,6 +18,87 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 
+data class DeadConfigPurgeDecision(
+    val shouldPurge: Boolean,
+    val offlineGuardTriggered: Boolean,
+    val purgeableCleanUris: Set<String>,
+    val remainingPool: List<String>,
+)
+
+object DeadConfigPurgePolicy {
+    const val OFFLINE_GUARD_MIN_BATCH: Int = 15
+    const val PURGE_TTL_MS: Long = 3L * 3_600_000L
+
+    /**
+     * يحسم الحذف التلقائي الفوري للكونفقات غير الشغّالة وفق الضوابط الثلاثة الصارمة:
+     *   1) حماية انقطاع إنترنت الهاتف (Offline Guard): إذا كان الهاتف بلا إنترنت أو فشل 100% من دفعة >= 15 كونفيق،
+     *      لا يُحذف أي سيرفر محفوظ (Last Known Good).
+     *   2) حماية المفضّلة (⭐) وعقد VIP الموثّقة: لا تُحذف تلقائيًا أبدًا.
+     *   3) حذف فوري لكافة الكونفقات العامة الفاشلة حتى تبقى القائمة صافية 100%.
+     */
+    fun evaluate(
+        currentPool: List<String>,
+        failedUris: Set<String>,
+        testedCount: Int,
+        aliveCount: Int,
+        deviceOnline: Boolean = true,
+        favoriteCleanUris: Set<String> = emptySet(),
+        favoriteServerIds: Set<String> = emptySet(),
+        vipCleanUris: Set<String> = emptySet(),
+    ): DeadConfigPurgeDecision {
+        val offlineSuspected = !deviceOnline || (testedCount >= OFFLINE_GUARD_MIN_BATCH && aliveCount == 0)
+        if (offlineSuspected || failedUris.isEmpty()) {
+            return DeadConfigPurgeDecision(
+                shouldPurge = false,
+                offlineGuardTriggered = offlineSuspected,
+                purgeableCleanUris = emptySet(),
+                remainingPool = currentPool,
+            )
+        }
+
+        val failedClean = failedUris.map { Converters.cleanUri(it) }.filter { it.isNotBlank() }.toHashSet()
+        val purgeable = LinkedHashSet<String>()
+        for (c in failedClean) {
+            val sid = Converters.stableServerId(c)
+            val isProtected = c in favoriteCleanUris || c in vipCleanUris || (sid.isNotBlank() && sid in favoriteServerIds)
+            if (!isProtected) {
+                purgeable.add(c)
+            }
+        }
+        if (purgeable.isEmpty()) {
+            return DeadConfigPurgeDecision(
+                shouldPurge = false,
+                offlineGuardTriggered = false,
+                purgeableCleanUris = emptySet(),
+                remainingPool = currentPool,
+            )
+        }
+
+        val purgeableIds = purgeable.mapNotNull { Converters.stableServerId(it).takeIf { id -> id.isNotBlank() } }.toHashSet()
+        val remaining = currentPool.filterNot { raw ->
+            val clean = Converters.cleanUri(raw)
+            val sid = Converters.stableServerId(clean)
+            clean in purgeable || (sid.isNotBlank() && sid in purgeableIds)
+        }
+        // Safety floor: if somehow every single config in currentPool would become empty while aliveCount == 0, keep LKG
+        if (remaining.isEmpty() && aliveCount == 0 && currentPool.isNotEmpty()) {
+            return DeadConfigPurgeDecision(
+                shouldPurge = false,
+                offlineGuardTriggered = true,
+                purgeableCleanUris = emptySet(),
+                remainingPool = currentPool,
+            )
+        }
+
+        return DeadConfigPurgeDecision(
+            shouldPurge = true,
+            offlineGuardTriggered = false,
+            purgeableCleanUris = purgeable,
+            remainingPool = remaining,
+        )
+    }
+}
+
 data class RemoteMeta(
     val generatedAt: String = "—",
     val alive: Int = 0,
@@ -682,6 +763,74 @@ class Repo(
                 TestResult(cfg = cfg, ok = true, latencyMs = lat, speedKbps = spd, testedAtMs = fileModifiedMs)
             }
         }.getOrDefault(emptyList())
+    }
+
+    // ─────────── سجل الحذف الفوري المعزول حسب الشبكة (دورة 3 ساعات) دون المساس ببصمات Top-500 ───────────
+    private fun purgedDeadFile(profile: ScanNetworkProfile): File =
+        File(dir, "purged_dead_${profile.code}.json")
+
+    fun getActivePurgedDeadServerIds(
+        profile: ScanNetworkProfile,
+        nowMs: Long = System.currentTimeMillis(),
+    ): Set<String> {
+        val f = purgedDeadFile(profile)
+        if (!f.exists()) return emptySet()
+        return runCatching {
+            val obj = JSONObject(f.readText(Charsets.UTF_8))
+            val cutoff = nowMs - DeadConfigPurgePolicy.PURGE_TTL_MS
+            val out = HashSet<String>()
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val sid = keys.next()
+                if (obj.optLong(sid, 0L) >= cutoff) out.add(sid)
+            }
+            out
+        }.getOrDefault(emptySet())
+    }
+
+    fun clearPurgedDeadForProfile(profile: ScanNetworkProfile) {
+        runCatching { purgedDeadFile(profile).delete() }
+    }
+
+    fun recordPurgedDeadAndCleanFiles(
+        profile: ScanNetworkProfile,
+        purgeableCleanUris: Set<String>,
+        remainingPool: List<String>,
+        bestLimit: Int = 100,
+        nowMs: Long = System.currentTimeMillis(),
+    ) {
+        if (purgeableCleanUris.isEmpty()) return
+        val deadIds = purgeableCleanUris.mapNotNull { Converters.stableServerId(it).takeIf { id -> id.isNotBlank() } }.toHashSet()
+        runCatching {
+            val f = purgedDeadFile(profile)
+            val existing = if (f.exists()) runCatching { JSONObject(f.readText(Charsets.UTF_8)) }.getOrNull() ?: JSONObject() else JSONObject()
+            val next = JSONObject()
+            val cutoff = nowMs - DeadConfigPurgePolicy.PURGE_TTL_MS
+            val itKeys = existing.keys()
+            while (itKeys.hasNext()) {
+                val k = itKeys.next()
+                val ts = existing.optLong(k, 0L)
+                if (ts >= cutoff) next.put(k, ts)
+            }
+            deadIds.forEach { next.put(it, nowMs) }
+            writeAtomic(f, next.toString())
+        }
+        runCatching {
+            if (remainingPool.isNotEmpty()) {
+                writeAll(remainingPool)
+            }
+            val savedBest = loadSavedBest().filterNot { r ->
+                val c = Converters.cleanUri(r.cfg)
+                val sid = Converters.stableServerId(c)
+                c in purgeableCleanUris || (sid.isNotBlank() && sid in deadIds)
+            }
+            if (savedBest.isNotEmpty()) {
+                writeBest(
+                    savedBest.map { ResultLine(it.cfg, it.latencyMs, it.speedKbps, it.testedAtMs) },
+                    bestLimit,
+                )
+            }
+        }
     }
 
     /** يجلب حزمة التراخيص والإعدادات الموقّعة رقميًا (ECDSA P-256) من الفرع الحي مع كاش ETag. */

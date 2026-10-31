@@ -137,7 +137,7 @@ enum class ScanNetworkProfile(val code: String, val labelAr: String, val labelEn
 }
 
 enum class LocalPoolTier(val code: String, val labelAr: String, val labelEn: String) {
-    TOP_50("TOP_50", "أفضل 50 للشبكة", "Network Top 50"),
+    TOP_50("TOP_50", "أفضل 100 للشبكة", "Network Top 100"),
     BACKUP_POOL("BACKUP_POOL", "الاحتياطي المؤهّل", "Qualified Backup"),
     CANDIDATE_ONLY("CANDIDATE_ONLY", "مرشّح غير مفحوص محليًا", "Untested Candidate");
 

@@ -217,8 +217,8 @@ fun ServersListScreen(
                 val updatedPart = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
                 Text(
                     tr(
-                        "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/50 • احتياطي ${state.backupPoolCount} • المرشّحات $poolTotal/500$updatedPart",
-                        "${state.activeNetworkProfile.labelEn}: Top ${state.top50Count}/50 • Backup ${state.backupPoolCount} • Pool $poolTotal/500$updatedPart",
+                        "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/100 • احتياطي ${state.backupPoolCount} • المرشّحات $poolTotal/500$updatedPart",
+                        "${state.activeNetworkProfile.labelEn}: Top ${state.top50Count}/100 • Backup ${state.backupPoolCount} • Pool $poolTotal/500$updatedPart",
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,
@@ -229,7 +229,7 @@ fun ServersListScreen(
             }
         }
 
-        // ── أزرار الفحص السريع (Top 50) والفحص الشامل (500) وإضافة كانفيغ ──
+        // ── أزرار الفحص فائق السرعة (500 ← أفضل 100 + حذف المتوقف فورًا) وإضافة كانفيغ ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -247,24 +247,14 @@ fun ServersListScreen(
                 }
             } else {
                 Button(
-                    onClick = { vm.startQuickScan() },
+                    onClick = { vm.startFullScan() },
                     enabled = state.servers.isNotEmpty() && state.engineReady,
-                    modifier = Modifier.weight(1.1f),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                 ) {
                     Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(tr("فحص سريع (50)", "Quick Scan (50)"))
-                }
-                OutlinedButton(
-                    onClick = { vm.startFullScan() },
-                    enabled = state.servers.isNotEmpty() && state.engineReady,
-                    modifier = Modifier.weight(1.1f),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                ) {
-                    Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(tr("فحص شامل (500)", "Full Scan (500)"))
+                    Text(tr("فحص فائق السرعة (500 ← أفضل 100)", "Ultra-Fast Scan (500 → Top 100)"))
                 }
             }
             OutlinedButton(
@@ -332,10 +322,10 @@ fun ServersListScreen(
             }
         }
 
-        // ── شرائح الفلترة (أفضل 50 للشبكة + الاحتياطي + البروتوكولات + المفضلة) ──
+        // ── شرائح الفلترة (أفضل 100 للشبكة + الاحتياطي + البروتوكولات + المفضلة) ──
         val chips = listOf(
             "ALL" to tr("الكل (${state.servers.size})", "All (${state.servers.size})"),
-            "TOP_50" to tr("🏆 أفضل 50 (${state.top50Count})", "🏆 Top 50 (${state.top50Count})"),
+            "TOP_50" to tr("🏆 أفضل 100 (${state.top50Count})", "🏆 Top 100 (${state.top50Count})"),
             "BACKUP" to tr("🛡️ الاحتياطي (${state.backupPoolCount})", "🛡️ Backup (${state.backupPoolCount})"),
             "FAV" to tr("⭐ المفضلة", "⭐ Favorites"),
             "STABLE" to tr("المستقرة", "Stable"),
@@ -539,13 +529,13 @@ private fun ServerCard(
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }
-                    } else if (item.localPoolTier == LocalPoolTier.BACKUP_POOL && item.personalizedRank > 50) {
+                    } else if (item.localPoolTier == LocalPoolTier.BACKUP_POOL && item.personalizedRank > 100) {
                         Surface(
                             color = MaterialTheme.colorScheme.tertiaryContainer,
                             shape = RoundedCornerShape(6.dp),
                         ) {
                             Text(
-                                tr("احتياطي #${item.personalizedRank - 50}", "Backup #${item.personalizedRank - 50}"),
+                                tr("احتياطي #${item.personalizedRank - 100}", "Backup #${item.personalizedRank - 100}"),
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,

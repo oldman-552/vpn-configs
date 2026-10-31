@@ -39,6 +39,7 @@ from typing import Any
 import collector
 from central_top500 import compute_config_fingerprint, strip_uri_fragment
 from dedupe import parse_identity
+from scoring import has_allow_insecure_uri
 
 COMMUNITY_SCHEMA_VERSION = "1.0.0"
 COMMUNITY_TOP_LIMIT = 500
@@ -217,13 +218,26 @@ def compute_country_community_rankings(
 
         if ok_latencies:
             lat_score = max(0.0, min(100.0, ((1800.0 - min(1800.0, float(median_lat))) / (1800.0 - 45.0)) * 100.0))
-            spd_score = 35.0 if median_spd <= 0.0 else min(100.0, 20.0 + (median_spd / 6000.0) * 80.0)
-            rep_conf_bonus = min(15.0, (distinct_reporters - 1) * 4.0 + max(0, distinct_asns - 1) * 3.0)
+            if median_hs > 0:
+                hs_score = max(0.0, min(100.0, ((4500.0 - min(4500.0, float(median_hs))) / (4500.0 - 250.0)) * 100.0))
+                ping_jitter_comp = 0.75 * lat_score + 0.25 * hs_score
+            else:
+                ping_jitter_comp = lat_score
+            # Zero free credit (0.0) when download throughput was not measured (median_spd <= 0).
+            if median_spd > 0.0:
+                import math
+
+                spd_norm = (math.log10(max(16.0, median_spd)) - 1.2) / 3.2
+                spd_score = max(5.0, min(100.0, spd_norm * 100.0))
+            else:
+                spd_score = 0.0
+            stability_comp = 0.65 * (shrunk_reliability * 100.0) + 0.35 * median_stab
+            rep_conf_bonus = min(10.0, (distinct_reporters - 1) * 3.0 + max(0, distinct_asns - 1) * 2.0)
+            # Unified 45% Real Download Throughput / 30% Stability+Reliability / 25% Ping+Handshake
             base_score = (
-                shrunk_reliability * 100.0 * 0.45 +
-                lat_score * 0.25 +
-                spd_score * 0.15 +
-                median_stab * 0.15 +
+                spd_score * 0.45 +
+                stability_comp * 0.30 +
+                ping_jitter_comp * 0.25 +
                 rep_conf_bonus
             )
             trust_score = round(min(100.0, base_score * recency_mult), 2)
@@ -235,7 +249,8 @@ def compute_country_community_rankings(
             len(ok_latencies) >= max(1, int(min_distinct_reporters)) and
             raw_success_rate >= 0.50 and
             median_lat > 0 and
-            str(cat["risk_level"]).upper() != "QUARANTINED"
+            str(cat["risk_level"]).upper() not in ("QUARANTINED", "CRITICAL") and
+            not has_allow_insecure_uri(cat["clean_uri"])
         )
 
         status_tag = (
@@ -271,8 +286,24 @@ def compute_country_community_rankings(
         if meets_multi_device:
             qualified_top.append({**summary_row, "_clean_uri": cat["clean_uri"]})
 
-    all_results.sort(key=lambda x: (-float(x["trust_score"]), -int(x["distinct_reporters"]), int(x["median_latency_ms"] or 999999), x["server_id"]))
-    qualified_top.sort(key=lambda x: (-float(x["trust_score"]), -int(x["distinct_reporters"]), int(x["median_latency_ms"]), x["server_id"]))
+    all_results.sort(
+        key=lambda x: (
+            -float(x["trust_score"]),
+            -float(x["median_speed_kbps"]),
+            -float(x["stability_score"]),
+            int(x["median_latency_ms"] or 999999),
+            x["server_id"],
+        )
+    )
+    qualified_top.sort(
+        key=lambda x: (
+            -float(x["trust_score"]),
+            -float(x["median_speed_kbps"]),
+            -float(x["stability_score"]),
+            int(x["median_latency_ms"]),
+            x["server_id"],
+        )
+    )
     qualified_top = qualified_top[: max(0, min(int(limit), COMMUNITY_TOP_LIMIT))]
 
     ranked_servers: list[dict[str, Any]] = []

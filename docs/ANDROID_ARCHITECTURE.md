@@ -1,8 +1,8 @@
-# Android Client Architecture (`v2` — Bilingual AR/EN + Rootless VPN Hotspot + Community Verification + Central Top 500 + Local Personalized Top 50)
+# Android Client Architecture (`v2` — Bilingual AR/EN + Rootless VPN Hotspot + Community Verification + Central Top 500 + Local Personalized Top 100)
 
 ## 0. Mandatory Responsibility Separation
-- **GitHub (`central_top500.py` & `community_ranking.py` -> `@data/top500.{manifest,delta,}.json` & `iran-top500.{json,txt}`):** Collect -> Validate -> Normalize -> Deduplicate -> Assign `server_id` & `config_fingerprint` -> Preliminary Check -> Rank Centrally -> Publish **up to 500** untrusted candidate configurations with SHA-256 checksums and optional incremental deltas. GitHub **never** selects a user's personalized Top 50.
-- **Android (`Repo.kt` + `LocalServerIntelligence.kt` + `ClientDatabase.kt` v4):** Download & verify Top-500 dataset (ETag + SHA-256 + rollback protection + last-known-valid recovery) -> Test sequentially (`concurrency = 1`) via real encrypted VPN tunnels on the user's actual network -> Append historical measurements (`server_scan_measurements`) -> Maintain strictly isolated **Wi-Fi** (`WIFI`) vs **Mobile Data** (`MOBILE_DATA`) rankings -> Select Personalized **Top 50** + **Qualified Backup Pool** (`local_network_rankings` + `local_ranking_history`).
+- **GitHub (`central_top500.py` & `community_ranking.py` -> `@data/top500.{manifest,delta,}.json` & `iran-top500.{json,txt}`):** Collect -> Validate -> Hard-Exclude `allowInsecure=1` -> Normalize -> Deduplicate -> Assign `server_id` & `config_fingerprint` -> Preliminary + `600 KB` Speed Check (`45%` Download / `30%` Stability / `25%` Latency+Jitter) -> Publish **up to 500** untrusted candidate configurations with SHA-256 checksums and optional incremental deltas. GitHub **never** selects a user's personalized Top 100.
+- **Android (`Repo.kt` + `LocalServerIntelligence.kt` + `WorkScheduler.kt` + `ClientDatabase.kt`):** Download & verify Top-500 dataset every **3 hours** (ETag + ECDSA/SHA-256 + rollback protection + last-known-valid recovery) -> Probe in ultra-fast multi-port `sing-box` batches (`45` ports/daemon, `24` concurrency + bisect fallback) + `600 KB` real HTTPS download speed -> Immediately purge dead configs (with Offline Guard + `⭐ Favorites` / `VIP` protection) -> Maintain strictly isolated **Wi-Fi** (`WIFI`) vs **Mobile Data** (`MOBILE_DATA`) rankings -> Select Personalized **Top 100** + **Qualified Backup Pool** (`local_network_rankings` + `local_ranking_history`).
 
 ## 1. High-Level Module & Package Layout
 The Android application (`:app`, `com.bahrain.vpnconfigs`, `versionCode = 2`, `versionName = "2.0"`, `minSdk = 29`, `targetSdk = 35`, `compileSdk = 36`) follows a reactive unidirectional architecture powered by Kotlin Coroutines, `StateFlow`, Jetpack Compose Material 3 with **Arabic (`RTL`) as the primary default language and instant live switching to English (`LTR`) via `AppI18n.kt`**, embedded SQLite (`WAL`), `sing-box`, and `hev-socks5-tunnel`.
@@ -17,7 +17,7 @@ com.bahrain.vpnconfigs
 │   └── ClientDatabase.kt           # WAL SQLite v3 (network rankings, scan history, sessions, favorites, telemetry)
 ├── engine/
 │   ├── Converters.kt               # Multi-protocol URI parser, sing-box config builder, stableServerId(), maskedEndpointLabel()
-│   ├── LocalServerIntelligence.kt  # Sequential VPN tunnel scanner (concurrency=1) & Wi-Fi vs Mobile Data Top-50 engine
+│   ├── LocalServerIntelligence.kt  # Multi-port sing-box batch scanner, 45/30/25 scorer & Wi-Fi vs Mobile Data Top-100 engine
 │   ├── SecurityEvaluator.kt        # Pre-connect TLS/Reality/cipher audit & quarantine gate
 │   ├── ServerRanker.kt             # List sorting modes (FASTEST_DOWNLOAD, LOWEST_LATENCY, MOST_STABLE, PRIVACY_AWARE, ...)
 │   ├── SmartServerSelector.kt      # Weighted 7-factor explainable selector + cooldown + confidence + fallback

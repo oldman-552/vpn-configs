@@ -615,21 +615,21 @@ fun ConnectHomeScreen(
                         }
                     } else {
                         Button(
-                            onClick = { vm.startQuickScan() },
+                            onClick = { vm.startFullScan() },
                             enabled = !state.loading && state.servers.isNotEmpty() && state.engineReady,
                             modifier = Modifier.weight(1f),
                         ) {
                             Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text(tr("فحص سريع", "Quick Scan"))
+                            Text(tr("فحص سريع (100)", "Fast Scan (100)"))
                         }
                     }
                 }
 
                 Text(
                     tr(
-                        "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/50 مخصّصة • الاحتياطي المؤهّل: ${state.backupPoolCount}",
-                        "${state.activeNetworkProfile.labelEn}: Personalized Top ${state.top50Count}/50 • Qualified Backup: ${state.backupPoolCount}",
+                        "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/100 مخصّصة • الاحتياطي المؤهّل: ${state.backupPoolCount}",
+                        "${state.activeNetworkProfile.labelEn}: Personalized Top ${state.top50Count}/100 • Qualified Backup: ${state.backupPoolCount}",
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,

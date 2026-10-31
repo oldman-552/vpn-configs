@@ -26,7 +26,7 @@ import os
 
 import collector
 from dedupe import parse_identity
-from scoring import ScoredNode, country_flag, diversify_scored_nodes
+from scoring import ScoredNode, country_flag, diversify_scored_nodes, has_allow_insecure_uri
 
 CENTRAL_TOP500_MAX = 500
 CENTRAL_TOP500_SCHEMA_VERSION = "1.0.0"
@@ -79,7 +79,9 @@ def is_qualified_for_central_pool(node: ScoredNode) -> bool:
         return False
     if node.canonical_protocol not in SUPPORTED_CENTRAL_PROTOCOLS:
         return False
-    if str(node.risk_level).upper() == "QUARANTINED" or str(node.security_assessment).upper() == "QUARANTINED":
+    if str(node.risk_level).upper() in ("QUARANTINED", "CRITICAL") or str(node.security_assessment).upper() == "QUARANTINED":
+        return False
+    if has_allow_insecure_uri(node.uri):
         return False
     if node.median_latency_ms <= 0 or node.median_latency_ms > 8000:
         return False
@@ -111,7 +113,15 @@ def select_central_top500(
     if not qualified:
         return []
 
-    qualified.sort(key=lambda n: (-float(n.score), float(n.median_latency_ms), n.identity_id))
+    qualified.sort(
+        key=lambda n: (
+            -float(n.score),
+            -float(getattr(n, "speed_kbps", 0.0)),
+            float(n.median_latency_ms),
+            float(getattr(n, "jitter_ms", 0.0)),
+            n.identity_id,
+        )
+    )
 
     diversified = diversify_scored_nodes(
         qualified,

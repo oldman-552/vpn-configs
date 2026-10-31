@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import com.bahrain.vpnconfigs.data.Prefs
+import com.bahrain.vpnconfigs.work.WorkScheduler
 
 class BootRestoreReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
@@ -17,6 +18,7 @@ class BootRestoreReceiver : BroadcastReceiver() {
             return
         }
         val appCtx = context.applicationContext
+        runCatching { WorkScheduler.syncSchedule(appCtx) }
         val prefs = Prefs(appCtx)
         if (!prefs.wasVpnDesiredActive || !prefs.killSwitch) return
         if (prefs.selectedCfg.isBlank()) return
