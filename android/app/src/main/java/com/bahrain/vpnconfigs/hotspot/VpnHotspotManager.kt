@@ -59,6 +59,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 enum class HotspotSharingMode(
     val code: String,
@@ -525,14 +526,14 @@ class VpnHotspotProxyServer(
             upUdpSock.soTimeout = 30_000
             activeUdpRelays.add(upUdpSock)
 
-            @Volatile var lastClientUdpAddr: InetSocketAddress? = null
+            val lastClientUdpAddr = AtomicReference<InetSocketAddress?>(null)
             val pumpDown = executor.submit {
                 val buf = ByteArray(65507)
                 while (running.get() && !upUdpSock.isClosed && isUpstreamTunnelVerified()) {
                     try {
                         val pkt = DatagramPacket(buf, buf.size)
                         upUdpSock.receive(pkt)
-                        val dst = lastClientUdpAddr ?: continue
+                        val dst = lastClientUdpAddr.get() ?: continue
                         val outPkt = DatagramPacket(pkt.data, pkt.offset, pkt.length, dst)
                         udpSock.send(outPkt)
                         val n = pkt.length.toLong()
@@ -552,7 +553,7 @@ class VpnHotspotProxyServer(
                         udpSock.receive(pkt)
                         val senderIp = pkt.address?.hostAddress.orEmpty()
                         if (!VpnHotspotManager.isSafePrivateLanIpv4(senderIp) && senderIp != "127.0.0.1") continue
-                        lastClientUdpAddr = InetSocketAddress(pkt.address, pkt.port)
+                        lastClientUdpAddr.set(InetSocketAddress(pkt.address, pkt.port))
                         val fwd = DatagramPacket(pkt.data, pkt.offset, pkt.length, upstreamUdpAddr)
                         upUdpSock.send(fwd)
                         val n = pkt.length.toLong()
