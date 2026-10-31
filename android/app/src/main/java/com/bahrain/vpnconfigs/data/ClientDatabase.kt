@@ -777,6 +777,27 @@ class ClientDatabase private constructor(ctx: Context) :
         writableDatabase.insert("connection_history", null, cv)
     }
 
+    /** Data used per server (or per network type) for sessions started since [sinceMs], biggest first. */
+    fun usageBreakdown(sinceMs: Long, byNetwork: Boolean = false, limit: Int = 8): List<UsageBucket> = synchronized(lock) {
+        val col = if (byNetwork) "network_type" else "server_label"
+        val out = ArrayList<UsageBucket>()
+        runCatching {
+            readableDatabase.rawQuery(
+                """
+                SELECT $col AS k, SUM(total_down_bytes) AS d, SUM(total_up_bytes) AS u, COUNT(*) AS n
+                FROM connection_history WHERE connected_at_ms >= ?
+                GROUP BY $col ORDER BY (d + u) DESC LIMIT ?
+                """.trimIndent(),
+                arrayOf(sinceMs.toString(), limit.toString()),
+            ).use { c ->
+                while (c.moveToNext()) {
+                    out.add(UsageBucket(c.getString(0) ?: "—", c.getLong(1), c.getLong(2), c.getInt(3)))
+                }
+            }
+        }
+        out
+    }
+
     fun querySessionHistory(
         serverQuery: String = "",
         sinceMs: Long = 0L,
@@ -1581,4 +1602,8 @@ class ClientDatabase private constructor(ctx: Context) :
     fun clearAllCommunityReports() = synchronized(lock) {
         writableDatabase.delete("community_test_reports", null, null)
     }
+}
+
+data class UsageBucket(val key: String, val downBytes: Long, val upBytes: Long, val sessions: Int) {
+    val totalBytes: Long get() = downBytes + upBytes
 }
