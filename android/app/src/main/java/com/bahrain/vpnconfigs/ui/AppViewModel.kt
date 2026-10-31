@@ -719,7 +719,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             networkType = vpnSt.underlyingNetwork,
             isMeteredNetwork = vpnSt.isMeteredNetwork,
             recentlyProblematicIds = problematicIds,
+            protocolBonus = blockingBonusFor(vpnSt.underlyingNetwork),
         )
+    }
+
+    /** Current censorship profile (null when never measured). */
+    fun blockingProfile(): com.bahrain.vpnconfigs.engine.BlockingProfile? =
+        com.bahrain.vpnconfigs.engine.BlockingProfile.fromJson(prefs.blockingProfileJson)
+
+    private fun blockingBonusFor(networkType: String): (String) -> Double {
+        val profile = blockingProfile()?.takeIf { it.networkType.equals(networkType, ignoreCase = true) }
+        return { cfg -> com.bahrain.vpnconfigs.engine.CensorshipProbe.bonusFor(cfg, profile) }
+    }
+
+    var blockingProbeRunning by androidx.compose.runtime.mutableStateOf(false)
+        private set
+
+    /** Detects DNS/SNI/IP/UDP blocking on the current network. Only valid while the VPN is off. */
+    fun runBlockingProbe(onDone: (com.bahrain.vpnconfigs.engine.BlockingProfile?) -> Unit) {
+        if (blockingProbeRunning) return
+        if (com.bahrain.vpnconfigs.vpn.VpnStateManager.status.value.isActive) {
+            onDone(null)
+            return
+        }
+        blockingProbeRunning = true
+        viewModelScope.launch {
+            val net = com.bahrain.vpnconfigs.vpn.VpnStateManager.status.value.underlyingNetwork
+            val profile = runCatching {
+                com.bahrain.vpnconfigs.engine.CensorshipProbe.classify(
+                    com.bahrain.vpnconfigs.engine.CensorshipProbe.observe(),
+                    networkType = net,
+                )
+            }.getOrNull()
+            profile?.let { prefs.blockingProfileJson = it.toJson() }
+            blockingProbeRunning = false
+            onDone(profile)
+        }
     }
 
     fun refreshPersistenceSnapshotAsync() {

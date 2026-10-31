@@ -141,6 +141,7 @@ object SmartServerSelector {
         isMeteredNetwork: Boolean = false,
         recentlyProblematicIds: Set<String> = emptySet(),
         nowMs: Long = System.currentTimeMillis(),
+        protocolBonus: (cfg: String) -> Double = { 0.0 },
     ): ScoredSmartCandidate {
         val w = weights.normalized()
         val sid = cand.serverId
@@ -278,6 +279,9 @@ object SmartServerSelector {
         }
         if (netAffinity >= 2) weighted += 3.0
 
+        // Censorship-aware adjustment from the last block-type probe on this network
+        weighted += protocolBonus(cand.cfg)
+
         // Geographic preference bonus/filter
         val cleanPref = preferredCountry.trim().uppercase()
         val candCc = cand.country.ifBlank { hint?.country.orEmpty() }.trim().uppercase()
@@ -376,6 +380,7 @@ object SmartServerSelector {
         isMeteredNetwork: Boolean = false,
         recentlyProblematicIds: Set<String> = emptySet(),
         nowMs: Long = System.currentTimeMillis(),
+        protocolBonus: (cfg: String) -> Double = { 0.0 },
     ): SmartSelectionDecision {
         if (candidates.isEmpty()) {
             return SmartSelectionDecision(null, null, emptyList())
@@ -389,6 +394,7 @@ object SmartServerSelector {
                 isMeteredNetwork = isMeteredNetwork,
                 recentlyProblematicIds = recentlyProblematicIds,
                 nowMs = nowMs,
+                protocolBonus = protocolBonus,
             )
         }.sortedWith(
             compareBy<ScoredSmartCandidate> { it.excludedCooldown }
