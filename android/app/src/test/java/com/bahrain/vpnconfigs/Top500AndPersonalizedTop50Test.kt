@@ -33,6 +33,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -555,7 +556,7 @@ class Top500AndPersonalizedTop50Test {
     @Test
     fun deadConfigPurgePolicyDeletesDeadConfigsPreservesFavoritesVipOfflineGuardAndTop500Checksum() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
-        val repo = Repo(ctx, baseUrls = emptyList())
+        val repo = Repo(ctx)
 
         val pool = (1..25).map { buildSampleUri(it) }
         val cleanPool = pool.map { Converters.cleanUri(it) }
@@ -635,15 +636,19 @@ class Top500AndPersonalizedTop50Test {
         val now = 1_793_400_000_000L
 
         // Verify unified 45% Download / 30% Stability / 25% Latency+Jitter constants
-        assertEquals(0.45, CentralScoringWeights.W_SPEED, 0.0001)
-        assertEquals(0.30, CentralScoringWeights.W_STABILITY, 0.0001)
-        assertEquals(0.25, CentralScoringWeights.W_LATENCY_JITTER, 0.0001)
-        assertEquals(0.0, CentralScoringWeights.computeSpeedScore(0.0), 0.0001)
+        assertEquals(0.45, CentralScoringWeights.THROUGHPUT_WEIGHT, 0.0001)
+        assertEquals(0.30, CentralScoringWeights.STABILITY_WEIGHT, 0.0001)
+        assertEquals(0.25, CentralScoringWeights.PING_JITTER_WEIGHT, 0.0001)
 
-        val defaultWeights = SmartSelectionWeights()
-        assertEquals(0.45, defaultWeights.throughput, 0.0001)
-        assertEquals(0.30, defaultWeights.reliability, 0.0001)
-        assertEquals(0.25, defaultWeights.latency, 0.0001)
+        val defaultWeights = SmartSelectionWeights().normalized()
+        assertEquals(0.45, defaultWeights.downloadSpeed, 0.0001)
+        assertEquals(
+            0.30,
+            defaultWeights.connectionReliability + defaultWeights.packetLoss +
+                defaultWeights.historicalUptime + defaultWeights.recentStability,
+            0.0001,
+        )
+        assertEquals(0.25, defaultWeights.latency + defaultWeights.jitter, 0.0001)
 
         // High download throughput (6500 KB/s, 95ms) MUST beat ping-only (0 KB/s, 25ms) across ServerRanker & SmartServerSelector!
         val fastRealThroughput = RankableServer(
@@ -690,8 +695,10 @@ class Top500AndPersonalizedTop50Test {
         )
         assertNotNull(decision.primary)
         assertEquals("SafeVerified", decision.primary!!.label)
+        assertNull(decision.fallback) // Insecure candidate must NEVER be selected even as fallback!
         val insecureEval = decision.allRanked.first { it.label == "InsecureFast" }
-        assertTrue(insecureEval.excludedFromPrimary)
+        assertTrue(insecureEval.excludedSecurity)
+        assertEquals(0.0, insecureEval.score, 0.0001)
     }
 
     @Test
@@ -699,7 +706,7 @@ class Top500AndPersonalizedTop50Test {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val prefs = Prefs(ctx)
 
-        assertEquals(3L, WorkScheduler.INTERVAL_HOURS)
+        assertEquals(3L, WorkScheduler.PERIOD_HOURS)
         assertEquals("bahrain_vpn_quality_refresh_3h", WorkScheduler.UNIQUE_WORK_NAME)
 
         // Default is enabled (true) and synced with autoRefresh

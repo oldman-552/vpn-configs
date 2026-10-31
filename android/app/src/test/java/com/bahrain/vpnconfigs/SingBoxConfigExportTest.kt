@@ -71,9 +71,9 @@ class SingBoxConfigExportTest {
             "socks5://user1:pass1@198.51.100.15:1080#bahrain-vpn 4",
             "http://user2:pass2@198.51.100.16:8080#bahrain-vpn 5",
         )
-        val built = SingBox(ctx).buildBatchConfigJson(
-            rawUris = uris,
-            baseSocksPort = 22100,
+        val paired = uris.mapIndexed { idx, uri -> uri to (22100 + idx) }
+        val built = SingBox(ctx).buildBatchConfig(
+            items = paired,
             dnsServer = "1.1.1.1",
             useDoh = true,
         )
