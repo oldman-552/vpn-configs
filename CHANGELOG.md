@@ -1,5 +1,29 @@
 # Changelog
 
+## [v2.1] — 2026-10-31
+
+### Anti-censorship
+- **Block-type detection** (DNS / SNI / IP / UDP) on the current network; results bias server ranking per protocol.
+- **TLS fragmentation** (sing-box `tls.fragment`): Auto (on when SNI filtering is detected) / Always / Off.
+- **Free Cloudflare WARP** fallback: one-time registration, used automatically once when every server fails, or manually.
+- **CDN-fronted servers** (WebSocket / gRPC / HTTPUpgrade via Cloudflare) are detected, badged, and preferred under IP blocking.
+
+### New features
+- Home-screen **widget** with status and one-tap connect/disconnect.
+- **Data usage** statistics by server and by network type (Wi-Fi / mobile).
+- Shareable **redacted diagnostic report** (credentials, hostnames and IPs masked).
+- First-launch notice that servers are public and run by unknown operators.
+
+### Security
+- `top500.manifest.json` is signed (ECDSA P-256); the app rejects missing/invalid signatures once a public key is configured.
+- Admin panel: strict CSP (`script-src 'self'`), no inline handlers, connections limited to GitHub/jsDelivr.
+- CodeQL and Dependabot enabled.
+
+### Engineering
+- `targetSdk 35`, `compileSdk 36`; Gradle 8.14.3, AGP 8.13, Kotlin 2.2; updated androidx/Compose.
+- UI split into per-screen files.
+- CI validates generated sing-box configs with the shipped sing-box version and surfaces Gradle failure causes.
+
 ## [v2] — 2026-10-31 — Official `bahrain-vpn v2` Production Release (`2.0`)
 
 ### Official Release Highlights
