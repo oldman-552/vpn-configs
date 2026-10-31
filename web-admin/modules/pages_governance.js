@@ -59,7 +59,7 @@ const GovernanceViews = {
                   <td><code>${esc(k)}</code></td>
                   <td>${esc(cfg.desc)}</td>
                   <td><strong>${esc(JSON.stringify(cfg.value))}</strong></td>
-                  <td><button class="btn btn-outline" onclick="toggleOrEditRemoteConfig('${k}')">${t("تغيير", "Change")}</button></td>
+                  <td><button class="btn btn-outline" data-on="click:toggleOrEditRemoteConfig" data-args='["${k}"]'>${t("تغيير", "Change")}</button></td>
                 </tr>`).join("")}
               </tbody>
             </table>
@@ -70,7 +70,7 @@ const GovernanceViews = {
           <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
               <h3>${t("إدارة الإصدارات والتحديث الرسمي الآمن حسب المعمارية (Split ABI v2)", "ABI-Aware Signed APK Version & Update Manager (v2)")}</h3>
-              <button class="btn no-print" onclick="triggerApkReleaseBuild()">${t("بناء ونشر APK جديد عبر GitHub Actions", "Trigger Signed APK Build")}</button>
+              <button class="btn no-print" data-on="click:triggerApkReleaseBuild">${t("بناء ونشر APK جديد عبر GitHub Actions", "Trigger Signed APK Build")}</button>
             </div>
             <table>
               <thead><tr><th>Target</th><th>Version</th><th>Code</th><th>ABIs</th><th>Mandatory</th><th>SHA-256</th></tr></thead>
@@ -95,7 +95,7 @@ const GovernanceViews = {
           <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center">
               <h3>${t("سجلات التدقيق الأمني المتسلسلة (SHA-256 Hash Chain)", "Tamper-Evident Admin Audit Logs")}</h3>
-              <button class="btn btn-outline no-print" onclick="checkAuditIntegrityUi()">${t("فحص سلامة السلسلة التشفيرية", "Verify Hash Chain")}</button>
+              <button class="btn btn-outline no-print" data-on="click:checkAuditIntegrityUi">${t("فحص سلامة السلسلة التشفيرية", "Verify Hash Chain")}</button>
             </div>
             <table>
               <thead><tr><th>${t("الوقت", "Time")}</th><th>${t("المشرف", "Admin")}</th><th>${t("الإجراء", "Action")}</th><th>${t("الهدف", "Target")}</th><th>Hash</th></tr></thead>
@@ -124,7 +124,7 @@ const GovernanceViews = {
               </select>
             </div>
             <div style="margin-top:12px">
-              <button class="btn" onclick="createNewAdminWithTotp()">${t("إضافة مشرف وتوليد مفتاح 2FA TOTP", "Create Admin + Generate TOTP Secret")}</button>
+              <button class="btn" data-on="click:createNewAdminWithTotp">${t("إضافة مشرف وتوليد مفتاح 2FA TOTP", "Create Admin + Generate TOTP Secret")}</button>
             </div>
           </div>
           <div class="card">
@@ -145,10 +145,10 @@ const GovernanceViews = {
           <div class="card">
             <h3>${t("النسخ الاحتياطي المشفّر (AES-256-GCM) والاستعادة الموثّقة", "AES-256-GCM Encrypted Backup & Verified Restore")}</h3>
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px" class="no-print">
-              <button class="btn" onclick="downloadEncryptedVaultBackup()">${t("تنزيل نسخة احتياطية مشفّرة الآن", "Download Encrypted Backup")}</button>
+              <button class="btn" data-on="click:downloadEncryptedVaultBackup">${t("تنزيل نسخة احتياطية مشفّرة الآن", "Download Encrypted Backup")}</button>
               <label class="btn btn-outline" style="cursor:pointer">
                 ${t("استعادة نسخة مشفّرة والتحقق منها", "Restore Encrypted Backup")}
-                <input type="file" accept=".json" style="display:none" onchange="restoreEncryptedVaultBackup(event)" />
+                <input type="file" accept=".json" style="display:none" data-on="change:restoreEncryptedVaultBackup" data-args='["$event"]' />
               </label>
             </div>
           </div>`;
