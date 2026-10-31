@@ -281,7 +281,6 @@ class AdminGitHubVaultManager(ctx: Context) {
                     .put("auto_block_on_device_violation", JSONObject().put("value", false).put("sensitive", true).put("desc", "حظر الحساب تلقائيًا عند محاولة جهاز غير مصرح"))
                     .put("auto_failover_enabled", JSONObject().put("value", true).put("sensitive", false).put("desc", "التبديل الذكي خلال ثانيتين عند سقوط النفق"))
                     .put("trial_duration_hours", JSONObject().put("value", 48).put("sensitive", false).put("desc", "مدة التجربة المجانية بالساعات"))
-                    .put("promo_enabled", JSONObject().put("value", true).put("sensitive", false).put("desc", "تفعيل نافذة الإعلانات المتناوبة"))
             )
             .put("admin_audit_logs", JSONArray())
     }

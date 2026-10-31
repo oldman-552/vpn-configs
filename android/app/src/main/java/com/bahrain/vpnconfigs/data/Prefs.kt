@@ -135,10 +135,6 @@ class Prefs(ctx: Context) {
         get() = sp.getString("blocking_profile_v1", "") ?: ""
         set(v) = sp.edit { putString("blocking_profile_v1", v) }
 
-    /** One-time acknowledgement that servers are public, third-party and untrusted. */
-    var publicServerNoticeAcked: Boolean
-        get() = sp.getBoolean("public_server_notice_v1", false)
-        set(v) = sp.edit { putBoolean("public_server_notice_v1", v) }
 
     var killSwitch: Boolean
         get() = sp.getBoolean("kill_switch_v32", true)
@@ -303,9 +299,6 @@ class Prefs(ctx: Context) {
         connectionHistory = emptyList()
     }
 
-    var lastPromoRotationIndex: Int
-        get() = sp.getInt("last_promo_rotation_idx", -1)
-        set(v) = sp.edit { putInt("last_promo_rotation_idx", v) }
 
     // ─────────── إعدادات الفحص المجتمعي الطوعي (معطّل افتراضيًا — موافقة صريحة) ───────────
     var communityTestingEnabled: Boolean

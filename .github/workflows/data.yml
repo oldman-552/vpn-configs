@@ -204,7 +204,6 @@ jobs:
           | \`servers-statistics.json\` | الإحصاءات الشاملة والجاهزية وفئات الأعطال الـ 10 | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/servers-statistics.json |
           | \`api/v1/statistics.json\` | واجهة الإحصاءات العامة القرائية المعماة (\`OpenAPI 3.1.0\`) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/api/v1/statistics.json |
           | \`enterprise/bundle.json\` | حزمة التراخيص الموقّعة (\`ECDSA P-256\` — \`v2\` / \`2.0\`) وعُقد VIP المشفّرة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/enterprise/bundle.json |
-          | \`promo/ads.json\` | البطاقات الترويجية الخمس الدوّارة والصور المرافقة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/promo/ads.json |
           | \`countries.json\` | فهرس الدول المُحقّقة عبر النفق الفعلي | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/countries.json |
           | \`source_health.json\` | تقرير صحّة وتفرّد المصادر وعزلها (بدون أسرار) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/source_health.json |
           | \`all.txt.gz\` | المجمع البنيوي النظيف الكامل مضغوطًا | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/all.txt.gz |

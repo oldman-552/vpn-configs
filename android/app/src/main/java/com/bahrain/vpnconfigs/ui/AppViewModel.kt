@@ -26,7 +26,6 @@ import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.data.ProtectionEventRecord
 import com.bahrain.vpnconfigs.data.RemoteMeta
 import com.bahrain.vpnconfigs.data.Repo
-import com.bahrain.vpnconfigs.data.ResolvedPromoBanner
 import com.bahrain.vpnconfigs.data.ResultLine
 import com.bahrain.vpnconfigs.data.ScanNetworkProfile
 import com.bahrain.vpnconfigs.data.ServerHint
@@ -150,7 +149,6 @@ data class UiState(
     val splitIncludeOnly: Boolean = false,
     val bypassIrDomains: Boolean = true,
     val tunnelNeedsReload: Boolean = false,
-    val activePromo: ResolvedPromoBanner? = null,
     // ── مؤشرات ULTIMATE VPN ENTERPRISE (حساب، تجربة 48 ساعة، سرعة، تشخيص، تحديثات) ──
     val accountState: AccountLicenseState = AccountLicenseState(),
     val authLoading: Boolean = false,
@@ -254,17 +252,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private var testJob: Job? = null
-    private var promoJob: Job? = null
     private var lastObservedDropped: Set<String> = emptySet()
-    private var promoSyncedWhileConnected: Boolean = false
 
     init {
         AppDiag.init(app)
         AppHealthMonitor.install(app)
         syncEnterpriseBundle()
-
-        // تحميل الإعلان المتناوب عند فتح التطبيق وتحديث بقية الصور الخمس في الخلفية
-        triggerNextPromoBanner()
 
         // مراقبة تغيّر نوع الشبكة الفعلي (Wi-Fi مقابل بيانات الجوال) وتبديل قائمة Top-50 المخصّصة فورًا
         viewModelScope.launch {
@@ -319,13 +312,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else if (latestHistory != state.connectionHistory) {
                     state = state.copy(connectionHistory = latestHistory)
                     refreshPersistenceSnapshotAsync()
-                }
-
-                if (vpnSt.isTunnelVerified && !promoSyncedWhileConnected) {
-                    promoSyncedWhileConnected = true
-                    viewModelScope.launch(Dispatchers.IO) {
-                        runCatching { buildRepo().syncAllPromoAssets() }
-                    }
                 }
             }
         }
@@ -1562,28 +1548,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             killSwitch = prefs.killSwitch,
             bypassIrDomains = prefs.bypassIrDomains,
         )
-    }
-
-    // ── نافذة الإعلانات المتناوبة (5 صور تتغير مع كل فتح) ──
-    fun triggerNextPromoBanner() {
-        if (state.activePromo != null) return
-        promoJob?.cancel()
-        promoJob = viewModelScope.launch {
-            val repo = buildRepo()
-            val next = withContext(Dispatchers.IO) {
-                runCatching { repo.selectNextPromoBanner(prefs) }.getOrNull()
-            }
-            if (next != null) {
-                state = state.copy(activePromo = next)
-            }
-            withContext(Dispatchers.IO) {
-                runCatching { repo.syncAllPromoAssets() }
-            }
-        }
-    }
-
-    fun dismissPromo() {
-        state = state.copy(activePromo = null)
     }
 
     // ── وظائف ULTIMATE VPN ENTERPRISE (حساب، سرعة، تشخيص، صحة، تحديثات) ──
