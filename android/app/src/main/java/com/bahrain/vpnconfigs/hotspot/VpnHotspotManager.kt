@@ -1143,7 +1143,10 @@ object VpnHotspotManager {
         upstreamPortOverrideForTest: Int = SingBox.VPN_SOCKS_PORT,
         upstreamVerifiedOverrideForTest: (() -> Boolean)? = null,
     ): Result<VpnHotspotState> {
-        ensureVpnWatcher()
+        val isTestHarness = interfaceOverrideForTest != null || upstreamVerifiedOverrideForTest != null
+        if (!isTestHarness) {
+            ensureVpnWatcher()
+        }
         // إيقاف أي فحص مجتمعي فور تشغيل الهوتسبوت لضمان أولوية واستقرار الأجهزة المتصلة
         com.bahrain.vpnconfigs.community.CommunityTestingManager.pauseForActiveHotspot()
 
@@ -1183,7 +1186,7 @@ object VpnHotspotManager {
         stopServerOnly()
         _state.update { it.copy(runPhase = HotspotRunPhase.STARTING, errorAr = null, errorEn = null) }
 
-        val targetPort = prefs.hotspotProxyPort
+        val targetPort = if (isTestHarness) 0 else prefs.hotspotProxyPort
         val reqAuth = prefs.hotspotRequireAuth
         val user = prefs.hotspotUsername
         val pass = prefs.hotspotPassword
@@ -1219,7 +1222,9 @@ object VpnHotspotManager {
             }
             if (activeServer == null) activeServer = server
 
-            val fullSystemRouting = iface.isDedicatedTetherAp && isSystemLevelFullVpnTetheringVerified(iface.interfaceName)
+            val fullSystemRouting = !isTestHarness &&
+                iface.isDedicatedTetherAp &&
+                isSystemLevelFullVpnTetheringVerified(iface.interfaceName)
             val mode = if (fullSystemRouting) {
                 HotspotSharingMode.MODE_A_FULL_VPN_HOTSPOT
             } else {
@@ -1265,7 +1270,9 @@ object VpnHotspotManager {
                 errorEn = null,
             )
             _state.value = newState
-            startTelemetryMonitorLoop(iface)
+            if (!isTestHarness) {
+                startTelemetryMonitorLoop(iface)
+            }
             Result.success(newState)
         } catch (e: Exception) {
             stopServerOnly()

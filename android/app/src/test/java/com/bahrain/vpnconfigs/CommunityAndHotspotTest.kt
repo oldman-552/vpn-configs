@@ -43,7 +43,7 @@ import kotlin.concurrent.thread
 @Config(sdk = [34])
 class CommunityAndHotspotTest {
 
-    @Test
+    @Test(timeout = 20_000L)
     fun socksAndHttpProxyProtocolsConvertSafelyAndRedactSecrets() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val sb = SingBox(ctx)
@@ -84,7 +84,7 @@ class CommunityAndHotspotTest {
         assertEquals("LOW", tlsEval.riskLevel)
     }
 
-    @Test
+    @Test(timeout = 20_000L)
     fun communityTestingIsOptInOnlyVerifiesIranOriginUploadsSecretFreeReportsAndRespectsHotspot() = runBlocking {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         ctx.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().clear().commit()
@@ -131,33 +131,45 @@ class CommunityAndHotspotTest {
         val ingestThread = thread(isDaemon = true) {
             while (runningIngest.get()) {
                 try {
-                    ingestSrv.accept().use { s ->
-                        s.soTimeout = 3000
-                        val reader = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.UTF_8))
-                        var contentLen = 0
-                        while (true) {
-                            val line = reader.readLine() ?: break
-                            if (line.isEmpty()) break
-                            if (line.startsWith("Content-Length:", ignoreCase = true)) {
-                                contentLen = line.substringAfter(":").trim().toIntOrNull() ?: 0
+                    val accepted = ingestSrv.accept()
+                    thread(isDaemon = true) {
+                        accepted.use { s ->
+                            s.soTimeout = 3000
+                            val rawIn = s.getInputStream()
+                            fun readHeaderLine(): String {
+                                val sb = StringBuilder()
+                                while (true) {
+                                    val ch = rawIn.read()
+                                    if (ch < 0 || ch == '\n'.code) break
+                                    if (ch != '\r'.code) sb.append(ch.toChar())
+                                }
+                                return sb.toString()
                             }
+                            var contentLen = 0
+                            while (true) {
+                                val line = readHeaderLine()
+                                if (line.isEmpty()) break
+                                if (line.startsWith("Content-Length:", ignoreCase = true)) {
+                                    contentLen = line.substringAfter(":").trim().toIntOrNull() ?: 0
+                                }
+                            }
+                            val bodyBytes = ByteArray(contentLen)
+                            var off = 0
+                            while (off < contentLen) {
+                                val r = rawIn.read(bodyBytes, off, contentLen - off)
+                                if (r < 0) break
+                                off += r
+                            }
+                            capturedPayload.set(String(bodyBytes, 0, off, Charsets.UTF_8))
+                            val resp = """{"status":"accepted","accepted_count":3}""".toByteArray(Charsets.UTF_8)
+                            val hdr = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${resp.size}\r\nConnection: close\r\n\r\n"
+                            s.getOutputStream().write(hdr.toByteArray(Charsets.UTF_8))
+                            s.getOutputStream().write(resp)
+                            s.getOutputStream().flush()
                         }
-                        val buf = CharArray(contentLen)
-                        var off = 0
-                        while (off < contentLen) {
-                            val r = reader.read(buf, off, contentLen - off)
-                            if (r < 0) break
-                            off += r
-                        }
-                        capturedPayload.set(String(buf, 0, off))
-                        val resp = """{"status":"accepted","accepted_count":3}""".toByteArray(Charsets.UTF_8)
-                        val hdr = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${resp.size}\r\nConnection: close\r\n\r\n"
-                        s.getOutputStream().write(hdr.toByteArray(Charsets.UTF_8))
-                        s.getOutputStream().write(resp)
-                        s.getOutputStream().flush()
                     }
                 } catch (_: Exception) {
-                    break
+                    if (!runningIngest.get()) break
                 }
             }
         }
@@ -221,7 +233,7 @@ class CommunityAndHotspotTest {
         }
     }
 
-    @Test
+    @Test(timeout = 20_000L)
     fun rootlessVpnHotspotEnforcesPrivateBindServesPacAuthRelaysSocksHttpAndFailsClosedOnVpnDrop() {
         // 1. Rejects binding to public WAN IP or wildcard 0.0.0.0
         var rejectedWildcard = false
@@ -315,7 +327,9 @@ class CommunityAndHotspotTest {
 
             // A) PAC script works for automatic OS setup
             Socket("127.0.0.1", hsPort).use { c ->
+                c.soTimeout = 3000
                 c.getOutputStream().write("GET /proxy.pac HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".toByteArray())
+                c.getOutputStream().flush()
                 val txt = c.getInputStream().bufferedReader().readText()
                 assertTrue(txt.contains("FindProxyForURL"))
                 assertTrue(txt.contains("SOCKS5 127.0.0.1:$hsPort"))
@@ -323,7 +337,9 @@ class CommunityAndHotspotTest {
 
             // B) Unauthenticated HTTP proxy request rejected with 407 when auth is enabled
             Socket("127.0.0.1", hsPort).use { c ->
+                c.soTimeout = 3000
                 c.getOutputStream().write("CONNECT check.example.com:443 HTTP/1.1\r\nHost: check.example.com:443\r\n\r\n".toByteArray())
+                c.getOutputStream().flush()
                 val firstLine = BufferedReader(InputStreamReader(c.getInputStream())).readLine()
                 assertTrue(firstLine.contains("407"))
             }
@@ -382,10 +398,12 @@ class CommunityAndHotspotTest {
             vpnTunnelVerified.set(false)
             hotspotProxy.terminateActiveClientStreams()
             Socket("127.0.0.1", hsPort).use { c ->
+                c.soTimeout = 3000
                 val req = "CONNECT leak-check.example.org:443 HTTP/1.1\r\n" +
                     "Host: leak-check.example.org:443\r\n" +
                     "Proxy-Authorization: Basic $basicToken\r\n\r\n"
                 c.getOutputStream().write(req.toByteArray())
+                c.getOutputStream().flush()
                 val statusLine = BufferedReader(InputStreamReader(c.getInputStream())).readLine()
                 assertTrue("Expected 503 Fail-Closed block when VPN is down, got $statusLine", statusLine.contains("503"))
             }
@@ -398,11 +416,11 @@ class CommunityAndHotspotTest {
         }
     }
 
-    @Test
+    @Test(timeout = 20_000L)
     fun repoLoadsCommunityVerifiedIranTop500FeedCleanly() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val running = AtomicBoolean(true)
-        val srv = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
+        val srv = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
         val port = srv.localPort
         val iranJson = """
             {
@@ -436,20 +454,29 @@ class CommunityAndHotspotTest {
         val acceptor = thread(isDaemon = true) {
             while (running.get()) {
                 try {
-                    srv.accept().use { s ->
-                        val req = BufferedReader(InputStreamReader(s.getInputStream())).readLine().orEmpty()
-                        val out = s.getOutputStream()
-                        if (req.contains("iran-top500.json")) {
-                            val b = iranJson.toByteArray(Charsets.UTF_8)
-                            out.write("HTTP/1.1 200 OK\r\nContent-Length: ${b.size}\r\nConnection: close\r\n\r\n".toByteArray())
-                            out.write(b)
-                        } else {
-                            out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                    val sock = srv.accept()
+                    thread(isDaemon = true) {
+                        sock.use { s ->
+                            s.soTimeout = 3000
+                            val reader = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.UTF_8))
+                            val req = reader.readLine().orEmpty()
+                            while (true) {
+                                val h = reader.readLine() ?: break
+                                if (h.isEmpty()) break
+                            }
+                            val out = s.getOutputStream()
+                            if (req.contains("iran-top500.json")) {
+                                val b = iranJson.toByteArray(Charsets.UTF_8)
+                                out.write("HTTP/1.1 200 OK\r\nContent-Length: ${b.size}\r\nConnection: close\r\n\r\n".toByteArray())
+                                out.write(b)
+                            } else {
+                                out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                            }
+                            out.flush()
                         }
-                        out.flush()
                     }
                 } catch (_: Exception) {
-                    break
+                    if (!running.get()) break
                 }
             }
         }

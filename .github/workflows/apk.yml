@@ -106,7 +106,16 @@ jobs:
         run: |
           set -o pipefail
           gradle --no-daemon :app:testReleaseUnitTest :admin:testReleaseUnitTest :app:assembleRelease :admin:assembleRelease 2>&1 | tee gradle.log || {
-            grep -vE '^> Task ' gradle.log | grep -E '(^e: |FAILURE:|What went wrong:|FAILED|AssertionError|Exception)' | head -n 8 | while IFS= read -r line; do
+            python3 - <<'PY' || true
+          import glob, xml.etree.ElementTree as ET
+          for p in glob.glob("**/build/test-results/testReleaseUnitTest/*.xml", recursive=True):
+              r = ET.parse(p).getroot()
+              for tc in r.findall("testcase"):
+                  for fail in list(tc.findall("failure")) + list(tc.findall("error")):
+                      msg = (fail.text or fail.attrib.get("message", "")).strip().splitlines()[:6]
+                      print(f"::error::{tc.attrib.get('classname')}.{tc.attrib.get('name')}: {' | '.join(msg)}")
+          PY
+            grep -vE '^> Task ' gradle.log | grep -E '(^e: |FAILURE:|What went wrong:|FAILED|AssertionError|Exception)' | head -n 12 | while IFS= read -r line; do
               echo "::error::$line"
             done
             exit 1
