@@ -12,3 +12,13 @@ updates:
     schedule: { interval: "weekly" }
     groups:
       androidx: { patterns: ["androidx.*"] }
+    ignore:
+      # AGP 9 / Gradle 9 and libraries needing compileSdk 37 require a planned migration.
+      - dependency-name: "com.android.application"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "gradle"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.jetbrains.kotlin*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "androidx.*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]

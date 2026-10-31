@@ -1,8 +1,8 @@
-# DEPLOYMENT.md — 100% Pure-GitHub Deployment & Operations Guide (`v2`)
+# Deployment & Operations Guide
 
-## 1. Zero-External-Server Architecture
-Everything runs exclusively on GitHub:
-- **`.github/workflows/ci.yml`**: Runs `pytest -v` (54 backend/Top-500/community/historical/security/API tests) and enforces 40-character commit SHA pinning and explicit `permissions:` across all workflows.
+## 1. Architecture
+Everything runs on GitHub (no VPS), except the optional community-testing backend on Cloudflare Worker + D1 (`community-worker/`):
+- **`.github/workflows/ci.yml`**: Runs `pytest -v`, web-admin syntax/CSP checks and the event-dispatcher test, and enforces 40-character commit SHA pinning and explicit `permissions:` across all workflows.
 - **`.github/workflows/data.yml` & `.github/workflows/community_rankings.yml`**: Run every 30 minutes (`*/30 * * * *`) / 2 hours (`15 */2 * * *`) and on `main` pushes, executing collection, pre/post-probe quarantine, 5-layer deduplication, multi-stage `Xray-core` + `sing-box` probing, Central Top-500 export (`top500.{manifest,delta,json,txt}`), multi-device Iran/Country Community Top-500 export (`iran-top500.{json,txt}`, `iran-results.json`), SQLite historical analytics (`servers-*.json`), static `/api/v1/*` export, LKG protection, and single-commit force-publish to `@data`.
 - **`.github/workflows/enterprise.yml`**: Validates all `web-admin/**/*.js` modules (`node --check` + zero-secret audit) and deploys both the 17-page Encrypted Admin Console (`index.html`) and the public read-only Live Infrastructure Monitor (`monitor.html`) to `gh-pages`.
 - **`.github/workflows/apk.yml`**: Fetches SHA-256-verified `sing-box` (`SFA 1.14.4`) and `hev-socks5-tunnel` (`2.19.3`), executes Robolectric unit tests (`testReleaseUnitTest`), signs Split-ABI Bilingual (Arabic Primary + English) User APKs (`v2`, `versionCode = 2`, `versionName = "2.0"`) + Admin APK (`v2`, `versionCode = 2`, `versionName = "2.0"`) with `RSA-4096` APK Signature Scheme `v1/v2/v3` (never `Android Debug`), enforces Play Protect Zero-Dropper & OpSec bytecode audits, and publishes the single official signed GitHub Release **`v2`** (`Latest`).
@@ -17,6 +17,17 @@ Configure under **GitHub Repository → Settings → Secrets and variables → A
   - `KEYSTORE_PASSWORD`: Keystore password
   - `KEY_ALIAS`: Signing key alias
   - `KEY_PASSWORD`: Signing key password
+- `TOP500_SIGNING_KEY_B64` *(recommended)*: ECDSA P-256 private key that signs `top500.manifest.json`. Generate with `python scripts/gen_manifest_signing_key.py`, store the private value as this secret, and put the public value in `android/gradle.properties` as `top500PublicKeyB64=...`. Without the public key the app accepts unsigned data (transition mode).
+- `COMMUNITY_WORKER_URL`, `COMMUNITY_EXPORT_TOKEN` *(optional)*: community testing backend, see `community-worker/README.md`.
+
+### Creating a persistent release keystore
+```bash
+keytool -genkeypair -v -storetype PKCS12 -keystore bahrain-vpn-release.p12 \
+  -alias bahrain_vpn_release -keyalg RSA -keysize 4096 -sigalg SHA256withRSA -validity 9125 \
+  -dname "CN=Bahrain VPN, O=Bahrain VPN"
+base64 -w0 bahrain-vpn-release.p12   # -> KEYSTORE_BASE64
+```
+Keep the `.p12` file and passwords safe: losing them means users must uninstall to update.
 
 ---
 

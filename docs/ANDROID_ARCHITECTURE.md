@@ -5,13 +5,14 @@
 - **Android (`Repo.kt` + `LocalServerIntelligence.kt` + `ClientDatabase.kt` v4):** Download & verify Top-500 dataset (ETag + SHA-256 + rollback protection + last-known-valid recovery) -> Test sequentially (`concurrency = 1`) via real encrypted VPN tunnels on the user's actual network -> Append historical measurements (`server_scan_measurements`) -> Maintain strictly isolated **Wi-Fi** (`WIFI`) vs **Mobile Data** (`MOBILE_DATA`) rankings -> Select Personalized **Top 50** + **Qualified Backup Pool** (`local_network_rankings` + `local_ranking_history`).
 
 ## 1. High-Level Module & Package Layout
-The Android application (`:app`, `com.bahrain.vpnconfigs`, `versionCode = 2`, `versionName = "2.0"`, `minSdk = 29`, `targetSdk = 34`) follows a reactive unidirectional architecture powered by Kotlin Coroutines, `StateFlow`, Jetpack Compose Material 3 with **Arabic (`RTL`) as the primary default language and instant live switching to English (`LTR`) via `AppI18n.kt`**, embedded SQLite (`WAL`), `sing-box`, and `hev-socks5-tunnel`.
+The Android application (`:app`, `com.bahrain.vpnconfigs`, `versionCode = 2`, `versionName = "2.0"`, `minSdk = 29`, `targetSdk = 35`, `compileSdk = 36`) follows a reactive unidirectional architecture powered by Kotlin Coroutines, `StateFlow`, Jetpack Compose Material 3 with **Arabic (`RTL`) as the primary default language and instant live switching to English (`LTR`) via `AppI18n.kt`**, embedded SQLite (`WAL`), `sing-box`, and `hev-socks5-tunnel`.
 
 ```
 com.bahrain.vpnconfigs
 ├── MainActivity.kt                 # 6-destination NavigationBar + Lifecycle foreground observer + VPN permission flow
 ├── data/
 │   ├── Repo.kt                     # Sole network/CDN boundary (ETag/304, Top-500 SHA-256 delta sync, promo, bundle)
+│   ├── ManifestSignature.kt        # ECDSA P-256 verification of top500.manifest.json(.sig)
 │   ├── Prefs.kt                    # User settings & flags (Arabic primary default "ar", bypassIrDomains = true default)
 │   └── ClientDatabase.kt           # WAL SQLite v3 (network rankings, scan history, sessions, favorites, telemetry)
 ├── engine/
@@ -21,7 +22,10 @@ com.bahrain.vpnconfigs
 │   ├── ServerRanker.kt             # List sorting modes (FASTEST_DOWNLOAD, LOWEST_LATENCY, MOST_STABLE, PRIVACY_AWARE, ...)
 │   ├── SmartServerSelector.kt      # Weighted 7-factor explainable selector + cooldown + confidence + fallback
 │   ├── SingBox.kt & Socks.kt       # Native daemon lifecycle, .ir/.ایران direct bypass routing, & real HTTP/SOCKS5 probes
-│   └── Tester.kt                   # Bounded-concurrency batch & single-server verifier
+│   ├── Tester.kt                   # Bounded-concurrency batch & single-server verifier
+│   ├── CensorshipProbe.kt          # DNS/SNI/IP/UDP block-type detection -> per-protocol ranking bonus
+│   ├── AntiCensorship.kt           # TlsFragment (sing-box tls.fragment) + CdnDetector (Cloudflare-fronted configs)
+│   └── WarpManager.kt              # Free Cloudflare WARP registration + WireGuard endpoint (warp:// fallback)
 ├── vpn/
 │   ├── BahrainVpnService.kt        # Foreground VpnService, TUN builder, parallel failover, session & telemetry recorder
 │   ├── VpnState.kt                 # Immutable VpnStatus StateFlow + 30-sample live traffic history ring + event timeline
@@ -30,7 +34,9 @@ com.bahrain.vpnconfigs
 │   ├── KillSwitchController.kt     # Fail-closed TUN hold vs OS VpnService.isLockdownEnabled + system settings intent
 │   ├── LeakProtectionEngine.kt     # Dual-stack ::/0 capture + MapDNS 198.18.0.2 + DoH sanitization
 │   ├── ConnectionSecurityClassifier.kt # 9-state honest security & DNS/IPv6 leak classifier
-│   └── ResourceAndBatteryMonitor.kt    # Real CPU/Heap/PSS telemetry & foreground/background adaptive polling
+│   ├── ResourceAndBatteryMonitor.kt    # Real CPU/Heap/PSS telemetry & foreground/background adaptive polling
+│   ├── QuickTileService.kt         # Quick Settings tile (also refreshes the home-screen widget)
+│   └── VpnWidgetProvider.kt        # Home-screen widget: status + one-tap toggle
 ├── hotspot/
 │   └── VpnHotspotManager.kt        # Rootless LAN-only VPN Hotspot (Mode A/B/C, HTTP/SOCKS5/PAC, Fail-Closed guard)
 ├── community/
@@ -48,6 +54,8 @@ com.bahrain.vpnconfigs
     ├── FavoritesScreen.kt          # Grouped, custom-named, performance-ranked Favorites UI
     ├── ServerHistoryScreen.kt      # Paginated, searchable, date-filtered SQLite Session History UI
     ├── SecurityStatusScreen.kt     # Dedicated 9-state Security, DNS/IPv6 Leak, Kill Switch & Battery UI
+    ├── UsageStatsCard.kt           # Data usage by server and network type
+    ├── enterprise/                 # Diagnostics (shareable redacted report), BlockingDetectionCard, AntiCensorshipToolsCard
     └── EnterpriseScreens.kt        # Enterprise Hub, Speed Test, PromoPopupDialog, MandatoryLoginGateDialog
 ```
 

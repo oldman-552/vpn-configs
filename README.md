@@ -27,6 +27,8 @@
 
 تحقق من الملف بعد التحميل: `sha256sum -c SHA256SUMS.txt`
 
+**طريقة الاستخدام خطوة بخطوة:** [دليل الاستخدام](docs/USER_GUIDE.md)
+
 ## المزايا
 
 - **اختيار تلقائي للأسرع:** يفحص السيرفرات عبر نفق حقيقي ويرتّب أفضل 50 لكل شبكة (WiFi وبيانات الجوال منفصلة).
@@ -34,6 +36,13 @@
 - **استثناء التطبيقات والنطاقات:** اختر تطبيقات تتجاوز الـ VPN، ونطاقات `.ir` تخرج مباشرة افتراضيًا.
 - **مشاركة الـ VPN عبر الهوتسبوت** بدون روت (بروكسي HTTP/SOCKS5).
 - **بيانات موقّعة:** التطبيق يرفض قوائم السيرفرات التي لا تحمل توقيعًا صحيحًا.
+- **Widget للشاشة الرئيسية**، و**إحصاءات استهلاك** حسب السيرفر والشبكة، و**تقرير تشخيص** آمن للإبلاغ عن المشاكل.
+
+### أدوات تجاوز الحجب (مجانية)
+- **اكتشاف نوع الحجب:** يفحص شبكتك (DNS أو SNI أو IP أو UDP) ويعدّل اختيار السيرفر حسب النتيجة.
+- **تجزئة TLS:** تخفي اسم السيرفر عن فلاتر SNI، وتعمل تلقائيًا عند الحاجة.
+- **Cloudflare WARP:** احتياط مجاني عندما تفشل كل السيرفرات.
+- **سيرفرات CDN:** تُميَّز بشارة وتُفضَّل عند حجب عناوين IP.
 
 ## كيف يعمل
 
@@ -72,7 +81,7 @@
 | `iran-top500.json` | سيرفرات مُختبرة من داخل إيران مجتمعيًا |
 | `api/v1/statistics.json` | إحصاءات عامة (OpenAPI 3.1) |
 
-القائمة الكاملة في [`docs/OVERVIEW.md`](docs/OVERVIEW.md) و [`API.md`](API.md).
+التفاصيل في [`docs/API.md`](docs/API.md).
 
 ## التشغيل المحلي
 
@@ -91,7 +100,7 @@ TEST_TOP=400 python server/build_data.py # بناء البيانات في dist/
 | السر | الغرض | كيف تولّده |
 |---|---|---|
 | `TOP500_SIGNING_KEY_B64` | توقيع بيانات Top 500 | `python scripts/gen_manifest_signing_key.py` |
-| `KEYSTORE_BASE64`، `KEYSTORE_PASSWORD`، `KEY_ALIAS`، `KEY_PASSWORD` | توقيع الـ APK بشهادة ثابتة | انظر [`docs/OVERVIEW.md`](docs/OVERVIEW.md) |
+| `KEYSTORE_BASE64`، `KEYSTORE_PASSWORD`، `KEY_ALIAS`، `KEY_PASSWORD` | توقيع الـ APK بشهادة ثابتة | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
 | `COMMUNITY_WORKER_URL`، `COMMUNITY_EXPORT_TOKEN` | الفحص المجتمعي (اختياري) | [`community-worker/README.md`](community-worker/README.md) |
 
 والمفتاح العام للتوقيع يُوضع في `android/gradle.properties` باسم `top500PublicKeyB64`.
@@ -99,7 +108,12 @@ TEST_TOP=400 python server/build_data.py # بناء البيانات في dist/
 
 ## التوثيق
 
-- [نظرة تفصيلية على المشروع](docs/OVERVIEW.md)
-- [معمارية أندرويد](docs/ANDROID_ARCHITECTURE.md) · [نموذج الأمان](docs/SECURITY_MODEL.md) · [قواعد البيانات](docs/DATABASE_SCHEMA.md)
-- [النشر](DEPLOYMENT.md) · [الاختبارات](TESTING.md) · [حل المشاكل](TROUBLESHOOTING.md)
+**للمستخدمين:** [دليل الاستخدام](docs/USER_GUIDE.md) · [حل المشاكل](docs/TROUBLESHOOTING.md)
+
+**للمطورين:**
+- [المعمارية العامة](docs/ARCHITECTURE.md) · [معمارية أندرويد](docs/ANDROID_ARCHITECTURE.md) · [قواعد البيانات](docs/DATABASE_SCHEMA.md)
+- [النشر والأسرار](docs/DEPLOYMENT.md) · [الاختبارات](docs/TESTING.md) · [واجهة البيانات API](docs/API.md)
+- [نموذج الأمان](docs/SECURITY_MODEL.md) · [البطارية](docs/ANDROID_BATTERY_OPTIMIZATION.md) · [المنصة المؤسسية](docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md)
+
+**عام:**
 - [الأمان والإبلاغ عن الثغرات](SECURITY.md) · [الخصوصية](PRIVACY.md) · [سجل التغييرات](CHANGELOG.md)
