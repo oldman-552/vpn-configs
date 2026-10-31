@@ -85,4 +85,41 @@ class SingBoxConfigExportTest {
         assertEquals(5, root.getJSONObject("route").getJSONArray("rules").length())
         export("batch-multi-outbound", built.first)
     }
+
+    @Test fun batchNormalizesUnsafeFingerprintsCiphersAndFiltersMalformedReality() {
+        Prefs(ctx).tlsFragmentMode = "ON"
+        val validRealityPbk = Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32) { (it + 7).toByte() })
+        val ssLegacyAlias = Base64.getEncoder().encodeToString("chacha20-poly1305:secretpass".toByteArray(Charsets.UTF_8))
+        val vmessEdgeJson = JSONObject()
+            .put("v", "2")
+            .put("add", "vmess.example.com")
+            .put("port", "443")
+            .put("id", "22222222-3333-4444-5555-666666666666")
+            .put("aid", "0")
+            .put("scy", "chacha20-ietf-poly1305")
+            .put("net", "ws")
+            .put("path", "/ws")
+            .put("tls", "tls")
+            .put("fp", "unsafe")
+            .toString()
+        val vmessEdgeUri = "vmess://" + Base64.getEncoder().encodeToString(vmessEdgeJson.toByteArray(Charsets.UTF_8))
+
+        val uris = listOf(
+            "vless://11111111-2222-3333-4444-555555555555@edge1.example.com:443?type=ws&security=tls&fp=unsafe&sni=edge1.example.com&path=%2Fws#u1",
+            "trojan://secret@edge2.example.com:443?security=tls&fp=chrome_psk&sni=edge2.example.com#u2",
+            "ss://$ssLegacyAlias@198.51.100.21:8388#u3",
+            vmessEdgeUri,
+            "vless://11111111-2222-3333-4444-555555555555@edge3.example.com:443?type=tcp&flow=xtls-rprx-direct&security=tls&sni=edge3.example.com#u5",
+            "hy2://hypass@198.51.100.22:8443?fp=unsafe&sni=hy2.example.com#u6",
+            "vless://11111111-2222-3333-4444-555555555555@198.51.100.23:443?security=reality&pbk=$validRealityPbk&sid=a&sni=www.microsoft.com#u7",
+            // Bad 7-char Reality pbk -> cleanly skipped from batch so sing-box never crashes!
+            "vless://11111111-2222-3333-4444-555555555555@198.51.100.24:443?security=reality&pbk=shortpk&sid=01&sni=www.microsoft.com#bad",
+        )
+        val paired = uris.mapIndexed { idx, uri -> uri to (22300 + idx) }
+        val built = SingBox(ctx).buildBatchConfig(items = paired, dnsServer = "1.1.1.1", useDoh = false)
+        assertNotNull(built)
+        // 7 valid normalized slots admitted, 1 malformed-pbk Reality slot surgically skipped!
+        assertEquals(7, built!!.second.size)
+        export("batch-normalized-edge-cases", built.first)
+    }
 }

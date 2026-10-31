@@ -24,6 +24,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -32,6 +33,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 import kotlin.math.ln
 import kotlin.math.max
@@ -662,14 +664,16 @@ class SequentialTunnelScanner(
                 )
                 onProgress(TestProgress(stage1Label, 0, plan.size, 0))
 
-                // Stage 0: 600ms parallel TCP SYN filter for raw-IP TCP nodes (skips UDP/QUIC & domains safely)
+                // Stage 0: 480ms parallel TCP SYN filter for raw-IP TCP nodes (skips UDP/QUIC & domains safely) with live progress
                 val (tunnelTargets, tcpDeadCleanList) = if (batchExecutor == null) {
-                    Tester.fastTcpIpPreScreen(plan, timeoutMs = 600)
+                    Tester.fastTcpIpPreScreen(plan, timeoutMs = 480) { estDead ->
+                        onProgress(TestProgress(stage1Label, estDead.coerceAtMost(plan.size - 1), plan.size, 0))
+                    }
                 } else {
                     plan to emptyList()
                 }
 
-                val stage1TimeoutMs = (timeoutSec.coerceIn(2, 5) * 420).coerceIn(1_250, 1_750)
+                val stage1TimeoutMs = (timeoutSec.coerceIn(2, 5) * 380).coerceIn(1_150, 1_550)
                 var doneStage1 = tcpDeadCleanList.size
                 var aliveStage1 = 0
                 var stoppedEarly = false
@@ -681,168 +685,251 @@ class SequentialTunnelScanner(
                     onProgress(TestProgress(stage1Label, doneStage1, plan.size, 0))
                 }
 
-                val chunks = tunnelTargets.chunked(BATCH_SIZE)
-                for (chunk in chunks) {
-                    coroutineContext.ensureActive()
-                    if (activeNetworkSupplier != null && activeNetworkSupplier.invoke() != networkProfile) {
-                        stoppedEarly = true
-                        break
-                    }
-                    val chunkRes = probeBatchChunkWithFallback(
-                        chunk = chunk,
-                        networkProfile = networkProfile,
-                        basePort = 0,
-                        timeoutMs = stage1TimeoutMs,
-                        dnsServer = dnsServer,
-                        useDoh = useDoh,
-                    ) { r ->
-                        var snap: TestProgress? = null
-                        synchronized(this@SequentialTunnelScanner) {
-                            doneStage1++
-                            if (r.ok && r.latencyMs > 0L) aliveStage1++
-                            if (doneStage1 % 16 == 0 || doneStage1 == plan.size) {
-                                snap = TestProgress(stage1Label, doneStage1, plan.size, aliveStage1)
-                            }
-                        }
-                        snap?.let { onProgress(it) }
-                    }
-                    stage1All.addAll(chunkRes)
-                    if (scanMode == LocalScanMode.QUICK_SCAN &&
-                        aliveStage1 >= quickStopTargetQualified &&
-                        doneStage1 < plan.size
-                    ) {
-                        stoppedEarly = true
-                        break
-                    }
-                }
-
-                // Offline Guard: if >= 15 configs were tested and 0 responded, device internet itself is down!
-                if (stage1All.size >= PersonalizedTop50Ranker.OFFLINE_GUARD_MIN_TESTED && aliveStage1 == 0) {
-                    val preservedBundle = PersonalizedTop50Ranker.computeRankings(
-                        allCandidateConfigs,
-                        fingerprintsById,
-                        initialStats,
-                        networkProfile,
-                        System.currentTimeMillis(),
-                    )
-                    return@withLock ScanExecutionSummary(
-                        scanMode = scanMode,
-                        networkProfile = networkProfile,
-                        plannedCount = plan.size,
-                        testedCount = stage1All.size,
-                        qualifiedAliveCount = preservedBundle.top50.size,
-                        stoppedEarly = stoppedEarly,
-                        rankingBundle = preservedBundle,
-                        results = emptyList(),
-                        failedCleanUris = emptySet(),
-                        offlineGuardTriggered = true,
-                    )
-                }
-
-                val responsiveSorted = stage1All
-                    .filter { it.ok && it.latencyMs > 0L }
-                    .sortedWith(compareBy<TestResult> { it.latencyMs }.thenBy { it.jitterMs })
-
-                // عرض فوري للسيرفرات الشغّالة فور انتهاء المرحلة الأولى (~3 ثوانٍ) بينما تقاس السرعة الفعلية في المرحلة 2
-                if (!isBackgroundRun && responsiveSorted.isNotEmpty()) {
-                    val stage1FailedPreview = LinkedHashSet<String>(securityRejectedClean)
-                    stage1All.forEach { if (!it.ok || it.latencyMs <= 0L) stage1FailedPreview.add(Converters.cleanUri(it.cfg)) }
-                    onRankingUpdated(
-                        PersonalizedTop50Ranker.computeRankings(
-                            allCandidateConfigs,
-                            fingerprintsById,
-                            initialStats,
-                            networkProfile,
-                            System.currentTimeMillis(),
-                        ),
-                        responsiveSorted,
-                        stage1FailedPreview,
-                    )
-                }
-
-                // Stage 2: Real 600 KB HTTPS Download Benchmark on top responsive safe servers (Time-Boxed 1.8s, 15 parallel)
                 val stage2Limit = when {
                     isBackgroundRun -> BACKGROUND_STAGE2_TOP_LIMIT // Top 15 (~9 MB strict budget)
                     networkProfile == ScanNetworkProfile.MOBILE_DATA || isMetered -> 18
                     else -> 30
                 }
-                val speedCandidates = responsiveSorted.take(stage2Limit)
-                val speedByClean = HashMap<String, Double>(speedCandidates.size)
+                val speedByClean = HashMap<String, Double>(stage2Limit)
+                var responsiveSorted: List<TestResult> = emptyList()
 
-                if (speedCandidates.isNotEmpty()) {
-                    val stage2Label = tr(
-                        "قياس سرعة التنزيل الحقيقية (${networkProfile.labelAr})",
-                        "Measuring Real Download Speed (${networkProfile.labelEn})",
-                    )
-                    onProgress(TestProgress(stage2Label, 0, speedCandidates.size, 0))
-                    var sDone = 0
-                    for (sChunk in speedCandidates.map { it.cfg }.chunked(BATCH_SIZE)) {
+                if (batchExecutor != null) {
+                    // Mocked unit-test batch executor path
+                    for (chunk in tunnelTargets.chunked(BATCH_SIZE)) {
                         coroutineContext.ensureActive()
                         if (activeNetworkSupplier != null && activeNetworkSupplier.invoke() != networkProfile) {
                             stoppedEarly = true
                             break
                         }
-                        if (batchExecutor != null) {
+                        val chunkRes = probeBatchChunkWithFallback(
+                            chunk = chunk,
+                            networkProfile = networkProfile,
+                            basePort = 0,
+                            timeoutMs = stage1TimeoutMs,
+                            dnsServer = dnsServer,
+                            useDoh = useDoh,
+                        ) { r ->
+                            var snap: TestProgress? = null
+                            synchronized(this@SequentialTunnelScanner) {
+                                doneStage1++
+                                if (r.ok && r.latencyMs > 0L) aliveStage1++
+                                if (doneStage1 % 8 == 0 || doneStage1 == plan.size) {
+                                    snap = TestProgress(stage1Label, doneStage1, plan.size, aliveStage1)
+                                }
+                            }
+                            snap?.let { onProgress(it) }
+                        }
+                        stage1All.addAll(chunkRes)
+                        if (scanMode == LocalScanMode.QUICK_SCAN &&
+                            aliveStage1 >= quickStopTargetQualified &&
+                            doneStage1 < plan.size
+                        ) {
+                            stoppedEarly = true
+                            break
+                        }
+                    }
+
+                    if (stage1All.size >= PersonalizedTop50Ranker.OFFLINE_GUARD_MIN_TESTED && aliveStage1 == 0) {
+                        val preservedBundle = PersonalizedTop50Ranker.computeRankings(
+                            allCandidateConfigs, fingerprintsById, initialStats, networkProfile, System.currentTimeMillis(),
+                        )
+                        return@withLock ScanExecutionSummary(
+                            scanMode = scanMode, networkProfile = networkProfile, plannedCount = plan.size,
+                            testedCount = stage1All.size, qualifiedAliveCount = preservedBundle.top50.size,
+                            stoppedEarly = stoppedEarly, rankingBundle = preservedBundle, results = emptyList(),
+                            failedCleanUris = emptySet(), offlineGuardTriggered = true,
+                        )
+                    }
+
+                    responsiveSorted = stage1All
+                        .filter { it.ok && it.latencyMs > 0L }
+                        .sortedWith(compareBy<TestResult> { it.latencyMs }.thenBy { it.jitterMs })
+
+                    val speedCandidates = responsiveSorted.take(stage2Limit)
+                    if (speedCandidates.isNotEmpty()) {
+                        val stage2Label = tr(
+                            "قياس سرعة التنزيل الحقيقية (${networkProfile.labelAr})",
+                            "Measuring Real Download Speed (${networkProfile.labelEn})",
+                        )
+                        onProgress(TestProgress(stage2Label, 0, speedCandidates.size, 0))
+                        var sDone = 0
+                        for (sChunk in speedCandidates.map { it.cfg }.chunked(BATCH_SIZE)) {
+                            coroutineContext.ensureActive()
+                            if (activeNetworkSupplier != null && activeNetworkSupplier.invoke() != networkProfile) {
+                                stoppedEarly = true
+                                break
+                            }
                             val spdBatch = runInterruptible(Tester.scanIoDispatcher) {
                                 batchExecutor.executeBatch(
                                     TunnelBatchProbeRequest(
-                                        cfgs = sChunk,
-                                        networkProfile = networkProfile,
-                                        measureSpeed = true,
-                                        timeoutMs = 2_200,
+                                        cfgs = sChunk, networkProfile = networkProfile, measureSpeed = true, timeoutMs = 2_200,
                                     )
                                 )
                             }
                             for (sr in spdBatch) {
-                                if (sr.speedKbps > 0.0) {
-                                    speedByClean[Converters.cleanUri(sr.cfg)] = sr.speedKbps
-                                }
+                                if (sr.speedKbps > 0.0) speedByClean[Converters.cleanUri(sr.cfg)] = sr.speedKbps
                                 sDone++
                             }
                             onProgress(TestProgress(stage2Label, sDone, speedCandidates.size, speedByClean.size))
-                            continue
                         }
-                        val ports = Tester.allocateFreePorts(sChunk.size, basePort = 0)
-                        val paired = sChunk.mapIndexed { idx, c -> c to ports[idx] }
-                        val session = runInterruptible(Tester.scanIoDispatcher) {
-                            singBox.startBatchDaemon(paired, dnsServer = dnsServer, useDoh = useDoh, waitMs = 1500L)
+                    }
+                } else {
+                    // Real Android Device Path: Continuous Zero-Barrier Streaming Pool + Warm Zero-Spawn Stage-2 Speed!
+                    val activeSessions = ArrayList<BatchDaemonSession>(3)
+                    try {
+                        val warmSlotByClean = HashMap<String, BatchOutboundSlot>(tunnelTargets.size)
+                        if (tunnelTargets.isNotEmpty()) {
+                            val allPorts = Tester.allocateFreePorts(tunnelTargets.size, basePort = 0)
+                            val pairedAll = tunnelTargets.mapIndexed { idx, c -> c to allPorts[idx] }
+                            val started = coroutineScope {
+                                pairedAll.chunked(BATCH_SIZE).map { sub ->
+                                    async(Tester.scanIoDispatcher) {
+                                        runInterruptible(Tester.scanIoDispatcher) {
+                                            singBox.startBatchDaemon(sub, dnsServer = dnsServer, useDoh = useDoh, waitMs = 1500L)
+                                        }
+                                    }
+                                }.awaitAll().filterNotNull()
+                            }
+                            activeSessions.addAll(started)
+                            for (sess in activeSessions) {
+                                for (slot in sess.slots) {
+                                    warmSlotByClean[Converters.cleanUri(slot.cfg)] = slot
+                                }
+                            }
+
+                            val sem1 = Semaphore(STAGE1_PARALLELISM)
+                            val stopFlag = AtomicBoolean(false)
+                            val waveResults = coroutineScope {
+                                tunnelTargets.map { rawCfg ->
+                                    async(Tester.scanIoDispatcher) {
+                                        ensureActive()
+                                        if (stopFlag.get()) return@async null
+                                        if (activeNetworkSupplier != null && activeNetworkSupplier.invoke() != networkProfile) {
+                                            stopFlag.set(true)
+                                            stoppedEarly = true
+                                            return@async null
+                                        }
+                                        val clean = Converters.cleanUri(rawCfg)
+                                        val slot = warmSlotByClean[clean]
+                                        val res = if (slot != null) {
+                                            sem1.withPermit {
+                                                ensureActive()
+                                                if (stopFlag.get()) return@withPermit null
+                                                runInterruptible(Tester.scanIoDispatcher) {
+                                                    singBox.probeSlotOnRunningBatch(
+                                                        slot = slot,
+                                                        timeoutMs = stage1TimeoutMs,
+                                                        measureThroughput = false,
+                                                        throughputBudgetBytes = 0L,
+                                                    )
+                                                }
+                                            }
+                                        } else {
+                                            TestResult(rawCfg, ok = false, error = "invalid-config", packetLossPct = 100.0)
+                                        } ?: return@async null
+
+                                        var snap: TestProgress? = null
+                                        synchronized(this@SequentialTunnelScanner) {
+                                            doneStage1++
+                                            if (res.ok && res.latencyMs > 0L) aliveStage1++
+                                            if (scanMode == LocalScanMode.QUICK_SCAN &&
+                                                aliveStage1 >= quickStopTargetQualified &&
+                                                doneStage1 < plan.size
+                                            ) {
+                                                stopFlag.set(true)
+                                                stoppedEarly = true
+                                            }
+                                            if (doneStage1 % 6 == 0 || doneStage1 == plan.size) {
+                                                snap = TestProgress(stage1Label, doneStage1, plan.size, aliveStage1)
+                                            }
+                                        }
+                                        snap?.let { onProgress(it) }
+                                        res
+                                    }
+                                }.awaitAll().filterNotNull()
+                            }
+                            stage1All.addAll(waveResults)
                         }
-                        if (session != null) {
-                            val sem = Semaphore(STAGE2_PARALLELISM)
-                            try {
-                                coroutineScope {
-                                    session.slots.map { slot ->
-                                        async(Tester.scanIoDispatcher) {
-                                            ensureActive()
-                                            val kbps = sem.withPermit {
+
+                        // Offline Guard: if >= 15 configs were tested and 0 responded, device internet itself is down!
+                        if (stage1All.size >= PersonalizedTop50Ranker.OFFLINE_GUARD_MIN_TESTED && aliveStage1 == 0) {
+                            val preservedBundle = PersonalizedTop50Ranker.computeRankings(
+                                allCandidateConfigs, fingerprintsById, initialStats, networkProfile, System.currentTimeMillis(),
+                            )
+                            return@withLock ScanExecutionSummary(
+                                scanMode = scanMode, networkProfile = networkProfile, plannedCount = plan.size,
+                                testedCount = stage1All.size, qualifiedAliveCount = preservedBundle.top50.size,
+                                stoppedEarly = stoppedEarly, rankingBundle = preservedBundle, results = emptyList(),
+                                failedCleanUris = emptySet(), offlineGuardTriggered = true,
+                            )
+                        }
+
+                        responsiveSorted = stage1All
+                            .filter { it.ok && it.latencyMs > 0L }
+                            .sortedWith(compareBy<TestResult> { it.latencyMs }.thenBy { it.jitterMs })
+
+                        // Run Stage-1 UI preview AND Stage-2 real 600 KB speed measurement CONCURRENTLY inside one scope (0.0ms gap!)
+                        coroutineScope {
+                            val previewJob = if (!isBackgroundRun && responsiveSorted.isNotEmpty()) {
+                                val stage1FailedPreview = LinkedHashSet<String>(securityRejectedClean)
+                                stage1All.forEach { if (!it.ok || it.latencyMs <= 0L) stage1FailedPreview.add(Converters.cleanUri(it.cfg)) }
+                                val previewAlive = responsiveSorted
+                                launch(Dispatchers.Default) {
+                                    onRankingUpdated(
+                                        PersonalizedTop50Ranker.computeRankings(
+                                            allCandidateConfigs, fingerprintsById, initialStats, networkProfile, System.currentTimeMillis(),
+                                        ),
+                                        previewAlive,
+                                        stage1FailedPreview,
+                                    )
+                                }
+                            } else null
+
+                            val speedCandidates = responsiveSorted.take(stage2Limit)
+                            if (speedCandidates.isNotEmpty() && !(activeNetworkSupplier != null && activeNetworkSupplier.invoke() != networkProfile)) {
+                                val stage2Label = tr(
+                                    "قياس سرعة التنزيل الحقيقية (${networkProfile.labelAr})",
+                                    "Measuring Real Download Speed (${networkProfile.labelEn})",
+                                )
+                                onProgress(TestProgress(stage2Label, 0, speedCandidates.size, 0))
+                                var sDone = 0
+                                val sem2 = Semaphore(STAGE2_PARALLELISM)
+                                speedCandidates.map { cand ->
+                                    async(Tester.scanIoDispatcher) {
+                                        ensureActive()
+                                        val clean = Converters.cleanUri(cand.cfg)
+                                        val slot = warmSlotByClean[clean]
+                                        val kbps = if (slot != null) {
+                                            sem2.withPermit {
                                                 ensureActive()
                                                 runInterruptible(Tester.scanIoDispatcher) {
                                                     SingBox.measureFastBatchThroughputOnPort(
                                                         port = slot.listenPort,
-                                                        connectTimeoutMs = 1_850,
-                                                        maxTransferMs = 1_800L,
+                                                        connectTimeoutMs = 1_750,
+                                                        maxTransferMs = 1_650L,
                                                         budgetBytes = SingBox.SPEED_BYTES,
                                                     )
                                                 }
                                             }
-                                            var snap: TestProgress? = null
-                                            synchronized(this@SequentialTunnelScanner) {
-                                                if (kbps > 0.0) {
-                                                    speedByClean[Converters.cleanUri(slot.cfg)] = kbps
-                                                }
-                                                sDone++
-                                                if (sDone % 4 == 0 || sDone == speedCandidates.size) {
-                                                    snap = TestProgress(stage2Label, sDone, speedCandidates.size, speedByClean.size)
-                                                }
-                                            }
-                                            snap?.let { onProgress(it) }
+                                        } else {
+                                            0.0
                                         }
-                                    }.awaitAll()
-                                }
-                            } finally {
-                                singBox.stopBatchDaemon(session)
+                                        var snap: TestProgress? = null
+                                        synchronized(this@SequentialTunnelScanner) {
+                                            if (kbps > 0.0) {
+                                                speedByClean[clean] = kbps
+                                            }
+                                            sDone++
+                                            snap = TestProgress(stage2Label, sDone, speedCandidates.size, speedByClean.size)
+                                        }
+                                        snap?.let { onProgress(it) }
+                                    }
+                                }.awaitAll()
                             }
+                            previewJob?.join()
                         }
+                    } finally {
+                        activeSessions.forEach { singBox.stopBatchDaemon(it) }
                     }
                 }
 
