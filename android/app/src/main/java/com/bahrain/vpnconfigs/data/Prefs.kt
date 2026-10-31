@@ -115,6 +115,11 @@ class Prefs(ctx: Context) {
             }
         }
 
+    /** Last censorship probe result (BlockingProfile JSON), used to bias protocol choice. */
+    var blockingProfileJson: String
+        get() = sp.getString("blocking_profile_v1", "") ?: ""
+        set(v) = sp.edit { putString("blocking_profile_v1", v) }
+
     /** One-time acknowledgement that servers are public, third-party and untrusted. */
     var publicServerNoticeAcked: Boolean
         get() = sp.getBoolean("public_server_notice_v1", false)

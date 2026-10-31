@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">bahrain-vpn</string>
     <string name="tile_label">bahrain-vpn • اتصال سريع</string>
+    <string name="widget_description">زر اتصال سريع مع حالة الـ VPN</string>
 </resources>
