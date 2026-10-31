@@ -11,7 +11,7 @@ The Android application (`:app`, `com.bahrain.vpnconfigs`, `versionCode = 2`, `v
 com.bahrain.vpnconfigs
 ├── MainActivity.kt                 # 6-destination NavigationBar + Lifecycle foreground observer + VPN permission flow
 ├── data/
-│   ├── Repo.kt                     # Sole network/CDN boundary (ETag/304, Top-500 SHA-256 delta sync, promo, bundle)
+│   ├── Repo.kt                     # Sole network/CDN boundary (ETag/304, Top-500 SHA-256 delta sync, bundle)
 │   ├── ManifestSignature.kt        # ECDSA P-256 verification of top500.manifest.json(.sig)
 │   ├── Prefs.kt                    # User settings & flags (Arabic primary default "ar", bypassIrDomains = true default)
 │   └── ClientDatabase.kt           # WAL SQLite v3 (network rankings, scan history, sessions, favorites, telemetry)
@@ -49,14 +49,13 @@ com.bahrain.vpnconfigs
     ├── AppsSplitScreen.kt          # AppsSplitScreen
     ├── SettingsScreen.kt           # SettingsAndExportScreen
     ├── ScreenComponents.kt         # Shared composables (StatusPill, badges, rows)
-    ├── PublicServerNotice.kt       # First-launch public-server warning
     ├── ConnectionMonitorCard.kt    # SmartSelectionSummaryCard + RealTimeConnectionMonitorCard (live Canvas chart)
     ├── FavoritesScreen.kt          # Grouped, custom-named, performance-ranked Favorites UI
     ├── ServerHistoryScreen.kt      # Paginated, searchable, date-filtered SQLite Session History UI
     ├── SecurityStatusScreen.kt     # Dedicated 9-state Security, DNS/IPv6 Leak, Kill Switch & Battery UI
     ├── UsageStatsCard.kt           # Data usage by server and network type
     ├── enterprise/                 # Diagnostics (shareable redacted report), BlockingDetectionCard, AntiCensorshipToolsCard
-    └── EnterpriseScreens.kt        # Enterprise Hub, Speed Test, PromoPopupDialog, MandatoryLoginGateDialog
+    └── EnterpriseScreens.kt        # Enterprise Hub, Speed Test MandatoryLoginGateDialog
 ```
 
 ## 2. Six Primary Navigation Destinations

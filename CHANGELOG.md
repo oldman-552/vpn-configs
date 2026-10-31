@@ -12,12 +12,15 @@
 - Home-screen **widget** with status and one-tap connect/disconnect.
 - **Data usage** statistics by server and by network type (Wi-Fi / mobile).
 - Shareable **redacted diagnostic report** (credentials, hostnames and IPs masked).
-- First-launch notice that servers are public and run by unknown operators.
 
 ### Security
 - `top500.manifest.json` is signed (ECDSA P-256); the app rejects missing/invalid signatures once a public key is configured.
 - Admin panel: strict CSP (`script-src 'self'`), no inline handlers, connections limited to GitHub/jsDelivr.
 - CodeQL and Dependabot enabled.
+
+### Removed
+- Rotating promo/ad popup and its `promo/` assets.
+- First-launch public-server notice (the warning remains in the README).
 
 ### Engineering
 - `targetSdk 35`, `compileSdk 36`; Gradle 8.14.3, AGP 8.13, Kotlin 2.2; updated androidx/Compose.

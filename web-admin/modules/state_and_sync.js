@@ -129,7 +129,6 @@ function createEmptyDb() {
       auto_block_on_device_violation: { value: false, sensitive: true, desc: "Auto-block account on unauthorized device" },
       auto_failover_enabled: { value: true, sensitive: false, desc: "Smart 2s Auto-Failover to fastest verified backup server" },
       trial_duration_hours: { value: 48, sensitive: false, desc: "Server-controlled trial duration (hours)" },
-      promo_enabled: { value: true, sensitive: false, desc: "Enable 5-slot rotating startup banner" },
       log_retention_days: { value: 90, sensitive: false, desc: "Telemetry & log retention days" },
     },
     disabled_server_uris: [],

@@ -41,7 +41,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,7 +58,6 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.bahrain.vpnconfigs.data.Prefs
-import com.bahrain.vpnconfigs.ui.PublicServerNotice
 import com.bahrain.vpnconfigs.ui.AppTheme
 import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.AppsSplitScreen
@@ -68,7 +66,6 @@ import com.bahrain.vpnconfigs.ui.ConnectHomeScreen
 import com.bahrain.vpnconfigs.ui.EnterpriseHubScreen
 import com.bahrain.vpnconfigs.ui.FavoritesScreen
 import com.bahrain.vpnconfigs.ui.MandatoryLoginGateDialog
-import com.bahrain.vpnconfigs.ui.PromoPopupDialog
 import com.bahrain.vpnconfigs.ui.SecurityStatusScreen
 import com.bahrain.vpnconfigs.ui.ServerHistoryScreen
 import com.bahrain.vpnconfigs.ui.ServerItem
@@ -98,7 +95,6 @@ class MainActivity : ComponentActivity() {
             AppTheme {
                 CompositionLocalProvider(LocalLayoutDirection provides activeLang.layoutDirection) {
                     AppRoot()
-                    PublicServerNotice()
                 }
             }
         }
@@ -123,8 +119,6 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
     val vpnStatus by VpnStateManager.status.collectAsState()
 
     var pendingTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var backgroundedAtMs by remember { mutableLongStateOf(0L) }
-    var skipNextReopenPromo by remember { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner) {
@@ -132,20 +126,9 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
                     ResourceAndBatteryMonitor.isUiInForeground = false
-                    val changingCfg = (ctx as? Activity)?.isChangingConfigurations == true
-                    if (!changingCfg) {
-                        backgroundedAtMs = System.currentTimeMillis()
-                    }
                 }
                 Lifecycle.Event.ON_START -> {
                     ResourceAndBatteryMonitor.isUiInForeground = true
-                    val bgAt = backgroundedAtMs
-                    backgroundedAtMs = 0L
-                    if (skipNextReopenPromo) {
-                        skipNextReopenPromo = false
-                    } else if (bgAt > 0L && pendingTarget == null && System.currentTimeMillis() - bgAt >= 15_000L) {
-                        vm.triggerNextPromoBanner()
-                    }
                 }
                 else -> Unit
             }
@@ -440,14 +423,6 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
             vm = vm,
             state = state,
             onCopyDeviceId = { id -> copyToClipboard(ctx, id, tr("تم نسخ رمز الجهاز", "Device ID copied")) },
-        )
-    }
-
-    state.activePromo?.let { promo ->
-        PromoPopupDialog(
-            banner = promo,
-            onDismiss = { vm.dismissPromo() },
-            onLinkOpened = { skipNextReopenPromo = true },
         )
     }
 }
