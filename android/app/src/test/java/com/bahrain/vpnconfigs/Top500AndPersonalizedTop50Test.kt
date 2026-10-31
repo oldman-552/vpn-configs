@@ -60,7 +60,7 @@ class Top500AndPersonalizedTop50Test {
     private fun buildSampleUri(index: Int, secretToken: String = "sec-$index"): String {
         val oct3 = 10 + (index / 200)
         val oct4 = (index % 200) + 10
-        val port = 443 + (index % 5)
+        val port = listOf(443, 2053, 2083, 2087, 8443)[index % 5]
         return "trojan://pwd-$secretToken-$index@198.51.$oct3.$oct4:$port?security=tls&sni=edge$index.example.com#bahrain-vpn $index"
     }
 
@@ -540,11 +540,12 @@ class Top500AndPersonalizedTop50Test {
             isMetered = false,
         )
 
-        // 1. Insecure allowInsecure=1 URI was pre-filtered and NEVER sent to sing-box batch probe!
+        // 1. Insecure allowInsecure=1 URI was pre-filtered and NEVER sent to sing-box batch probe (and marked failed for purge)!
         assertFalse(Converters.cleanUri(insecureUri) in seenUris)
+        assertTrue(Converters.cleanUri(insecureUri) in summary.failedCleanUris)
         assertEquals(120, summary.testedCount)
         assertEquals(105, summary.aliveCount)
-        assertEquals(15, summary.failedCleanUris.size)
+        assertEquals(16, summary.failedCleanUris.size) // 15 dead + 1 pre-filtered allowInsecure=1
         assertFalse(summary.offlineGuardTriggered)
 
         // 2. Stage 2 real download speed ran on top 30 Wi-Fi finalists and ranked Top 100 speed-first!
