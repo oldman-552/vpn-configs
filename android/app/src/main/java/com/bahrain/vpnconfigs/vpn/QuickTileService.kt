@@ -22,6 +22,7 @@ class QuickTileService : TileService() {
             runCatching {
                 requestListeningState(ctx, ComponentName(ctx, QuickTileService::class.java))
             }
+            VpnWidgetProvider.refreshAll(ctx)
         }
     }
 
