@@ -322,7 +322,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 if (prefs.customConfigs.isNotEmpty()) {
                                     prefs.customConfigs = prefs.customConfigs.filterNot {
                                         Converters.cleanUri(it) in dec.purgeableCleanUris
-                                    }.toSet()
+                                    }
                                 }
                                 buildRepo().recordPurgedDeadAndCleanFiles(
                                     profile = curProfile,
@@ -1147,7 +1147,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 clientDb.getPersonalizedRankings(netProfile, LocalPoolTier.TOP_50)
             }
             val vpnOrHotspotBusy = VpnStateManager.status.value.isActive ||
-                com.bahrain.vpnconfigs.hotspot.VpnHotspotManager.state.value.isActive
+                com.bahrain.vpnconfigs.hotspot.VpnHotspotManager.state.value.isSharingActive
             val shouldAutoScan = sequentialScanner.engineAvailable &&
                 newConfigs.isNotEmpty() &&
                 !(silent && vpnOrHotspotBusy) &&
@@ -1363,7 +1363,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         if (prefs.customConfigs.isNotEmpty()) {
                             prefs.customConfigs = prefs.customConfigs.filterNot {
                                 Converters.cleanUri(it) in dec.purgeableCleanUris
-                            }.toSet()
+                            }
                         }
                         r.recordPurgedDeadAndCleanFiles(
                             profile = scanProfile,
@@ -1419,11 +1419,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // مزامنة الاختبار المجتمعي بدون أي نوافذ مزعجة إذا كان مفعّلًا من المستخدم
                 withContext(Dispatchers.IO) {
                     runCatching {
-                        com.bahrain.vpnconfigs.community.CommunityTestingManager(getApplication())
+                        com.bahrain.vpnconfigs.community.CommunityTestingManager
                             .syncFromUnifiedQualityScanIfOptedIn(
-                                summary = summary,
-                                networkProfile = scanProfile,
-                                fingerprintsById = serverFingerprints,
+                                ctx = getApplication(),
+                                aliveResults = summary.results,
                             )
                     }
                 }
@@ -1583,7 +1582,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             if (prefs.customConfigs.isNotEmpty()) {
                                 prefs.customConfigs = prefs.customConfigs.filterNot {
                                     Converters.cleanUri(it) in dec.purgeableCleanUris
-                                }.toSet()
+                                }
                             }
                             buildRepo().recordPurgedDeadAndCleanFiles(
                                 profile = netProfile,

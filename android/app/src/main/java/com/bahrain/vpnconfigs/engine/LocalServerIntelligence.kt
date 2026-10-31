@@ -61,6 +61,17 @@ fun interface TunnelProbeExecutor {
     fun executeSequential(req: TunnelProbeRequest): TestResult
 }
 
+data class TunnelBatchProbeRequest(
+    val cfgs: List<String>,
+    val networkProfile: ScanNetworkProfile,
+    val measureSpeed: Boolean,
+    val timeoutMs: Int,
+)
+
+fun interface TunnelBatchProbeExecutor {
+    fun executeBatch(req: TunnelBatchProbeRequest): List<TestResult>
+}
+
 data class PersonalizedRankingBundle(
     val networkProfile: ScanNetworkProfile,
     val top50: List<PersonalizedRankEntry>,
@@ -86,7 +97,10 @@ data class ScanExecutionSummary(
     val results: List<TestResult>,
     val failedCleanUris: Set<String>,
     val offlineGuardTriggered: Boolean = false,
-)
+) {
+    val aliveCount: Int
+        get() = results.size
+}
 
 typealias PersonalizedTop100Ranker = PersonalizedTop50Ranker
 
@@ -414,6 +428,7 @@ object FullScanPlanner {
 class SequentialTunnelScanner(
     private val ctx: Context,
     private val clientDb: ClientDatabase = ClientDatabase.getInstance(ctx),
+    private val batchExecutor: TunnelBatchProbeExecutor? = null,
     private val customProbeExecutor: TunnelProbeExecutor? = null,
 ) {
     companion object {
@@ -440,7 +455,7 @@ class SequentialTunnelScanner(
     private val singBox by lazy { SingBox(ctx) }
 
     val engineAvailable: Boolean
-        get() = customProbeExecutor != null || singBox.isAvailable
+        get() = customProbeExecutor != null || batchExecutor != null || singBox.isAvailable
 
     private val defaultExecutor = TunnelProbeExecutor { req ->
         val port = pickSingleFreePort()
@@ -458,6 +473,7 @@ class SequentialTunnelScanner(
 
     private suspend fun probeBatchChunkWithFallback(
         chunk: List<String>,
+        networkProfile: ScanNetworkProfile,
         basePort: Int,
         timeoutMs: Int,
         dnsServer: String,
@@ -465,6 +481,20 @@ class SequentialTunnelScanner(
         onItemDone: suspend (TestResult) -> Unit,
     ): List<TestResult> = coroutineScope {
         if (chunk.isEmpty()) return@coroutineScope emptyList()
+        if (batchExecutor != null) {
+            val mocked = runInterruptible(Dispatchers.IO) {
+                batchExecutor.executeBatch(
+                    TunnelBatchProbeRequest(
+                        cfgs = chunk,
+                        networkProfile = networkProfile,
+                        measureSpeed = false,
+                        timeoutMs = timeoutMs,
+                    )
+                )
+            }
+            for (r in mocked) onItemDone(r)
+            return@coroutineScope mocked
+        }
         val ports = Tester.allocateFreePorts(chunk.size, basePort = basePort)
         val paired = chunk.mapIndexed { idx, c -> c to ports[idx] }
         val session = runInterruptible(Dispatchers.IO) {
@@ -473,8 +503,8 @@ class SequentialTunnelScanner(
         if (session == null) {
             if (chunk.size > 1) {
                 val mid = (chunk.size + 1) / 2
-                val left = probeBatchChunkWithFallback(chunk.subList(0, mid), basePort, timeoutMs, dnsServer, useDoh, onItemDone)
-                val right = probeBatchChunkWithFallback(chunk.subList(mid, chunk.size), basePort + mid + 5, timeoutMs, dnsServer, useDoh, onItemDone)
+                val left = probeBatchChunkWithFallback(chunk.subList(0, mid), networkProfile, basePort, timeoutMs, dnsServer, useDoh, onItemDone)
+                val right = probeBatchChunkWithFallback(chunk.subList(mid, chunk.size), networkProfile, basePort + mid + 5, timeoutMs, dnsServer, useDoh, onItemDone)
                 return@coroutineScope left + right
             }
             val single = runInterruptible(Dispatchers.IO) {
@@ -646,6 +676,7 @@ class SequentialTunnelScanner(
                     }
                     val chunkRes = probeBatchChunkWithFallback(
                         chunk = chunk,
+                        networkProfile = networkProfile,
                         basePort = 23200 + (cIdx % 6) * 60,
                         timeoutMs = stage1TimeoutMs,
                         dnsServer = dnsServer,
@@ -719,6 +750,26 @@ class SequentialTunnelScanner(
                         if (activeNetworkSupplier != null && activeNetworkSupplier.invoke() != networkProfile) {
                             stoppedEarly = true
                             break
+                        }
+                        if (batchExecutor != null) {
+                            val spdBatch = runInterruptible(Dispatchers.IO) {
+                                batchExecutor.executeBatch(
+                                    TunnelBatchProbeRequest(
+                                        cfgs = sChunk,
+                                        networkProfile = networkProfile,
+                                        measureSpeed = true,
+                                        timeoutMs = 6_500,
+                                    )
+                                )
+                            }
+                            for (sr in spdBatch) {
+                                if (sr.speedKbps > 0.0) {
+                                    speedByClean[Converters.cleanUri(sr.cfg)] = sr.speedKbps
+                                }
+                                sDone++
+                            }
+                            onProgress(TestProgress(stage2Label, sDone, speedCandidates.size, speedByClean.size))
+                            continue
                         }
                         val ports = Tester.allocateFreePorts(sChunk.size, basePort = 24400 + (sIdx % 3) * 60)
                         val paired = sChunk.mapIndexed { idx, c -> c to ports[idx] }

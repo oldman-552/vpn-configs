@@ -105,7 +105,7 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
                 if (prefs.customConfigs.isNotEmpty()) {
                     prefs.customConfigs = prefs.customConfigs.filterNot {
                         Converters.cleanUri(it) in purgeDecision.purgeableCleanUris
-                    }.toSet()
+                    }
                 }
                 repo.recordPurgedDeadAndCleanFiles(
                     profile = netProfile,
