@@ -27,7 +27,7 @@ data class DeadConfigPurgeDecision(
 
 object DeadConfigPurgePolicy {
     const val OFFLINE_GUARD_MIN_BATCH: Int = 15
-    const val PURGE_TTL_MS: Long = 3L * 3_600_000L
+    const val PURGE_TTL_MS: Long = 4L * 3_600_000L
 
     /**
      * يحسم الحذف التلقائي الفوري للكونفقات غير الشغّالة وفق الضوابط الثلاثة الصارمة:
@@ -765,7 +765,76 @@ class Repo(
         }.getOrDefault(emptyList())
     }
 
-    // ─────────── سجل الحذف الفوري المعزول حسب الشبكة (دورة 3 ساعات) دون المساس ببصمات Top-500 ───────────
+    private fun profileResultsFile(profile: ScanNetworkProfile): File =
+        File(dir, "local_results_${profile.code}.json")
+
+    /** يحفظ نتائج الفحص الشغّالة الخاصة بنوع الشبكة الحالي (WIFI أو MOBILE_DATA) بشكل دائم على القرص. */
+    fun saveProfileResults(profile: ScanNetworkProfile, results: List<TestResult>) {
+        runCatching {
+            val arr = JSONArray()
+            val seen = HashSet<String>()
+            results.filter { it.ok && (it.latencyMs > 0L || it.speedKbps > 0.0) }
+                .take(500)
+                .forEach { r ->
+                    val clean = Converters.cleanUri(r.cfg)
+                    if (clean.contains("://") && seen.add(clean)) {
+                        arr.put(
+                            JSONObject()
+                                .put("cfg", clean)
+                                .put("latency_ms", r.latencyMs)
+                                .put("speed_kbps", r.speedKbps)
+                                .put("jitter_ms", r.jitterMs)
+                                .put("establish_ms", r.establishMs)
+                                .put("stability_score", r.stabilityScore)
+                                .put("tested_at_ms", r.testedAtMs)
+                        )
+                    }
+                }
+            writeAtomic(profileResultsFile(profile), arr.toString())
+        }
+    }
+
+    /** يستعيد نتائج الفحص المحفوظة للشبكة الحالية فور فتح التطبيق دون الحاجة لإعادة الفحص. */
+    fun loadSavedResultsForProfile(profile: ScanNetworkProfile): List<TestResult> {
+        val pf = profileResultsFile(profile)
+        if (pf.exists()) {
+            val parsed = runCatching {
+                val arr = JSONArray(pf.readText(Charsets.UTF_8))
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.optJSONObject(i) ?: continue
+                        val cfg = Converters.cleanUri(o.optString("cfg"))
+                        if (!cfg.contains("://") || !Converters.isSupported(cfg)) continue
+                        add(
+                            TestResult(
+                                cfg = cfg,
+                                ok = true,
+                                latencyMs = o.optLong("latency_ms", 0L),
+                                speedKbps = o.optDouble("speed_kbps", 0.0),
+                                testedAtMs = o.optLong("tested_at_ms", 0L),
+                                establishMs = o.optLong("establish_ms", 0L),
+                                jitterMs = o.optDouble("jitter_ms", 0.0),
+                                stabilityScore = o.optDouble("stability_score", 0.0),
+                            )
+                        )
+                    }
+                }
+            }.getOrDefault(emptyList())
+            if (parsed.isNotEmpty()) return parsed
+            return emptyList()
+        }
+        val otherProfileFile = profileResultsFile(
+            if (profile == ScanNetworkProfile.WIFI) ScanNetworkProfile.MOBILE_DATA else ScanNetworkProfile.WIFI
+        )
+        if (!otherProfileFile.exists() &&
+            ClientDatabase.getInstance(ctx).getPersonalizedRankings(profile, LocalPoolTier.TOP_50).isNotEmpty()
+        ) {
+            return loadSavedBest()
+        }
+        return emptyList()
+    }
+
+    // ─────────── سجل الحذف الفوري المعزول حسب الشبكة (دورة 4 ساعات) دون المساس ببصمات Top-500 ───────────
     private fun purgedDeadFile(profile: ScanNetworkProfile): File =
         File(dir, "purged_dead_${profile.code}.json")
 
@@ -818,6 +887,14 @@ class Repo(
         runCatching {
             if (remainingPool.isNotEmpty()) {
                 writeAll(remainingPool)
+            }
+            val savedProf = loadSavedResultsForProfile(profile).filterNot { r ->
+                val c = Converters.cleanUri(r.cfg)
+                val sid = Converters.stableServerId(c)
+                c in purgeableCleanUris || (sid.isNotBlank() && sid in deadIds)
+            }
+            if (savedProf.isNotEmpty()) {
+                saveProfileResults(profile, savedProf)
             }
             val savedBest = loadSavedBest().filterNot { r ->
                 val c = Converters.cleanUri(r.cfg)

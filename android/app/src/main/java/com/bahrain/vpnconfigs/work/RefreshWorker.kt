@@ -1,29 +1,22 @@
 // =====================================================================
-// RefreshWorker.kt — العامل الدوري الموحّد كل 3 ساعات لفحص جودة السيرفرات:
+// RefreshWorker.kt — العامل الدوري الموحّد كل 4 ساعات لفحص جودة السيرفرات وحفظها في القوائم:
 //   • يحترم خيار الإعدادات Automatic Server Quality Testing والبطارية (>= 25%).
 //   • يتخطى الفحص الثقيل فورًا إذا كان الـ VPN أو الـ VPN Hotspot نشطًا لعدم إزعاج التصفح.
-//   • يحدّث حزمة الـ Top 500، يشغّل الفحص الدفعي مع قياس سرعة 600 KB لأفضل 15 سيرفر فقط (~9 MB)،
-//     يخزّن النتائج معزولة بين WIFI و MOBILE_DATA، يحذف الميت فورًا (مع Offline Guard)،
-//     ويزامن تقارير المجتمع Zero-PII من نفس القياسات دون إعادة فحص مزدوج.
+//   • يحدّث حزمة الـ Top 500 من GitHub (مع العودة للكاش المحلي الموثّق عند تعذّر الوصول المؤقت)،
+//     يشغّل الفحص الدفعي مع قياس سرعة 600 KB لأفضل 25 سيرفر، ويحفظ كافة النتائج في قوائم التطبيق:
+//     SQLite + local_results_<profile>.json + bahrain-vpn-best.txt + bahrain-vpn-sub.txt
+//     مع عزل WIFI عن MOBILE_DATA وحذف الميت فورًا (مع Offline Guard) ومزامنة تقارير المجتمع.
 // =====================================================================
 package com.bahrain.vpnconfigs.work
 
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.bahrain.vpnconfigs.community.CommunityTestingManager
-import com.bahrain.vpnconfigs.data.ClientDatabase
-import com.bahrain.vpnconfigs.data.DeadConfigPurgePolicy
 import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.data.Repo
-import com.bahrain.vpnconfigs.data.ResultLine
 import com.bahrain.vpnconfigs.data.ScanNetworkProfile
-import com.bahrain.vpnconfigs.engine.Converters
-import com.bahrain.vpnconfigs.engine.LocalScanMode
-import com.bahrain.vpnconfigs.engine.PersonalizedTop50Ranker
+import com.bahrain.vpnconfigs.engine.ScanRuntimeCoordinator
 import com.bahrain.vpnconfigs.engine.SequentialTunnelScanner
-import com.bahrain.vpnconfigs.engine.ServerSortMode
-import com.bahrain.vpnconfigs.enterprise.EnterpriseLicenseGuard
 import com.bahrain.vpnconfigs.hotspot.VpnHotspotManager
 import com.bahrain.vpnconfigs.vpn.NetworkAwarenessMonitor
 import com.bahrain.vpnconfigs.vpn.VpnStateManager
@@ -56,101 +49,37 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
 
         val repo = Repo(appCtx)
         val res = repo.loadRemote(prefs.feedProfile)
-        if (res.configs.isEmpty() || res.fromCacheFallback || res.error != null) {
+        val livePoolOk = res.configs.isNotEmpty() && !res.fromCacheFallback && res.error == null
+        val cachedFallback = if (!livePoolOk) repo.loadCached(prefs.feedProfile) else null
+        val resolvedConfigs = if (res.configs.isNotEmpty()) res.configs else cachedFallback?.configs.orEmpty()
+        val resolvedFingerprints = if (res.serverFingerprints.isNotEmpty()) {
+            res.serverFingerprints
+        } else {
+            cachedFallback?.serverFingerprints.orEmpty()
+        }
+
+        if (resolvedConfigs.isEmpty()) {
             return Result.retry()
         }
-        prefs.lastRefreshWallMs = System.currentTimeMillis()
-        repo.clearPurgedDeadForProfile(netProfile)
+        if (livePoolOk) {
+            prefs.lastRefreshWallMs = System.currentTimeMillis()
+            repo.clearPurgedDeadForProfile(netProfile)
+        }
 
         val scanner = SequentialTunnelScanner(appCtx)
         if (!scanner.engineAvailable) {
-            runCatching { repo.writeAll(res.configs) }
+            runCatching { repo.writeAll(resolvedConfigs) }
             return Result.success()
         }
 
-        val clientDb = ClientDatabase.getInstance(appCtx)
-        val licenseGuard = EnterpriseLicenseGuard(appCtx)
-        val vipClean = licenseGuard.getAuthorizedVipNodes().map { Converters.cleanUri(it.uri) }.toHashSet()
-        val favClean = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
-        val favIds = clientDb.favoriteServerIds()
-        val pool = (vipClean + prefs.customConfigs + res.configs).distinct()
-
-        val summary = runCatching {
-            scanner.executeScan(
-                scanMode = LocalScanMode.FULL_SCAN,
-                allCandidateConfigs = pool,
-                fingerprintsById = res.serverFingerprints,
-                networkProfile = netProfile,
-                isMetered = isMetered,
-                timeoutSec = prefs.timeoutSec,
-                dnsServer = prefs.dnsServer,
-                useDoh = prefs.dnsDoh,
-                isBackgroundRun = true,
-                skipFreshWithinTtl = true,
-            )
-        }.getOrNull() ?: return Result.success()
-
-        if (!summary.offlineGuardTriggered) {
-            val purgeDecision = DeadConfigPurgePolicy.evaluate(
-                currentPool = res.configs,
-                failedUris = summary.failedCleanUris,
-                testedCount = summary.testedCount,
-                aliveCount = summary.results.size,
-                deviceOnline = netMonitor.refreshNow().connected,
-                favoriteCleanUris = favClean,
-                favoriteServerIds = favIds,
-                vipCleanUris = vipClean,
-            )
-            if (purgeDecision.shouldPurge) {
-                if (prefs.customConfigs.isNotEmpty()) {
-                    prefs.customConfigs = prefs.customConfigs.filterNot {
-                        Converters.cleanUri(it) in purgeDecision.purgeableCleanUris
-                    }
-                }
-                repo.recordPurgedDeadAndCleanFiles(
-                    profile = netProfile,
-                    purgeableCleanUris = purgeDecision.purgeableCleanUris,
-                    remainingPool = purgeDecision.remainingPool,
-                    bestLimit = minOf(prefs.bestN, PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT),
-                )
-            } else {
-                runCatching { repo.writeAll(res.configs) }
-            }
-
-            if (summary.results.isNotEmpty()) {
-                val top100Ids = summary.rankingBundle.top100.map { it.serverId }.toHashSet()
-                val exportAlive = summary.results
-                    .filter {
-                        val c = Converters.cleanUri(it.cfg)
-                        c !in vipClean && (top100Ids.isEmpty() || Converters.stableServerId(c) in top100Ids)
-                    }
-                    .sortedWith(
-                        compareByDescending<com.bahrain.vpnconfigs.engine.TestResult> { it.speedKbps }
-                            .thenByDescending { it.stabilityScore }
-                            .thenBy { it.latencyMs }
-                            .thenBy { it.jitterMs }
-                    )
-                if (exportAlive.isNotEmpty()) {
-                    prefs.sortMode = ServerSortMode.FASTEST_DOWNLOAD.key
-                    prefs.rankBySpeed = true
-                    runCatching {
-                        repo.writeBest(
-                            exportAlive.map { ResultLine(it.cfg, it.latencyMs, it.speedKbps, it.testedAtMs) },
-                            minOf(prefs.bestN, PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT),
-                        )
-                    }
-                }
-            }
-
-            // Unified Zero-PII community telemetry sync from the same scan (zero duplicate background probes!)
-            runCatching {
-                CommunityTestingManager.syncFromUnifiedQualityScanIfOptedIn(
-                    ctx = appCtx,
-                    aliveResults = summary.results,
-                )
-            }
-        }
-
-        return Result.success()
+        val ok = ScanRuntimeCoordinator.executeScheduledFourHourScan(
+            ctx = appCtx,
+            baseConfigs = resolvedConfigs,
+            fingerprintsById = resolvedFingerprints,
+            scanProfile = netProfile,
+            isMetered = isMetered,
+            customScanner = scanner,
+        )
+        return if (ok) Result.success() else Result.retry()
     }
 }

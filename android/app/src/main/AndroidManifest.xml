@@ -47,6 +47,16 @@
                 android:value="vpn" />
         </service>
 
+        <!-- خدمة أمامية مؤقتة تضمن استمرار الفحص فائق السرعة دون خنق عند انتقال المستخدم لتطبيق آخر -->
+        <service
+            android:name=".vpn.ServerScanForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="vpn_quality_scan" />
+        </service>
+
         <!-- ودجت الشاشة الرئيسية: زر اتصال سريع مع الحالة -->
         <receiver
             android:name=".vpn.VpnWidgetProvider"
