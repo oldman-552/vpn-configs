@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.bahrain.vpnconfigs"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.bahrain.vpnconfigs"
@@ -16,7 +16,7 @@ android {
         val top500Pub = (project.findProperty("top500PublicKeyB64") as String?)
             ?: System.getenv("TOP500_PUBLIC_KEY_B64") ?: ""
         buildConfigField("String", "TOP500_PUBLIC_KEY_B64", "\"${top500Pub.trim()}\"")
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 2
         versionName = "2.0"
     }

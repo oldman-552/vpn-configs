@@ -38,7 +38,12 @@ com.bahrain.vpnconfigs
 ├── enterprise/                     # ECDSA P-256 license verification, AES-256-GCM VIP nodes, diagnostics, ABI updater
 └── ui/
     ├── AppViewModel.kt             # State holder bridging Repo, Tester, ClientDatabase, and SmartServerSelector
-    ├── Screens.kt                  # ConnectHomeScreen, ServersListScreen, AppsSplitScreen, SettingsAndExportScreen
+    ├── HomeScreen.kt               # ConnectHomeScreen
+    ├── ServersScreen.kt            # ServersListScreen, ServerCard
+    ├── AppsSplitScreen.kt          # AppsSplitScreen
+    ├── SettingsScreen.kt           # SettingsAndExportScreen
+    ├── ScreenComponents.kt         # Shared composables (StatusPill, badges, rows)
+    ├── PublicServerNotice.kt       # First-launch public-server warning
     ├── ConnectionMonitorCard.kt    # SmartSelectionSummaryCard + RealTimeConnectionMonitorCard (live Canvas chart)
     ├── FavoritesScreen.kt          # Grouped, custom-named, performance-ranked Favorites UI
     ├── ServerHistoryScreen.kt      # Paginated, searchable, date-filtered SQLite Session History UI
