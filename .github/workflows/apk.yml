@@ -42,7 +42,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
         with:
-          gradle-version: "8.7"
+          gradle-version: "8.14.3"
 
       - name: Cache native VPN engines (sing-box + hev-socks5-tunnel)
         id: cache-sbx
