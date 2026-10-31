@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "0505a7c6184d",
+    "name": "bahrain-vpn 612",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "51.222.155.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 28.4,
+    "reliability_score": 78.2,
+    "composite_score": 56.2,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 669.0,
+    "jitter_ms": 383.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 2,
+    "score_delta": 21.3,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

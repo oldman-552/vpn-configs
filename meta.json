@@ -1,0 +1,161 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-10-31T15:27:03Z",
+  "duration_sec": 147.3,
+  "degraded_mode": false,
+  "channels_total": 277,
+  "channels_ok": 254,
+  "channels_failed": 23,
+  "github_sources": 26,
+  "github_sources_ok": 20,
+  "raw_collected": 27694,
+  "unique_clean": 13769,
+  "tested": 1200,
+  "alive": 629,
+  "central_top500_qualified": 500,
+  "central_top500_version": 1793460423,
+  "personalized_top50_authority": "ANDROID_LOCAL_ONLY",
+  "quarantined": 254,
+  "skipped_unsupported": 2,
+  "alive_by_protocol": {
+    "vless": 134,
+    "vmess": 70,
+    "trojan": 129,
+    "ss": 172,
+    "hysteria2": 124
+  },
+  "collected_by_protocol": {
+    "hy2": 111,
+    "hysteria2": 124,
+    "ss": 998,
+    "ssr": 2,
+    "trojan": 2154,
+    "tuic": 11,
+    "vless": 7244,
+    "vmess": 3379
+  },
+  "best100_by_protocol": {
+    "vless": 9,
+    "vmess": 11,
+    "trojan": 45,
+    "ss": 20,
+    "hysteria2": 15
+  },
+  "security_summary": {
+    "Verified": 142,
+    "Partial": 337,
+    "Failed": 150
+  },
+  "risk_summary": {
+    "LOW": 142,
+    "MEDIUM": 336,
+    "HIGH": 150,
+    "UNKNOWN": 1
+  },
+  "deduplication": {
+    "raw_input": 27694,
+    "invalid_or_unsafe_rejected": 1148,
+    "layer1_exact_duplicates": 7030,
+    "layer2_identity_duplicates": 5493,
+    "unique_identities": 14023,
+    "unique_endpoints": 8491,
+    "unique_subnets": 5112,
+    "multi_source_corroborated": 7690
+  },
+  "validation_funnel": {
+    "l0_raw_collected": 27694,
+    "l1_unique_valid": 13769,
+    "l2_l3_tested": 1200,
+    "l3_tunnel_alive": 629,
+    "l4_full_probe_pass": 548,
+    "l5_speed_verified": 120,
+    "l6_multi_run_stable": 555
+  },
+  "scoring_weights": {
+    "reliability": 0.35,
+    "throughput": 0.25,
+    "latency": 0.2,
+    "stability": 0.12,
+    "freshness": 0.08
+  },
+  "countries_summary": {
+    "US": 156,
+    "NL": 133,
+    "DE": 48,
+    "XX": 31,
+    "FR": 26,
+    "CA": 22,
+    "HK": 22,
+    "JP": 20,
+    "SG": 20,
+    "PL": 19,
+    "KR": 18,
+    "TW": 15,
+    "IT": 11,
+    "GB": 10,
+    "FI": 9,
+    "ES": 8,
+    "CH": 7,
+    "SE": 6,
+    "IR": 5,
+    "IN": 4
+  },
+  "source_health_summary": {
+    "active": 154,
+    "degraded": 121,
+    "temporarily_failed": 0,
+    "disabled": 0,
+    "quarantined": 28,
+    "retired": 0,
+    "pending_validation": 0
+  },
+  "engines": {
+    "xray": true,
+    "singbox": true
+  },
+  "files": {
+    "alive": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/alive.txt",
+    "best100": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/best100.txt",
+    "sub": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/sub.txt",
+    "reliable": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/reliable.txt",
+    "reliable_sub": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/reliable_sub.txt",
+    "low_latency": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/low_latency.txt",
+    "high_throughput": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/high_throughput.txt",
+    "privacy_aware": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/privacy_aware.txt",
+    "alive_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/alive.json",
+    "countries_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/countries.json",
+    "source_health_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/source_health.json",
+    "quarantined_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/quarantined.json",
+    "api_v1_statistics": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/api/v1/statistics.json",
+    "api_v1_servers": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/api/v1/servers.json",
+    "api_v1_openapi": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/api/v1/openapi.json",
+    "servers_current_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-current.json",
+    "servers_history_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-history.json",
+    "servers_performance_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-performance.json",
+    "servers_statistics_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-statistics.json",
+    "countries_statistics_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/countries-statistics.json",
+    "sources_statistics_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/sources-statistics.json",
+    "top500_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.json",
+    "top500_txt": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.txt",
+    "top500_manifest_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.manifest.json",
+    "top500_delta_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/top500.delta.json",
+    "iran_top500_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/iran-top500.json",
+    "iran_top500_txt": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/iran-top500.txt",
+    "iran_results_json": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/iran-results.json",
+    "all_gz": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/all.txt.gz",
+    "protocols": {
+      "hysteria2": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/protocols/hysteria2.txt",
+      "ss": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/protocols/ss.txt",
+      "trojan": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/protocols/trojan.txt",
+      "vless": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/protocols/vless.txt",
+      "vmess": "https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/protocols/vmess.txt"
+    }
+  },
+  "community_verified_counts": {
+    "IR": 0,
+    "DE": 0,
+    "FR": 0,
+    "TR": 0,
+    "RU": 0
+  }
+}

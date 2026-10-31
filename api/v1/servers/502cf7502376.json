@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "502cf7502376",
+    "name": "bahrain-vpn 24",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "192.236.226.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 80.5,
+    "reliability_score": 87.9,
+    "composite_score": 84.5,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 44.0,
+    "jitter_ms": 6.2,
+    "download_mbps": 17.68,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 2.4,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

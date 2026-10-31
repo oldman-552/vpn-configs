@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "123ca504305b",
+    "name": "bahrain-vpn 107",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "185.215.132.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 79.4,
+    "reliability_score": 73.8,
+    "composite_score": 77.5,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 60.0,
+    "jitter_ms": 2.1,
+    "download_mbps": 14.21,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 1,
+    "score_delta": -2.3,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

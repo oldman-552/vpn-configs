@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6025ca042004",
+    "name": "bahrain-vpn 343",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "132.226.226.0/24",
+    "exit_country": "KR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 63.3,
+    "reliability_score": 87.9,
+    "composite_score": 73.0,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 157.0,
+    "jitter_ms": 36.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 10.1,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

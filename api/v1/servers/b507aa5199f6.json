@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "b507aa5199f6",
+    "name": "bahrain-vpn 373",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "185.121.179.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": false,
+    "performance_score": 53.0,
+    "reliability_score": 60.2,
+    "composite_score": 72.3,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 153.0,
+    "jitter_ms": 5.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -2.5,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

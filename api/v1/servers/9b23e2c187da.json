@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "9b23e2c187da",
+    "name": "bahrain-vpn 134",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "66.163.122.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 71.3,
+    "reliability_score": 87.9,
+    "composite_score": 76.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 82.0,
+    "jitter_ms": 7.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -3.1,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

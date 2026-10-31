@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "0a020ffa73c8",
+    "name": "bahrain-vpn 370",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "216.152.147.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 68.5,
+    "reliability_score": 83.3,
+    "composite_score": 72.4,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 105.0,
+    "jitter_ms": 15.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -6.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

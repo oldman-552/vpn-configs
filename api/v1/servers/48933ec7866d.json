@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "48933ec7866d",
+    "name": "bahrain-vpn 439",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "138.124.180.0/24",
+    "exit_country": "LV",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 63.9,
+    "reliability_score": 83.3,
+    "composite_score": 70.9,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 201.0,
+    "jitter_ms": 13.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -0.1,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

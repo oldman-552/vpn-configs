@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "530f184a5dc9",
+    "name": "bahrain-vpn 342",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "31.172.65.0/24",
+    "exit_country": "SE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 63.0,
+    "reliability_score": 87.9,
+    "composite_score": 73.0,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 185.0,
+    "jitter_ms": 28.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -3.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

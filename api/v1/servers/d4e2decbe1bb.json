@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "d4e2decbe1bb",
+    "name": "bahrain-vpn 44",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "216.152.156.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 78.1,
+    "reliability_score": 83.3,
+    "composite_score": 82.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 62.0,
+    "jitter_ms": 7.7,
+    "download_mbps": 13.74,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": 0.2,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

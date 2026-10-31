@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ad3b31a42891",
+    "name": "bahrain-vpn 315",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "192.142.23.0/24",
+    "exit_country": "SE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.4,
+    "reliability_score": 87.9,
+    "composite_score": 73.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 175.0,
+    "jitter_ms": 20.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -2.2,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

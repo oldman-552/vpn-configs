@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1d714f77cf21",
+    "name": "bahrain-vpn 534",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "104.18.40.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": true,
+    "performance_score": 46.5,
+    "reliability_score": 60.2,
+    "composite_score": 66.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 34.0,
+    "jitter_ms": 33.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -11.1,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "dafcfc97fc33",
+    "name": "bahrain-vpn 311",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "152.70.237.0/24",
+    "exit_country": "KR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 65.0,
+    "reliability_score": 87.9,
+    "composite_score": 73.7,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 154.0,
+    "jitter_ms": 24.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 6.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

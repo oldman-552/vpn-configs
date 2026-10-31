@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "90c213cc65ec",
+    "name": "bahrain-vpn 363",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "8.211.175.0/24",
+    "exit_country": "JP",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 68.8,
+    "reliability_score": 83.3,
+    "composite_score": 72.5,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 106.0,
+    "jitter_ms": 14.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": 2.5,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

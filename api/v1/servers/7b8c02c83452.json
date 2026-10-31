@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7b8c02c83452",
+    "name": "bahrain-vpn 234",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "185.98.63.0/24",
+    "exit_country": "RU",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.5,
+    "reliability_score": 87.9,
+    "composite_score": 74.8,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 156.0,
+    "jitter_ms": 4.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -3.1,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

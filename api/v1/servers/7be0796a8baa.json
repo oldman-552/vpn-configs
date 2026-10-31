@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7be0796a8baa",
+    "name": "bahrain-vpn 316",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "95.128.71.0/24",
+    "exit_country": "BY",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.2,
+    "reliability_score": 87.9,
+    "composite_score": 73.6,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 200.0,
+    "jitter_ms": 11.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -5.4,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

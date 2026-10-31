@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "fa88329eb153",
+    "name": "bahrain-vpn 462",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "38.107.234.0/24",
+    "exit_country": "KZ",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 52.8,
+    "reliability_score": 87.9,
+    "composite_score": 70.0,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 326.0,
+    "jitter_ms": 80.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 0.2,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

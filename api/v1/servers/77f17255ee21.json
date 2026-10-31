@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "77f17255ee21",
+    "name": "bahrain-vpn 505",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "*.rvpn.app",
+    "exit_country": "SE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 46.6,
+    "reliability_score": 87.9,
+    "composite_score": 67.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 377.0,
+    "jitter_ms": 148.2,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 32.6,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

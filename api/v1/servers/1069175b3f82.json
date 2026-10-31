@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1069175b3f82",
+    "name": "bahrain-vpn 530",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "9.247.54.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 53.1,
+    "reliability_score": 83.3,
+    "composite_score": 66.7,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 265.0,
+    "jitter_ms": 102.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -18.4,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

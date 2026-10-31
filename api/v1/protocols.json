@@ -1,0 +1,66 @@
+{
+  "api_version": "1.0.0",
+  "generated_at": "2026-10-31T15:27:03Z",
+  "protocols": [
+    {
+      "protocol": "ss",
+      "active_servers": 172,
+      "tested_candidates": 324,
+      "success_rate": 0.5309,
+      "avg_latency_ms": 284.8,
+      "avg_download_mbps": 15.13,
+      "avg_reliability_score": 82.5,
+      "verified_security_count": 0
+    },
+    {
+      "protocol": "vless",
+      "active_servers": 134,
+      "tested_candidates": 229,
+      "success_rate": 0.5852,
+      "avg_latency_ms": 216.5,
+      "avg_download_mbps": 19.88,
+      "avg_reliability_score": 79.3,
+      "verified_security_count": 105
+    },
+    {
+      "protocol": "trojan",
+      "active_servers": 129,
+      "tested_candidates": 241,
+      "success_rate": 0.5353,
+      "avg_latency_ms": 110.7,
+      "avg_download_mbps": 20.72,
+      "avg_reliability_score": 79.7,
+      "verified_security_count": 14
+    },
+    {
+      "protocol": "hysteria2",
+      "active_servers": 124,
+      "tested_candidates": 232,
+      "success_rate": 0.5345,
+      "avg_latency_ms": 173.2,
+      "avg_download_mbps": 19.98,
+      "avg_reliability_score": 82.7,
+      "verified_security_count": 11
+    },
+    {
+      "protocol": "vmess",
+      "active_servers": 70,
+      "tested_candidates": 163,
+      "success_rate": 0.4294,
+      "avg_latency_ms": 207.7,
+      "avg_download_mbps": 13.87,
+      "avg_reliability_score": 74.2,
+      "verified_security_count": 12
+    },
+    {
+      "protocol": "tuic",
+      "active_servers": 0,
+      "tested_candidates": 11,
+      "success_rate": 0.0,
+      "avg_latency_ms": 0.0,
+      "avg_download_mbps": 0.0,
+      "avg_reliability_score": 0.0,
+      "verified_security_count": 0
+    }
+  ]
+}

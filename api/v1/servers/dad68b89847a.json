@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "dad68b89847a",
+    "name": "bahrain-vpn 385",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "82.38.31.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 52.7,
+    "reliability_score": 60.2,
+    "composite_score": 72.2,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 162.0,
+    "jitter_ms": 3.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -15.6,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

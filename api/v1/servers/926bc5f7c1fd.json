@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "926bc5f7c1fd",
+    "name": "bahrain-vpn 446",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "145.239.55.0/24",
+    "exit_country": "FR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 50.5,
+    "reliability_score": 87.9,
+    "composite_score": 70.6,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 299.0,
+    "jitter_ms": 123.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -8.3,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

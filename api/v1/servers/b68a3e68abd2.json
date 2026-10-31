@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "b68a3e68abd2",
+    "name": "bahrain-vpn 522",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "38.91.107.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 55.6,
+    "reliability_score": 55.6,
+    "composite_score": 67.1,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 82.0,
+    "jitter_ms": 8.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -24.5,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "d4eb828a6fa2",
+    "name": "bahrain-vpn 572",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "202.50.253.0/24",
+    "exit_country": "IT",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 52.5,
+    "reliability_score": 46.1,
+    "composite_score": 63.5,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 170.0,
+    "jitter_ms": 0.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 1,
+    "score_delta": -12.7,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

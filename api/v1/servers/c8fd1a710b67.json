@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c8fd1a710b67",
+    "name": "bahrain-vpn 589",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "15.204.247.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 29.3,
+    "reliability_score": 87.9,
+    "composite_score": 60.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 511.0,
+    "jitter_ms": 723.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -28.5,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

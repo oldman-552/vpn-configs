@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "07610d31b64d",
+    "name": "bahrain-vpn 117",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "149.88.23.0/24",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.2,
+    "reliability_score": 87.9,
+    "composite_score": 77.1,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 164.0,
+    "jitter_ms": 2.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 4.3,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

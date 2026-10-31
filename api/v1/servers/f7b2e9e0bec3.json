@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "f7b2e9e0bec3",
+    "name": "bahrain-vpn 512",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "172.64.157.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": true,
+    "performance_score": 47.9,
+    "reliability_score": 60.2,
+    "composite_score": 67.2,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 34.0,
+    "jitter_ms": 29.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -11.0,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

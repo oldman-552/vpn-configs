@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "34a01d12e83b",
+    "name": "bahrain-vpn 291",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.150333.xyz",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 65.4,
+    "reliability_score": 87.9,
+    "composite_score": 73.9,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 163.0,
+    "jitter_ms": 18.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 2.2,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

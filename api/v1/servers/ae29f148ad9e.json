@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ae29f148ad9e",
+    "name": "bahrain-vpn 607",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "104.17.147.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 40.4,
+    "reliability_score": 18.5,
+    "composite_score": 57.2,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 106.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 1,
+    "score_delta": -5.7,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

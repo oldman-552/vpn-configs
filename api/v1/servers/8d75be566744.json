@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "8d75be566744",
+    "name": "bahrain-vpn 433",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.h1cloud.net",
+    "exit_country": "EE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.6,
+    "reliability_score": 83.3,
+    "composite_score": 71.2,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 201.0,
+    "jitter_ms": 6.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -1.9,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

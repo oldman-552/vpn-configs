@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "15db5525f555",
+    "name": "bahrain-vpn 290",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "*.fastervpn.world",
+    "exit_country": "TW",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 65.8,
+    "reliability_score": 87.9,
+    "composite_score": 74.0,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 137.0,
+    "jitter_ms": 24.2,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 3.6,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

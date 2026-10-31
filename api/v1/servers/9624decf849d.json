@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "9624decf849d",
+    "name": "bahrain-vpn 493",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.datasynctrue.online",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": false,
+    "performance_score": 49.9,
+    "reliability_score": 60.2,
+    "composite_score": 68.5,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 213.0,
+    "jitter_ms": 9.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 4.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

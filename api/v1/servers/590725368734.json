@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "590725368734",
+    "name": "bahrain-vpn 16",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "*.mi11o4ka.com",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 82.6,
+    "reliability_score": 87.9,
+    "composite_score": 85.1,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 62.0,
+    "jitter_ms": 17.0,
+    "download_mbps": 34.1,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 4.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

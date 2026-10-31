@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ba80c5705301",
+    "name": "bahrain-vpn 447",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "152.70.237.0/24",
+    "exit_country": "KR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 63.3,
+    "reliability_score": 83.3,
+    "composite_score": 70.5,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 162.0,
+    "jitter_ms": 35.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": 5.7,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

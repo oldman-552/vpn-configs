@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c74c4c96cb69",
+    "name": "bahrain-vpn 627",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "104.17.0.0/24",
+    "exit_country": "CA",
+    "country_source": "remark_hint",
+    "is_cdn": true,
+    "performance_score": 28.6,
+    "reliability_score": 14.4,
+    "composite_score": 47.1,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 513.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 50.0,
+    "consecutive_alive": 1,
+    "score_delta": 0.0,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

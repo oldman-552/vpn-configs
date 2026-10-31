@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "a731e1d917ed",
+    "name": "bahrain-vpn 91",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "*.windowsmsidownloads.com",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 71.7,
+    "reliability_score": 87.9,
+    "composite_score": 78.7,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 97.0,
+    "jitter_ms": 1.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 12.2,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

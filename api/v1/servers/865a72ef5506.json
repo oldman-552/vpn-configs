@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "865a72ef5506",
+    "name": "bahrain-vpn 608",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "152.67.8.0/24",
+    "exit_country": "IN",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 36.4,
+    "reliability_score": 22.9,
+    "composite_score": 57.2,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 220.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 2,
+    "score_delta": -23.0,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

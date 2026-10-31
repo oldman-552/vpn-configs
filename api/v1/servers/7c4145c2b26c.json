@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7c4145c2b26c",
+    "name": "bahrain-vpn 125",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "91.107.169.0/24",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.0,
+    "reliability_score": 87.9,
+    "composite_score": 77.0,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 164.0,
+    "jitter_ms": 4.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -3.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

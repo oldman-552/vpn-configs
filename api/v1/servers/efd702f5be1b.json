@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "efd702f5be1b",
+    "name": "bahrain-vpn 577",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.dontblockmepls.com",
+    "exit_country": "PL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 36.1,
+    "reliability_score": 60.2,
+    "composite_score": 63.0,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 298.0,
+    "jitter_ms": 181.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -15.5,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

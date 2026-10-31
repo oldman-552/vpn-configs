@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7f99af5eac34",
+    "name": "bahrain-vpn 604",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "152.67.200.0/24",
+    "exit_country": "KR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 29.0,
+    "reliability_score": 32.5,
+    "composite_score": 57.8,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 493.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -22.7,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

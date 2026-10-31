@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "52b10e9f11bd",
+    "name": "bahrain-vpn 408",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "*.blog-forme.ru",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 66.5,
+    "reliability_score": 83.3,
+    "composite_score": 71.8,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 168.0,
+    "jitter_ms": 6.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": 7.1,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

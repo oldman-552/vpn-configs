@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "12353922b440",
+    "name": "bahrain-vpn 51",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "54.39.96.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 77.9,
+    "reliability_score": 83.3,
+    "composite_score": 82.3,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 67.0,
+    "jitter_ms": 1.3,
+    "download_mbps": 11.77,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": 0.2,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

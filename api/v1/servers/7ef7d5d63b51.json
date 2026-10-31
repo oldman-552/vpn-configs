@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7ef7d5d63b51",
+    "name": "bahrain-vpn 425",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "31.77.199.0/24",
+    "exit_country": "FI",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 63.2,
+    "reliability_score": 83.3,
+    "composite_score": 71.5,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 224.0,
+    "jitter_ms": 8.2,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -4.7,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "36678baf97da",
+    "name": "bahrain-vpn 622",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "51.222.200.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 11.8,
+    "reliability_score": 60.2,
+    "composite_score": 51.1,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 3150.0,
+    "jitter_ms": 443.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 7.0,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

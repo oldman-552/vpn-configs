@@ -1,0 +1,98 @@
+{
+  "api_version": "1.0.0",
+  "generated_at": "2026-10-31T15:27:03Z",
+  "overview": {
+    "total_collected_configs": 27694,
+    "unique_clean_configs": 13769,
+    "tested_configs": 1200,
+    "active_servers": 629,
+    "healthy_servers": 548,
+    "failed_servers": 571,
+    "quarantined_servers": 254,
+    "monitored_sources": 303,
+    "last_successful_execution": "2026-10-31T15:27:03Z",
+    "pipeline_duration_sec": 147.3,
+    "degraded_mode": false
+  },
+  "performance_analytics": {
+    "avg_latency_ms": 204.0,
+    "avg_jitter_ms": 49.6,
+    "avg_download_mbps": 19.2,
+    "avg_packet_loss_pct": 5.35,
+    "historical_availability_pct": 96.93,
+    "avg_performance_score": 62.8,
+    "avg_reliability_score": 80.3
+  },
+  "security_analytics": {
+    "security_assessments": {
+      "Verified": 142,
+      "Partial": 337,
+      "Failed": 150
+    },
+    "risk_levels": {
+      "LOW": 142,
+      "MEDIUM": 336,
+      "HIGH": 150,
+      "UNKNOWN": 1
+    },
+    "quarantined_reasons": {
+      "broken_ss_cipher": 143,
+      "suspicious_infrastructure_port": 43,
+      "invalid_or_missing_reality_public_key": 36,
+      "unencrypted_vmess_none_without_tls": 32
+    }
+  },
+  "history": [
+    {
+      "timestamp": "2026-10-31T14:46:28Z",
+      "collected": 64018,
+      "unique_clean": 38352,
+      "tested": 1200,
+      "active": 601,
+      "healthy": 514,
+      "failed": 599,
+      "quarantined": 424,
+      "avg_latency_ms": 197.7,
+      "avg_jitter_ms": 63.0,
+      "avg_download_mbps": 17.12,
+      "avg_packet_loss_pct": 5.71,
+      "avg_performance_score": 61.9,
+      "avg_reliability_score": 71.7,
+      "active_sources": 154
+    },
+    {
+      "timestamp": "2026-10-31T15:07:34Z",
+      "collected": 16848,
+      "unique_clean": 12294,
+      "tested": 1200,
+      "active": 601,
+      "healthy": 535,
+      "failed": 599,
+      "quarantined": 235,
+      "avg_latency_ms": 168.9,
+      "avg_jitter_ms": 54.1,
+      "avg_download_mbps": 17.18,
+      "avg_packet_loss_pct": 4.27,
+      "avg_performance_score": 64.1,
+      "avg_reliability_score": 77.3,
+      "active_sources": 154
+    },
+    {
+      "timestamp": "2026-10-31T15:27:03Z",
+      "collected": 27694,
+      "unique_clean": 13769,
+      "tested": 1200,
+      "active": 629,
+      "healthy": 548,
+      "failed": 571,
+      "quarantined": 254,
+      "avg_latency_ms": 204.0,
+      "avg_jitter_ms": 49.6,
+      "avg_download_mbps": 19.2,
+      "avg_packet_loss_pct": 5.35,
+      "avg_performance_score": 62.8,
+      "avg_reliability_score": 80.3,
+      "active_sources": 154
+    }
+  ]
+}

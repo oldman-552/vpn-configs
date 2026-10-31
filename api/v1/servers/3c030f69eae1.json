@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "3c030f69eae1",
+    "name": "bahrain-vpn 331",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "102.37.156.0/24",
+    "exit_country": "ZA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 60.8,
+    "reliability_score": 87.9,
+    "composite_score": 73.3,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 280.0,
+    "jitter_ms": 1.2,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -2.7,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

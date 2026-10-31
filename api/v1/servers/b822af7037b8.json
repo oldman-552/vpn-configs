@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "b822af7037b8",
+    "name": "bahrain-vpn 626",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "152.67.200.0/24",
+    "exit_country": "KR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 5.7,
+    "reliability_score": 60.2,
+    "composite_score": 47.3,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 1867.0,
+    "jitter_ms": 2895.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -23.7,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

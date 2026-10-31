@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ff94ef58cd08",
+    "name": "bahrain-vpn 312",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.poncheki.xyz",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.8,
+    "reliability_score": 87.9,
+    "composite_score": 73.7,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 174.0,
+    "jitter_ms": 18.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 0.6,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

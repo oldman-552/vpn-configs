@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "88e665e11f4f",
+    "name": "bahrain-vpn 375",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "13.36.234.0/24",
+    "exit_country": "FR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.8,
+    "reliability_score": 83.3,
+    "composite_score": 72.3,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 155.0,
+    "jitter_ms": 2.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -4.7,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "5d73e06de6e7",
+    "name": "bahrain-vpn 546",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "66.94.121.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 50.7,
+    "reliability_score": 83.3,
+    "composite_score": 65.7,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 97.0,
+    "jitter_ms": 404.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -11.7,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

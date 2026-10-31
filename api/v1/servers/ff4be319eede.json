@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ff4be319eede",
+    "name": "bahrain-vpn 561",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "104.16.34.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 43.7,
+    "reliability_score": 83.3,
+    "composite_score": 64.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 207.0,
+    "jitter_ms": 495.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -19.2,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

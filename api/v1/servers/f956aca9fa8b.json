@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "f956aca9fa8b",
+    "name": "bahrain-vpn 603",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "51.75.118.0/24",
+    "exit_country": "FR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 38.9,
+    "reliability_score": 18.5,
+    "composite_score": 57.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 148.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 1,
+    "score_delta": -24.4,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

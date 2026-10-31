@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "99257c9e17f8",
+    "name": "bahrain-vpn 421",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "160.187.100.0/24",
+    "exit_country": "TW",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 66.1,
+    "reliability_score": 83.3,
+    "composite_score": 71.6,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 145.0,
+    "jitter_ms": 18.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": 4.2,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

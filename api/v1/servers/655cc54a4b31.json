@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "655cc54a4b31",
+    "name": "bahrain-vpn 191",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "*.levikogjgfdd.ir",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.1,
+    "reliability_score": 87.9,
+    "composite_score": 75.5,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 163.0,
+    "jitter_ms": 4.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 4.3,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

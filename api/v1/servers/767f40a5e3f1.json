@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "767f40a5e3f1",
+    "name": "bahrain-vpn 590",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "104.25.10.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 50.3,
+    "reliability_score": 48.8,
+    "composite_score": 60.4,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 164.0,
+    "jitter_ms": 27.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 1,
+    "score_delta": 0.0,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

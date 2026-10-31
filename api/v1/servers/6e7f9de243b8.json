@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6e7f9de243b8",
+    "name": "bahrain-vpn 79",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "23.162.200.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 61.6,
+    "reliability_score": 60.2,
+    "composite_score": 79.7,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 58.0,
+    "jitter_ms": 2.9,
+    "download_mbps": 12.82,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 0.9,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

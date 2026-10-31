@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "d19bbbfe091a",
+    "name": "bahrain-vpn 420",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "140.238.213.0/24",
+    "exit_country": "CH",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 65.9,
+    "reliability_score": 83.3,
+    "composite_score": 71.6,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 171.0,
+    "jitter_ms": 10.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -5.2,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

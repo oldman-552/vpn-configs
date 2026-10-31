@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "5feb8632eb13",
+    "name": "bahrain-vpn 437",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "*.zestapp778.com",
+    "exit_country": "TH",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.2,
+    "reliability_score": 83.3,
+    "composite_score": 71.0,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 211.0,
+    "jitter_ms": 5.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": 7.0,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

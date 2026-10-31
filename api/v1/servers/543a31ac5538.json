@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "543a31ac5538",
+    "name": "bahrain-vpn 507",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.webredirect.org",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": false,
+    "performance_score": 47.6,
+    "reliability_score": 60.2,
+    "composite_score": 67.6,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 281.0,
+    "jitter_ms": 0.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -0.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

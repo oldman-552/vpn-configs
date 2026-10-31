@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-10-31T15:45:38Z",
+  "generated_at_epoch": 1793461538,
+  "country_code": "DE",
+  "country_slug": "germany",
+  "role": "COMMUNITY_VERIFIED_COUNTRY_POOL",
+  "personalized_top50_authority": "ANDROID_LOCAL_ONLY",
+  "verification_policy": "VERIFIED_NON_VPN_DIRECT_ORIGIN_ONLY",
+  "min_distinct_reporters": 2,
+  "qualified_count": 0,
+  "servers": []
+}

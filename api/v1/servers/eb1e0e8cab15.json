@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "eb1e0e8cab15",
+    "name": "bahrain-vpn 26",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "66.163.112.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 82.2,
+    "reliability_score": 83.3,
+    "composite_score": 84.4,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 51.0,
+    "jitter_ms": 0.8,
+    "download_mbps": 19.54,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": 7.4,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

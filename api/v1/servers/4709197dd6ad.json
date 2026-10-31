@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "4709197dd6ad",
+    "name": "bahrain-vpn 582",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.levikogjgfdd.ir",
+    "exit_country": "FR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 35.5,
+    "reliability_score": 32.5,
+    "composite_score": 61.9,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 249.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -28.3,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

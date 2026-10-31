@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "dc8bd2f5d866",
+    "name": "bahrain-vpn 49",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.freesocks.work",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 77.3,
+    "reliability_score": 87.9,
+    "composite_score": 82.5,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 76.0,
+    "jitter_ms": 20.9,
+    "download_mbps": 17.54,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -1.5,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

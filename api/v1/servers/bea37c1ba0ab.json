@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "bea37c1ba0ab",
+    "name": "bahrain-vpn 356",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "2.59.21.0/24",
+    "exit_country": "AT",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 62.0,
+    "reliability_score": 87.9,
+    "composite_score": 72.7,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 202.0,
+    "jitter_ms": 31.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -2.9,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

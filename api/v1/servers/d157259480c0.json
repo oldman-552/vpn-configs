@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "d157259480c0",
+    "name": "bahrain-vpn 160",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "67.220.73.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.8,
+    "reliability_score": 87.9,
+    "composite_score": 75.7,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 74.0,
+    "jitter_ms": 39.7,
+    "download_mbps": 4.25,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -1.6,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

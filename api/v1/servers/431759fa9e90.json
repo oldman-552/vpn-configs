@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "431759fa9e90",
+    "name": "bahrain-vpn 116",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "*.zestapp778.com",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 74.1,
+    "reliability_score": 87.9,
+    "composite_score": 77.1,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 58.0,
+    "jitter_ms": 1.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 8.9,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

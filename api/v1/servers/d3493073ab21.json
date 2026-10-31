@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "d3493073ab21",
+    "name": "bahrain-vpn 103",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "84.17.41.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 74.3,
+    "reliability_score": 87.9,
+    "composite_score": 77.9,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 48.0,
+    "jitter_ms": 3.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 13.9,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "41c052868e7c",
+    "name": "bahrain-vpn 327",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "45.198.55.0/24",
+    "exit_country": "ES",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 63.6,
+    "reliability_score": 87.9,
+    "composite_score": 73.3,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 183.0,
+    "jitter_ms": 24.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 3.0,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

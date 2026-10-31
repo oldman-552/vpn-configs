@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "aa4686dfeaa1",
+    "name": "bahrain-vpn 379",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.divarkhaghazi.com",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.3,
+    "reliability_score": 78.2,
+    "composite_score": 72.3,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 163.0,
+    "jitter_ms": 2.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 2,
+    "score_delta": -3.5,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

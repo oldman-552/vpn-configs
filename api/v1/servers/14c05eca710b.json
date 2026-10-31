@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "14c05eca710b",
+    "name": "bahrain-vpn 313",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "104.16.34.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": true,
+    "performance_score": 59.5,
+    "reliability_score": 60.2,
+    "composite_score": 73.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 28.0,
+    "jitter_ms": 2.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 0.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

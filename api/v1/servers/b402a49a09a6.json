@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "b402a49a09a6",
+    "name": "bahrain-vpn 588",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "51.38.71.0/24",
+    "exit_country": "GB",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 23.9,
+    "reliability_score": 87.9,
+    "composite_score": 60.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 991.0,
+    "jitter_ms": 384.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -44.1,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

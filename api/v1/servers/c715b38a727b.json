@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c715b38a727b",
+    "name": "bahrain-vpn 355",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "189.24.79.0/24",
+    "exit_country": "HK",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 62.5,
+    "reliability_score": 87.9,
+    "composite_score": 72.7,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 157.0,
+    "jitter_ms": 42.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 0.9,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

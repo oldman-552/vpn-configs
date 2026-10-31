@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ff4143f0d335",
+    "name": "bahrain-vpn 583",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "*.windowssearchtools.com",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": false,
+    "performance_score": 37.8,
+    "reliability_score": 28.0,
+    "composite_score": 61.8,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 179.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -17.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

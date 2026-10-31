@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7ce68e62bfd2",
+    "name": "bahrain-vpn 268",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "217.142.138.0/24",
+    "exit_country": "KR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.8,
+    "reliability_score": 87.9,
+    "composite_score": 74.4,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 148.0,
+    "jitter_ms": 27.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 8.0,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1975c5612d88",
+    "name": "bahrain-vpn 625",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "15.204.247.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 19.7,
+    "reliability_score": 22.9,
+    "composite_score": 47.4,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 1166.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 2,
+    "score_delta": -2.3,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

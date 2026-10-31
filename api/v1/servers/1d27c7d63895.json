@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1d27c7d63895",
+    "name": "bahrain-vpn 409",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "216.152.147.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 65.6,
+    "reliability_score": 83.3,
+    "composite_score": 71.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 87.0,
+    "jitter_ms": 32.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -7.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

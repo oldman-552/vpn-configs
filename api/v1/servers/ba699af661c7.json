@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ba699af661c7",
+    "name": "bahrain-vpn 508",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "54.37.131.0/24",
+    "exit_country": "PL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 44.4,
+    "reliability_score": 87.9,
+    "composite_score": 67.6,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 406.0,
+    "jitter_ms": 171.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 3.8,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

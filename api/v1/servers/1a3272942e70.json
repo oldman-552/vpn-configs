@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1a3272942e70",
+    "name": "bahrain-vpn 560",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "185.22.155.0/24",
+    "exit_country": "RU",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 57.8,
+    "reliability_score": 73.8,
+    "composite_score": 64.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 292.0,
+    "jitter_ms": 31.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 1,
+    "score_delta": 6.3,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1da80e6090e8",
+    "name": "bahrain-vpn 201",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "62.210.7.0/24",
+    "exit_country": "FR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 68.4,
+    "reliability_score": 87.9,
+    "composite_score": 75.2,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 145.0,
+    "jitter_ms": 2.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -4.1,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

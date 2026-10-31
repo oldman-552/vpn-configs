@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "71f3eb1ca9e7",
+    "name": "bahrain-vpn 220",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "51.158.206.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.6,
+    "reliability_score": 87.9,
+    "composite_score": 74.9,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 151.0,
+    "jitter_ms": 5.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -2.9,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

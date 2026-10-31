@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6fac3e8c2026",
+    "name": "bahrain-vpn 347",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "195.123.221.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 62.9,
+    "reliability_score": 87.9,
+    "composite_score": 73.0,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 187.0,
+    "jitter_ms": 29.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -8.0,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

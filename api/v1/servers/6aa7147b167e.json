@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6aa7147b167e",
+    "name": "bahrain-vpn 506",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "216.9.225.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 44.6,
+    "reliability_score": 87.9,
+    "composite_score": 67.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 394.0,
+    "jitter_ms": 172.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -28.4,
+    "verified_at": "2026-10-31T15:27:03Z"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-10-31T15:27:03Z",
+  "overview": {
+    "total_discovered_servers": 39097,
+    "currently_operational_servers": 707,
+    "unstable_servers": 125,
+    "failed_servers": 1215,
+    "suppressed_servers": 0,
+    "quarantined_servers": 0,
+    "retired_servers": 0,
+    "newly_discovered_24h": 39097,
+    "removed_from_active_rotation": 0
+  },
+  "status_breakdown": {
+    "DISCOVERED": 37050,
+    "FAILED": 1215,
+    "OPERATIONAL": 707,
+    "UNSTABLE": 125
+  },
+  "failure_categories": {
+    "TLS_ERROR": 5,
+    "CONNECTION_TIMEOUT": 1
+  },
+  "daily_trends": [
+    {
+      "day_bucket": "2026-10-31",
+      "tracked_servers": 2047,
+      "avg_latency_ms": 191.13,
+      "avg_p95_latency_ms": 234.6,
+      "avg_download_kbps": 2176.9,
+      "peak_download_kbps": 6860.26,
+      "avg_packet_loss_pct": 64.04,
+      "avg_observed_uptime_pct": 37.74
+    }
+  ]
+}
