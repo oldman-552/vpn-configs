@@ -1306,7 +1306,7 @@ object VpnHotspotManager {
 
         // إذا كانت واجهة الهوتسبوت في نطاق 10.x.y.z، نحدّث استثناءات مسار TUN تلقائيًا لعدم حجبها محليًا
         if (!isTestHarness && allIfaces.any { it.ipv4Address.startsWith("10.") }) {
-            com.bahrain.vpnconfigs.vpn.BahrainVpnService.activeInstance?.requestReloadTun()
+            com.bahrain.vpnconfigs.vpn.BahrainVpnService.reloadTunIfActive()
         }
 
         stopServerOnly()
@@ -1506,7 +1506,7 @@ object VpnHotspotManager {
                             dynSrv.start()
                             secondaryServers[cand.ipv4Address] = dynSrv
                             if (cand.ipv4Address.startsWith("10.")) {
-                                com.bahrain.vpnconfigs.vpn.BahrainVpnService.activeInstance?.requestReloadTun()
+                                com.bahrain.vpnconfigs.vpn.BahrainVpnService.reloadTunIfActive()
                             }
                         }
                     }

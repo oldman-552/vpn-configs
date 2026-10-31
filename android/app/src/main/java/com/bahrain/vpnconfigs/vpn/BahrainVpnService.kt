@@ -142,6 +142,10 @@ class BahrainVpnService : VpnService() {
                 }
             }
         }
+
+        fun reloadTunIfActive() {
+            activeInstance?.requestReloadTun()
+        }
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
