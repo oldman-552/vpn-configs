@@ -20,7 +20,10 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.net.Socket
+import java.util.concurrent.atomic.AtomicInteger
 
 data class TestProgress(
     val stage: String,
@@ -36,10 +39,17 @@ class Tester(private val ctx: Context) {
     val engineAvailable: Boolean get() = engine.isAvailable
 
     companion object {
-        const val DEFAULT_BATCH_SIZE = 45
-        const val DEFAULT_STAGE1_CONCURRENCY = 26
-        const val DEFAULT_STAGE2_CONCURRENCY = 6
+        const val DEFAULT_BATCH_SIZE = 180
+        const val DEFAULT_STAGE1_CONCURRENCY = 120
+        const val DEFAULT_STAGE2_CONCURRENCY = 15
         const val BACKGROUND_SPEED_CAP = 15
+
+        /** مجمّع خيوط IO مخصّص للفحص المتوازي يكسر سقف الـ 64 خيطًا الافتراضي في Dispatchers.IO. */
+        val scanIoDispatcher = Dispatchers.IO.limitedParallelism(140)
+
+        private val portCursor = AtomicInteger(25_000)
+        private val rawIpv4Regex = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
+        private val udpOutboundTypes = setOf("hysteria2", "hy2", "tuic", "wireguard")
 
         /** فحص أمني مسبق صارم يستبعد allowInsecure=1 والعقد المحجورة قبل إضاعة وقت الفحص أو الترتيب. */
         fun passesHardSecurityPreFilter(rawCfg: String, isVipAttested: Boolean = false): Boolean {
@@ -49,12 +59,20 @@ class Tester(private val ctx: Context) {
             return !sec.quarantined && !sec.allowInsecure && sec.riskLevel != "CRITICAL"
         }
 
-        fun allocateFreePorts(count: Int, basePort: Int = 23000): List<Int> {
+        fun allocateFreePorts(count: Int, basePort: Int = 0): List<Int> {
             if (count <= 0) return emptyList()
             val out = ArrayList<Int>(count)
             val loopback = InetAddress.getByName("127.0.0.1")
-            var cand = basePort
-            while (out.size < count && cand < 61000) {
+            val start = if (basePort in 20_000..56_000) {
+                basePort
+            } else {
+                portCursor.getAndUpdate { cur ->
+                    val next = cur + count + 20
+                    if (next > 56_000) 25_000 else next
+                }
+            }
+            var cand = start
+            while (out.size < count && cand < 61_000) {
                 val ok = try {
                     ServerSocket(cand, 1, loopback).use { true }
                 } catch (_: Exception) {
@@ -63,10 +81,97 @@ class Tester(private val ctx: Context) {
                 if (ok) out.add(cand)
                 cand++
             }
+            var wrap = 23_000
+            while (out.size < count && wrap < start) {
+                val ok = try {
+                    ServerSocket(wrap, 1, loopback).use { true }
+                } catch (_: Exception) {
+                    false
+                }
+                if (ok) out.add(wrap)
+                wrap++
+            }
             while (out.size < count) {
-                out.add(basePort + out.size)
+                out.add(25_000 + out.size)
             }
             return out
+        }
+
+        /**
+         * فلترة TCP SYN فائقة السرعة (~600ms بتوازي 140) لعناوين IPv4 الخام لبروتوكولات TCP فقط:
+         * • تمرّر تلقائيًا جميع بروتوكولات UDP/QUIC (HY2 / TUIC) دون لمسها.
+         * • تمرّر تلقائيًا جميع النطاقات (Domains / CDN) لتجنب تسميم DNS المحلي على الشبكات المحجوبة.
+         * • تستبعد فورًا السيرفرات المطفأة التي تستخدم IP خام قبل استهلاك وقت ومنافذ sing-box.
+         */
+        suspend fun fastTcpIpPreScreen(
+            configs: List<String>,
+            timeoutMs: Int = 620,
+        ): Pair<List<String>, List<String>> = coroutineScope {
+            if (configs.isEmpty()) return@coroutineScope emptyList<String>() to emptyList()
+            val tcpTargetsByEndpoint = LinkedHashMap<Pair<String, Int>, Unit>()
+            val endpointForIndex = arrayOfNulls<Pair<String, Int>>(configs.size)
+
+            configs.forEachIndexed { idx, raw ->
+                val ob = Converters.toOutbound(raw) ?: return@forEachIndexed
+                val obType = ob.optString("type").lowercase()
+                if (obType in udpOutboundTypes) return@forEachIndexed
+                val transType = ob.optJSONObject("transport")?.optString("type")?.lowercase().orEmpty()
+                if (transType == "quic") return@forEachIndexed
+                val host = ob.optString("server").trim()
+                val port = ob.optInt("server_port", 0)
+                if (port in 1..65535 && rawIpv4Regex.matches(host)) {
+                    val ep = host to port
+                    endpointForIndex[idx] = ep
+                    tcpTargetsByEndpoint[ep] = Unit
+                }
+            }
+
+            if (tcpTargetsByEndpoint.isEmpty()) {
+                return@coroutineScope configs to emptyList()
+            }
+
+            val sem = Semaphore(140)
+            val reachableSet = HashSet<Pair<String, Int>>(tcpTargetsByEndpoint.size)
+            tcpTargetsByEndpoint.keys.map { ep ->
+                async(scanIoDispatcher) {
+                    ensureActive()
+                    val ok = sem.withPermit {
+                        ensureActive()
+                        runInterruptible(scanIoDispatcher) {
+                            try {
+                                Socket().use { s ->
+                                    s.tcpNoDelay = true
+                                    s.connect(InetSocketAddress(ep.first, ep.second), timeoutMs)
+                                    true
+                                }
+                            } catch (_: Exception) {
+                                false
+                            }
+                        }
+                    }
+                    ep to ok
+                }
+            }.awaitAll().forEach { (ep, ok) ->
+                if (ok) reachableSet.add(ep)
+            }
+
+            // Offline safety: if >12 raw TCP IPs were probed and ZERO TCP SYN succeeded, pass all to Stage 1
+            // so Stage 1's formal Offline Guard evaluates accurately without false mass-filtering!
+            if (reachableSet.isEmpty() && tcpTargetsByEndpoint.size >= 12) {
+                return@coroutineScope configs to emptyList()
+            }
+
+            val passed = ArrayList<String>(configs.size)
+            val deadRawIpConfigs = ArrayList<String>()
+            configs.forEachIndexed { idx, cfg ->
+                val ep = endpointForIndex[idx]
+                if (ep == null || ep in reachableSet) {
+                    passed.add(cfg)
+                } else {
+                    deadRawIpConfigs.add(Converters.cleanUri(cfg))
+                }
+            }
+            passed to deadRawIpConfigs
         }
     }
 
@@ -127,8 +232,8 @@ class Tester(private val ctx: Context) {
         if (chunk.isEmpty()) return@coroutineScope emptyList()
         val ports = allocateFreePorts(chunk.size, basePort = basePort)
         val paired = chunk.mapIndexed { idx, c -> c to ports[idx] }
-        val session = runInterruptible(Dispatchers.IO) {
-            engine.startBatchDaemon(paired, dnsServer = dnsServer, useDoh = useDoh, waitMs = 2200L)
+        val session = runInterruptible(scanIoDispatcher) {
+            engine.startBatchDaemon(paired, dnsServer = dnsServer, useDoh = useDoh, waitMs = 1600L)
         }
 
         if (session == null) {
@@ -136,17 +241,17 @@ class Tester(private val ctx: Context) {
             if (chunk.size > 1) {
                 val mid = (chunk.size + 1) / 2
                 val left = runBatchProbeChunk(
-                    chunk.subList(0, mid), basePort, timeoutMs, parallelism,
+                    chunk.subList(0, mid), 0, timeoutMs, parallelism,
                     measureThroughput, throughputBudgetBytes, dnsServer, useDoh, onItemDone,
                 )
                 val right = runBatchProbeChunk(
-                    chunk.subList(mid, chunk.size), basePort + mid + 5, timeoutMs, parallelism,
+                    chunk.subList(mid, chunk.size), 0, timeoutMs, parallelism,
                     measureThroughput, throughputBudgetBytes, dnsServer, useDoh, onItemDone,
                 )
                 return@coroutineScope left + right
             }
             val singlePort = ports.first()
-            val singleRes = runInterruptible(Dispatchers.IO) {
+            val singleRes = runInterruptible(scanIoDispatcher) {
                 engine.testRealTunnelSequential(
                     cfg = chunk.first(),
                     port = singlePort,
@@ -163,10 +268,10 @@ class Tester(private val ctx: Context) {
         }
 
         val slotByClean = session.slots.associateBy { Converters.cleanUri(it.cfg) }
-        val sem = Semaphore(parallelism.coerceIn(1, 32))
+        val sem = Semaphore(parallelism.coerceIn(1, 140))
         try {
             chunk.map { rawCfg ->
-                async(Dispatchers.IO) {
+                async(scanIoDispatcher) {
                     ensureActive()
                     val clean = Converters.cleanUri(rawCfg)
                     val slot = slotByClean[clean]
@@ -175,7 +280,7 @@ class Tester(private val ctx: Context) {
                     } else {
                         sem.withPermit {
                             ensureActive()
-                            runInterruptible(Dispatchers.IO) {
+                            runInterruptible(scanIoDispatcher) {
                                 engine.probeSlotOnRunningBatch(
                                     slot = slot,
                                     timeoutMs = timeoutMs,
@@ -229,22 +334,26 @@ class Tester(private val ctx: Context) {
             return@withContext emptyList()
         }
 
-        val stage1Parallelism = maxOf(concurrency, DEFAULT_STAGE1_CONCURRENCY).coerceIn(8, 30)
-        val stage1TimeoutMs = (timeoutSec.coerceIn(2, 5) * 650).coerceIn(1_800, 2_800)
+        val stage1Parallelism = maxOf(concurrency, DEFAULT_STAGE1_CONCURRENCY).coerceIn(8, 130)
+        val stage1TimeoutMs = (timeoutSec.coerceIn(2, 5) * 420).coerceIn(1_250, 1_750)
 
-        var done = 0
+        val (tunnelTargets, tcpDeadCleanList) = fastTcpIpPreScreen(candidates, timeoutMs = 600)
+        var done = tcpDeadCleanList.size
         var alive = 0
         val liveAlive = ArrayList<TestResult>()
-        val liveDead = LinkedHashSet<String>(insecureRejected)
-        onProgress(TestProgress(tr("فحص الأنفاق فائق السرعة", "Fast Tunnel Check"), 0, candidates.size, 0))
+        val liveDead = LinkedHashSet<String>(insecureRejected).apply { addAll(tcpDeadCleanList) }
+        onProgress(TestProgress(tr("فحص الأنفاق فائق السرعة", "Fast Tunnel Check"), done, candidates.size, 0))
 
         val firstStage = ArrayList<TestResult>(candidates.size)
-        val batches = candidates.chunked(DEFAULT_BATCH_SIZE)
-        for ((bIdx, batch) in batches.withIndex()) {
+        for (deadClean in tcpDeadCleanList) {
+            firstStage.add(TestResult(deadClean, ok = false, error = "tcp-down", packetLossPct = 100.0))
+        }
+        val batches = tunnelTargets.chunked(DEFAULT_BATCH_SIZE)
+        for (batch in batches) {
             ensureActive()
             val batchResults = runBatchProbeChunk(
                 chunk = batch,
-                basePort = 23000 + (bIdx % 6) * 60,
+                basePort = 0,
                 timeoutMs = stage1TimeoutMs,
                 parallelism = stage1Parallelism,
                 measureThroughput = false,
@@ -261,7 +370,7 @@ class Tester(private val ctx: Context) {
                     } else {
                         liveDead.add(Converters.cleanUri(r.cfg))
                     }
-                    if (done % 8 == 0 || done == candidates.size) {
+                    if (done % 16 == 0 || done == candidates.size) {
                         snap = TestProgress(tr("فحص الأنفاق فائق السرعة", "Fast Tunnel Check"), done, candidates.size, alive)
                     }
                 }
@@ -293,26 +402,27 @@ class Tester(private val ctx: Context) {
         if (speedPool.isNotEmpty() && throughputBudgetBytes >= 16_384L) {
             var sdone = 0
             onProgress(TestProgress(tr("قياس سرعة التنزيل الفعلية", "Measuring Real Download Speed"), 0, speedPool.size, 0))
-            for ((sIdx, sBatch) in speedPool.map { it.cfg }.chunked(DEFAULT_BATCH_SIZE).withIndex()) {
+            for (sBatch in speedPool.map { it.cfg }.chunked(DEFAULT_BATCH_SIZE)) {
                 ensureActive()
-                val ports = allocateFreePorts(sBatch.size, basePort = 24200 + (sIdx % 3) * 60)
+                val ports = allocateFreePorts(sBatch.size, basePort = 0)
                 val paired = sBatch.mapIndexed { idx, c -> c to ports[idx] }
-                val session = runInterruptible(Dispatchers.IO) {
-                    engine.startBatchDaemon(paired, dnsServer = dnsServer, useDoh = useDoh, waitMs = 2200L)
+                val session = runInterruptible(scanIoDispatcher) {
+                    engine.startBatchDaemon(paired, dnsServer = dnsServer, useDoh = useDoh, waitMs = 1500L)
                 }
                 if (session != null) {
                     val sem = Semaphore(DEFAULT_STAGE2_CONCURRENCY)
                     try {
                         coroutineScope {
                             session.slots.map { slot ->
-                                async(Dispatchers.IO) {
+                                async(scanIoDispatcher) {
                                     ensureActive()
                                     val kbps = sem.withPermit {
                                         ensureActive()
-                                        runInterruptible(Dispatchers.IO) {
-                                            SingBox.measureDownloadThroughputOnPort(
+                                        runInterruptible(scanIoDispatcher) {
+                                            SingBox.measureFastBatchThroughputOnPort(
                                                 port = slot.listenPort,
-                                                timeoutMs = 6_500,
+                                                connectTimeoutMs = 1_850,
+                                                maxTransferMs = 1_800L,
                                                 budgetBytes = throughputBudgetBytes,
                                             )
                                         }

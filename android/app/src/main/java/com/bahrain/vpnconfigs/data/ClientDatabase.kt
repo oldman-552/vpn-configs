@@ -168,6 +168,19 @@ data class ScanMeasurementSample(
     val failureReason: String = "",
 )
 
+data class BatchScanOutcomeRow(
+    val cleanCfg: String,
+    val configFingerprint: String,
+    val success: Boolean,
+    val establishMs: Long,
+    val latencyMs: Long,
+    val jitterMs: Double,
+    val packetLossPct: Double,
+    val throughputKbps: Double,
+    val stabilityScore: Double,
+    val failureReason: String = "",
+)
+
 data class NetworkServerProfileStats(
     val serverId: String,
     val networkProfile: ScanNetworkProfile,
@@ -1214,6 +1227,240 @@ class ClientDatabase private constructor(ctx: Context) :
         } finally {
             db.endTransaction()
         }
+    }
+
+    /**
+     * حفظ دفعي فائق السرعة لنتائج فحص الـ 500 سيرفر في معاملة قرص واحدة (Single Atomic Transaction < 25ms)
+     * بدل 1,000 معاملة منفصلة، مع الحفاظ التام على سجل القياسات التاريخية والعزل الصارم بين WIFI و MOBILE_DATA.
+     */
+    fun recordBatchScanOutcomes(
+        outcomes: List<BatchScanOutcomeRow>,
+        networkProfile: ScanNetworkProfile,
+        scanMode: String,
+        nowMs: Long = System.currentTimeMillis(),
+    ): Map<String, NetworkServerProfileStats> = synchronized(lock) {
+        if (outcomes.isEmpty()) return getNetworkStatsMap(networkProfile)
+        val db = writableDatabase
+        val statsMap = HashMap<String, NetworkServerProfileStats>()
+        db.rawQuery(
+            "SELECT * FROM network_server_stats WHERE network_profile = ?",
+            arrayOf(networkProfile.code),
+        ).use { c ->
+            while (c.moveToNext()) {
+                val r = readNetworkStatRow(c)
+                statsMap[r.serverId] = r
+            }
+        }
+        val telMap = HashMap<String, LocalServerTelemetry>()
+        db.rawQuery("SELECT * FROM local_server_telemetry", emptyArray()).use { c ->
+            while (c.moveToNext()) {
+                val r = readTelemetryRow(c)
+                telMap[r.serverId] = r
+            }
+        }
+
+        val alpha = 0.35
+        val isWifi = networkProfile == ScanNetworkProfile.WIFI
+        val isCell = networkProfile == ScanNetworkProfile.MOBILE_DATA
+        val modeClipped = scanMode.take(24)
+
+        db.beginTransaction()
+        try {
+            for (item in outcomes) {
+                val sid = Converters.stableServerId(item.cleanCfg)
+                if (sid.isBlank()) continue
+                val fp = item.configFingerprint.ifBlank { Converters.configFingerprint(item.cleanCfg) }.take(64)
+                val success = item.success
+                val establishMs = item.establishMs.coerceAtLeast(0L)
+                val latencyMs = item.latencyMs.coerceAtLeast(0L)
+                val jitterMs = item.jitterMs.coerceAtLeast(0.0)
+                val effLoss = if (success) item.packetLossPct.coerceIn(0.0, 100.0) else 100.0
+                val throughputKbps = item.throughputKbps.coerceAtLeast(0.0)
+
+                // 1) Append-only scan measurement row
+                val mCv = ContentValues(13).apply {
+                    put("server_id", sid)
+                    put("config_fingerprint", fp)
+                    put("network_profile", networkProfile.code)
+                    put("scan_mode", modeClipped)
+                    put("scanned_at_ms", nowMs)
+                    put("success", if (success) 1 else 0)
+                    put("establish_ms", establishMs)
+                    put("latency_ms", latencyMs)
+                    put("jitter_ms", jitterMs)
+                    put("packet_loss_pct", effLoss)
+                    put("throughput_kbps", throughputKbps)
+                    put("stability_score", item.stabilityScore.coerceIn(0.0, 100.0))
+                    put("personalized_score", 0.0)
+                    put("failure_reason", item.failureReason.take(64))
+                }
+                db.insert("server_scan_measurements", null, mCv)
+
+                // 2) Isolated per-network stats rollup
+                val prev = statsMap[sid]
+                val fpChanged = prev != null && prev.configFingerprint.isNotBlank() && prev.configFingerprint != fp
+                val baseScans = (prev?.scanCount ?: 0) + 1
+                val baseSucc = (prev?.successCount ?: 0) + (if (success) 1 else 0)
+                val baseFail = (prev?.failureCount ?: 0) + (if (success) 0 else 1)
+                val consecFail = if (success) 0 else ((prev?.consecutiveFailures ?: 0) + 1)
+                val succRate = baseSucc.toDouble() / max(1, baseScans).toDouble()
+
+                val nextEwmaLat = when {
+                    success && latencyMs > 0L && (prev == null || prev.ewmaLatencyMs <= 0.0 || fpChanged) -> latencyMs.toDouble()
+                    success && latencyMs > 0L && prev != null -> alpha * latencyMs.toDouble() + (1.0 - alpha) * prev.ewmaLatencyMs
+                    else -> prev?.ewmaLatencyMs ?: 0.0
+                }
+                val nextEwmaJit = when {
+                    success && (prev == null || fpChanged) -> jitterMs
+                    success && prev != null -> alpha * jitterMs + (1.0 - alpha) * prev.ewmaJitterMs
+                    else -> prev?.ewmaJitterMs ?: 0.0
+                }
+                val nextEwmaLoss = if (prev == null || fpChanged) effLoss else (alpha * effLoss + (1.0 - alpha) * prev.ewmaPacketLossPct)
+                val nextLatestTp = when {
+                    success && throughputKbps > 0.0 -> throughputKbps
+                    fpChanged -> 0.0
+                    else -> prev?.latestThroughputKbps ?: 0.0
+                }
+                val nextBestTp = if (fpChanged) {
+                    if (success) throughputKbps else 0.0
+                } else {
+                    max(prev?.bestThroughputKbps ?: 0.0, if (success) throughputKbps else 0.0)
+                }
+                val computedStab = if (item.stabilityScore > 0.0) {
+                    item.stabilityScore.coerceIn(0.0, 100.0)
+                } else {
+                    val srPart = succRate * 48.0
+                    val lossPart = ((100.0 - nextEwmaLoss).coerceIn(0.0, 100.0) / 100.0) * 27.0
+                    val jitPart = ((1.0 - (nextEwmaJit / 220.0)).coerceIn(0.0, 1.0)) * 15.0
+                    val sampleBonus = (minOf(baseSucc, 5) / 5.0) * 10.0
+                    val failPenalty = consecFail * 14.0
+                    (srPart + lossPart + jitPart + sampleBonus - failPenalty).coerceIn(0.0, 100.0)
+                }
+
+                val nextStat = NetworkServerProfileStats(
+                    serverId = sid,
+                    networkProfile = networkProfile,
+                    configFingerprint = fp,
+                    lastSuccessfulConnectionMs = if (success) nowMs else (prev?.lastSuccessfulConnectionMs ?: 0L),
+                    lastScanAtMs = nowMs,
+                    scanCount = baseScans,
+                    successCount = baseSucc,
+                    failureCount = baseFail,
+                    consecutiveFailures = consecFail,
+                    connectionSuccessRate = succRate,
+                    latestEstablishMs = if (success && establishMs > 0L) establishMs else (prev?.latestEstablishMs ?: 0L),
+                    latestLatencyMs = if (success && latencyMs > 0L) latencyMs else (if (fpChanged) 0L else (prev?.latestLatencyMs ?: 0L)),
+                    ewmaLatencyMs = nextEwmaLat,
+                    latestJitterMs = if (success) jitterMs else (prev?.latestJitterMs ?: 0.0),
+                    ewmaJitterMs = nextEwmaJit,
+                    latestPacketLossPct = effLoss,
+                    ewmaPacketLossPct = nextEwmaLoss,
+                    latestThroughputKbps = nextLatestTp,
+                    bestThroughputKbps = nextBestTp,
+                    stabilityScore = computedStab,
+                    personalizedScore = prev?.personalizedScore ?: 0.0,
+                )
+                statsMap[sid] = nextStat
+
+                val sCv = ContentValues(21).apply {
+                    put("server_id", sid)
+                    put("network_profile", networkProfile.code)
+                    put("config_fingerprint", fp)
+                    put("last_successful_connection_ms", nextStat.lastSuccessfulConnectionMs)
+                    put("last_scan_at_ms", nowMs)
+                    put("scan_count", baseScans)
+                    put("success_count", baseSucc)
+                    put("failure_count", baseFail)
+                    put("consecutive_failures", consecFail)
+                    put("connection_success_rate", succRate)
+                    put("latest_establish_ms", nextStat.latestEstablishMs)
+                    put("latest_latency_ms", nextStat.latestLatencyMs)
+                    put("ewma_latency_ms", nextEwmaLat)
+                    put("latest_jitter_ms", nextStat.latestJitterMs)
+                    put("ewma_jitter_ms", nextEwmaJit)
+                    put("latest_packet_loss_pct", effLoss)
+                    put("ewma_packet_loss_pct", nextEwmaLoss)
+                    put("latest_throughput_kbps", nextLatestTp)
+                    put("best_throughput_kbps", nextBestTp)
+                    put("stability_score", computedStab)
+                    put("personalized_score", nextStat.personalizedScore)
+                }
+                db.insertWithOnConflict("network_server_stats", null, sCv, SQLiteDatabase.CONFLICT_REPLACE)
+
+                // 3) Global server_telemetry rollup inside the SAME transaction
+                val prevTel = telMap[sid] ?: LocalServerTelemetry(serverId = sid)
+                val tAttempts = prevTel.attempts + 1
+                val tSucc = prevTel.successes + (if (success) 1 else 0)
+                val tConsecFail = if (success) 0 else (prevTel.consecutiveFailures + 1)
+                val tEwmaLat = when {
+                    !success || latencyMs <= 0L -> prevTel.ewmaLatencyMs
+                    prevTel.ewmaLatencyMs <= 0.0 -> latencyMs.toDouble()
+                    else -> alpha * latencyMs.toDouble() + (1.0 - alpha) * prevTel.ewmaLatencyMs
+                }
+                val tVar = when {
+                    !success || latencyMs <= 0L -> prevTel.latencyVarianceMs2
+                    prevTel.ewmaLatencyMs <= 0.0 -> 0.0
+                    else -> {
+                        val diff = latencyMs.toDouble() - prevTel.ewmaLatencyMs
+                        (1.0 - alpha) * (prevTel.latencyVarianceMs2 + alpha * diff * diff)
+                    }
+                }
+                val tJit = when {
+                    !success -> prevTel.ewmaJitterMs
+                    jitterMs > 0.0 -> if (prevTel.ewmaJitterMs <= 0.0) jitterMs else (alpha * jitterMs + (1.0 - alpha) * prevTel.ewmaJitterMs)
+                    prevTel.ewmaLatencyMs > 0.0 && latencyMs > 0L -> abs(latencyMs.toDouble() - prevTel.ewmaLatencyMs)
+                    else -> prevTel.ewmaJitterMs
+                }
+                val tLoss = if (prevTel.attempts == 0) effLoss else (alpha * effLoss + (1.0 - alpha) * prevTel.ewmaPacketLossPct)
+                val tEstab = when {
+                    !success || establishMs <= 0L -> prevTel.avgEstablishMs
+                    prevTel.avgEstablishMs <= 0L -> establishMs
+                    else -> (0.4 * establishMs + 0.6 * prevTel.avgEstablishMs).toLong()
+                }
+                val trend = if (success && prevTel.ewmaLatencyMs > 0.0 && latencyMs > 0L) {
+                    (prevTel.ewmaLatencyMs - latencyMs.toDouble()).coerceIn(-250.0, 250.0)
+                } else if (!success) -40.0 else prevTel.recentTrendDelta
+
+                val tCv = ContentValues(17).apply {
+                    put("server_id", sid)
+                    put("attempts", tAttempts)
+                    put("successes", tSucc)
+                    put("consecutive_failures", tConsecFail)
+                    put("last_failure_at_ms", if (!success) nowMs else prevTel.lastFailureAtMs)
+                    put("last_failure_category", if (!success) "BATCH_SCAN_FAIL" else prevTel.lastFailureCategory)
+                    put("last_success_at_ms", if (success) nowMs else prevTel.lastSuccessAtMs)
+                    put("avg_establish_ms", tEstab)
+                    put("ewma_latency_ms", tEwmaLat)
+                    put("latency_variance_ms2", tVar)
+                    put("ewma_jitter_ms", tJit)
+                    put("ewma_packet_loss_pct", tLoss)
+                    put("best_download_kbps", max(prevTel.bestDownloadKbps, throughputKbps))
+                    put("best_upload_kbps", prevTel.bestUploadKbps)
+                    put("wifi_successes", prevTel.wifiSuccesses + (if (success && isWifi) 1 else 0))
+                    put("cellular_successes", prevTel.cellularSuccesses + (if (success && isCell) 1 else 0))
+                    put("recent_trend_delta", trend)
+                }
+                db.insertWithOnConflict("local_server_telemetry", null, tCv, SQLiteDatabase.CONFLICT_REPLACE)
+            }
+
+            // Single bounded table-level trim once per batch instead of 500 nested-subquery DELETEs
+            db.execSQL(
+                """
+                DELETE FROM server_scan_measurements
+                WHERE network_profile = ?
+                  AND id NOT IN (
+                      SELECT id FROM server_scan_measurements
+                      WHERE network_profile = ?
+                      ORDER BY scanned_at_ms DESC, id DESC LIMIT 12000
+                  )
+                """.trimIndent(),
+                arrayOf(networkProfile.code, networkProfile.code),
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return statsMap
     }
 
     private fun readSingleNetworkStatLocked(

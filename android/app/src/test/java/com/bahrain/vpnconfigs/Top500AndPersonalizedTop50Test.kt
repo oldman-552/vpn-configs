@@ -2,6 +2,7 @@ package com.bahrain.vpnconfigs
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.bahrain.vpnconfigs.data.BatchScanOutcomeRow
 import com.bahrain.vpnconfigs.data.ClientDatabase
 import com.bahrain.vpnconfigs.data.DeadConfigPurgePolicy
 import com.bahrain.vpnconfigs.data.LocalPoolTier
@@ -22,6 +23,7 @@ import com.bahrain.vpnconfigs.engine.SmartSelectionWeights
 import com.bahrain.vpnconfigs.engine.SmartServerCandidateInput
 import com.bahrain.vpnconfigs.engine.SmartServerSelector
 import com.bahrain.vpnconfigs.engine.TestResult
+import com.bahrain.vpnconfigs.engine.Tester
 import com.bahrain.vpnconfigs.engine.TunnelBatchProbeExecutor
 import com.bahrain.vpnconfigs.work.WorkScheduler
 import kotlinx.coroutines.async
@@ -720,5 +722,115 @@ class Top500AndPersonalizedTop50Test {
         assertFalse(prefs.autoServerQualityTesting)
         assertFalse(prefs.autoRefresh)
         prefs.autoServerQualityTesting = true
+    }
+
+    @Test
+    fun fastTcpIpPreScreenFiltersDeadRawTcpIpsPassesUdpDomainsAndProtectsOffline() = runBlocking {
+        ServerSocket(0, 16, InetAddress.getByName("127.0.0.1")).use { liveListener ->
+            val livePort = liveListener.localPort
+            val closedPort = ServerSocket(0, 4, InetAddress.getByName("127.0.0.1")).let { s ->
+                val p = s.localPort
+                s.close()
+                p
+            }
+
+            val liveRawTcp = "vless://11111111-1111-1111-1111-111111111111@127.0.0.1:$livePort?security=tls&sni=live.example.com#live"
+            val deadRawTcp = "vless://22222222-2222-2222-2222-222222222222@127.0.0.1:$closedPort?security=tls&sni=dead.example.com#dead"
+            val udpHy2RawIp = "hy2://pass@198.51.100.88:8443?sni=hy2.example.com#udp"
+            val domainTcp = "trojan://pass@cdn-edge.example.com:443?security=tls&sni=cdn-edge.example.com#domain"
+
+            val (passed, deadList) = Tester.fastTcpIpPreScreen(
+                configs = listOf(liveRawTcp, deadRawTcp, udpHy2RawIp, domainTcp),
+                timeoutMs = 250,
+            )
+
+            assertEquals(3, passed.size)
+            assertTrue(liveRawTcp in passed)
+            assertTrue(udpHy2RawIp in passed)
+            assertTrue(domainTcp in passed)
+            assertEquals(listOf(Converters.cleanUri(deadRawTcp)), deadList)
+
+            // Offline Guard safety: when >=12 distinct raw TCP IPs all fail (0 reachable), pre-screen passes all through
+            val closedPorts = (1..14).map {
+                ServerSocket(0, 2, InetAddress.getByName("127.0.0.1")).let { s ->
+                    val p = s.localPort
+                    s.close()
+                    p
+                }
+            }.distinct()
+            if (closedPorts.size >= 12) {
+                val allClosedPool = closedPorts.mapIndexed { idx, p ->
+                    "vless://33333333-3333-3333-3333-${(100000000000L + idx)}@127.0.0.1:$p?security=tls&sni=n$idx.example.com#n$idx"
+                }
+                val (offlinePassed, offlineDead) = Tester.fastTcpIpPreScreen(allClosedPool, timeoutMs = 150)
+                assertEquals(allClosedPool.size, offlinePassed.size)
+                assertTrue(offlineDead.isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun atomicBatchSqliteCommitAnd500ConfigScannerExecuteInMinimalBatches() = runBlocking {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val db = ClientDatabase.getInstance(ctx)
+
+        val pool500 = (1..500).map { buildSampleUri(it) }
+        val rows = pool500.mapIndexed { idx, uri ->
+            val clean = Converters.cleanUri(uri)
+            val ok = idx < 220
+            BatchScanOutcomeRow(
+                cleanCfg = clean,
+                configFingerprint = Converters.configFingerprint(clean),
+                success = ok,
+                establishMs = if (ok) 95L else 0L,
+                latencyMs = if (ok) 40L + (idx % 90) else 0L,
+                jitterMs = if (ok) 3.5 else 0.0,
+                packetLossPct = if (ok) 0.0 else 100.0,
+                throughputKbps = if (ok && idx < 30) 7_500.0 - idx * 80.0 else 0.0,
+                stabilityScore = if (ok) 88.0 else 0.0,
+                failureReason = if (ok) "" else "tcp-down",
+            )
+        }
+
+        val t0 = System.nanoTime()
+        val statsMap = db.recordBatchScanOutcomes(
+            outcomes = rows,
+            networkProfile = ScanNetworkProfile.WIFI,
+            scanMode = "FULL_SCAN",
+            nowMs = 1_793_500_000_000L,
+        )
+        val commitMs = (System.nanoTime() - t0) / 1_000_000L
+        assertEquals(500, statsMap.size)
+        assertTrue("Expected single-transaction 500-row commit < 1500ms, got ${commitMs}ms", commitMs < 1_500L)
+        assertTrue(db.getNetworkStatsMap(ScanNetworkProfile.MOBILE_DATA).size < 500)
+
+        // Verify 500-config SequentialTunnelScanner runs in exactly 4 batch daemon invocations (3 Stage-1 x 180 + 1 Stage-2 x 30)!
+        val batchCalls = AtomicInteger(0)
+        val fastBatchExec = TunnelBatchProbeExecutor { req ->
+            batchCalls.incrementAndGet()
+            req.cfgs.mapIndexed { i, raw ->
+                val clean = Converters.cleanUri(raw)
+                TestResult(
+                    cfg = clean,
+                    ok = i % 3 != 0,
+                    latencyMs = if (i % 3 != 0) 45L + (i % 50) else 0L,
+                    speedKbps = if (req.measureSpeed) 6_200.0 - i * 40.0 else 0.0,
+                    establishMs = 90L,
+                    jitterMs = 3.0,
+                    packetLossPct = if (i % 3 != 0) 0.0 else 100.0,
+                    stabilityScore = 90.0,
+                )
+            }
+        }
+        val scanner = SequentialTunnelScanner(ctx = ctx, clientDb = db, batchExecutor = fastBatchExec)
+        val summary = scanner.executeScan(
+            scanMode = LocalScanMode.FULL_SCAN,
+            allCandidateConfigs = pool500,
+            networkProfile = ScanNetworkProfile.WIFI,
+            isMetered = false,
+        )
+        assertEquals(500, summary.testedCount)
+        assertEquals(4, batchCalls.get()) // ceil(500/180)=3 Stage-1 batches + 1 Stage-2 speed batch!
+        assertEquals(100, summary.rankingBundle.top100.size)
     }
 }

@@ -51,6 +51,8 @@ class SingBox(private val ctx: Context) {
 
     companion object {
         const val TEST_URL = "https://www.gstatic.com/generate_204"
+        const val FAST_PROBE_URL = "http://cp.cloudflare.com/generate_204"
+        const val FAST_PROBE_FALLBACK_URL = "http://connectivitycheck.gstatic.com/generate_204"
         const val SPEED_URL = "https://speed.cloudflare.com/__down?bytes=600000"
         const val VPN_SOCKS_PORT = 20808
         const val SPEED_BYTES = 600_000L
@@ -101,6 +103,43 @@ class SingBox(private val ctx: Context) {
                 }
             }
             return 0.0
+        }
+
+        /**
+         * قياس سرعة التنزيل الحقيقية (600 KB HTTPS) للدفعات فائقة السرعة بنافذة نقل محددة (Time-Boxed):
+         * السيرفرات السريعة تنزّل كامل الـ 600 KB في 0.15–1.8 ثانية، والسيرفرات الأبطأ تقاس سرعتها
+         * الفعلية الدقيقة خلال نافذة 1.8 ثانية دون تجميد الطابور 15 ثانية على السيرفرات المختنقة.
+         */
+        fun measureFastBatchThroughputOnPort(
+            port: Int,
+            connectTimeoutMs: Int = 1_850,
+            maxTransferMs: Long = 1_800L,
+            budgetBytes: Long = SPEED_BYTES,
+            customPrimaryUrl: String = "",
+        ): Double {
+            if (budgetBytes < 8_192L || Thread.currentThread().isInterrupted) return 0.0
+            val targetUrl = customPrimaryUrl.trim().takeIf { it.startsWith("https://", true) }
+                ?: if (budgetBytes in 16_384L until SPEED_BYTES) {
+                    "https://speed.cloudflare.com/__down?bytes=$budgetBytes"
+                } else {
+                    SPEED_URL
+                }
+            val sp = runCatching {
+                Socks.get(
+                    proxyPort = port,
+                    url = targetUrl,
+                    timeoutMs = connectTimeoutMs.coerceIn(900, 4_000),
+                    maxBytes = budgetBytes,
+                    captureText = false,
+                    maxTransferMs = maxTransferMs.coerceIn(700L, 4_000L),
+                )
+            }.getOrNull() ?: return 0.0
+            val dtSec = maxOf(sp.transferMs / 1000.0, 0.005)
+            return if (sp.status in listOf(200, 206) && sp.bytes >= 8_192L) {
+                (sp.bytes / 1024.0) / dtSec
+            } else {
+                0.0
+            }
         }
     }
 
@@ -372,6 +411,7 @@ class SingBox(private val ctx: Context) {
         val built = buildBatchConfig(items, dnsServer, useDoh) ?: return null
         val (json, slots) = built
         val firstPort = slots.first().listenPort
+        val lastPort = slots.last().listenPort
         val confFile = File(tmpDir, "cfg-batch-$firstPort-${System.nanoTime() and 0xFFFFF}.json")
         confFile.writeText(json, Charsets.UTF_8)
 
@@ -392,50 +432,71 @@ class SingBox(private val ctx: Context) {
             while (System.currentTimeMillis() < deadline) {
                 if (Thread.currentThread().isInterrupted || !proc.isAlive) break
                 try {
-                    Socket().use { s ->
-                        s.connect(InetSocketAddress("127.0.0.1", firstPort), 50)
-                        up = true
+                    Socket().use { s -> s.connect(InetSocketAddress("127.0.0.1", firstPort), 40) }
+                    if (lastPort != firstPort) {
+                        Socket().use { s -> s.connect(InetSocketAddress("127.0.0.1", lastPort), 40) }
                     }
-                    if (up) break
+                    up = true
+                    break
                 } catch (_: Exception) {
-                    Thread.sleep(20)
+                    Thread.sleep(8)
                 }
             }
             if (!up) {
-                stopProcess(proc, confFile)
+                stopProcessForcibly(proc, confFile)
                 null
             } else {
                 BatchDaemonSession(proc, confFile, slots)
             }
         } catch (_: Exception) {
-            stopProcess(proc, confFile)
+            stopProcessForcibly(proc, confFile)
             null
         }
     }
 
     fun stopBatchDaemon(session: BatchDaemonSession?) {
         if (session == null) return
-        stopProcess(session.process, session.configFile)
+        stopProcessForcibly(session.process, session.configFile)
+    }
+
+    private fun stopProcessForcibly(proc: Process?, confFile: File?) {
+        proc?.let {
+            runCatching {
+                it.destroyForcibly()
+                it.waitFor(120, TimeUnit.MILLISECONDS)
+            }
+        }
+        runCatching { confFile?.delete() }
     }
 
     fun probeSlotOnRunningBatch(
         slot: BatchOutboundSlot,
-        timeoutMs: Int = 2400,
+        timeoutMs: Int = 1_450,
         measureThroughput: Boolean = false,
         throughputBudgetBytes: Long = SPEED_BYTES,
         customSpeedUrl: String = "",
     ): TestResult {
         return try {
-            val probe = Socks.measureRealDelay(slot.listenPort, TEST_URL, timeoutMs.coerceIn(1_200, 10_000))
+            val boundedMs = timeoutMs.coerceIn(750, 4_000)
+            val tStart = System.currentTimeMillis()
+            var probe = Socks.fastTunnelProbe(slot.listenPort, FAST_PROBE_URL, boundedMs)
+            // إذا رد سيرفر الخروج بحجب Cloudflare محدد بسرعة، نجرب gstatic ضمن ما تبقى من الميزانية الزمنية فقط
+            if (probe.status !in listOf(200, 204)) {
+                val rem = boundedMs - (System.currentTimeMillis() - tStart).toInt()
+                if (rem >= 450 && probe.status in 400..599) {
+                    probe = Socks.fastTunnelProbe(slot.listenPort, FAST_PROBE_FALLBACK_URL, rem)
+                }
+            }
             if (probe.status !in listOf(200, 204) || probe.elapsedMs <= 0L) {
                 return TestResult(slot.cfg, ok = false, error = "http-${probe.status}", packetLossPct = 100.0)
             }
             val establishMs = probe.establishMs.coerceAtLeast(probe.elapsedMs)
             val jitter = probe.jitterMs.coerceAtLeast(0.0)
             val speedKbps = if (measureThroughput && !Thread.currentThread().isInterrupted) {
-                measureDownloadThroughputOnPort(
+                measureFastBatchThroughputOnPort(
                     port = slot.listenPort,
-                    timeoutMs = maxOf(timeoutMs + 3_500, 6_500),
+                    connectTimeoutMs = 1_850,
+                    maxTransferMs = 1_800L,
                     budgetBytes = throughputBudgetBytes,
                     customPrimaryUrl = customSpeedUrl,
                 )
