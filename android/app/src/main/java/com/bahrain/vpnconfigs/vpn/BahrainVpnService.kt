@@ -873,13 +873,21 @@ class BahrainVpnService : VpnService() {
                 useDoh = prefs.dnsDoh,
             )
 
+            val activeLanIps = com.bahrain.vpnconfigs.hotspot.VpnHotspotManager
+                .detectAllSharingInterfaces()
+                .map { it.ipv4Address }
+            val ipv4Routes = LeakProtectionEngine.computeIpv4RoutesExcludingLocalLan(activeLanIps)
+
             val builder = Builder()
                 .setSession("bahrain-vpn")
                 .setBlocking(false)
                 .setMtu(8500)
                 .addAddress("198.18.0.1", 32)
-                .addRoute("0.0.0.0", 0)
                 .addDnsServer(plan.mapDnsAddress)
+
+            for (r in ipv4Routes) {
+                builder.addRoute(r.address, r.prefixLength)
+            }
 
             if (plan.captureIpv6Route) {
                 builder.addAddress("fc00::1", 128)
