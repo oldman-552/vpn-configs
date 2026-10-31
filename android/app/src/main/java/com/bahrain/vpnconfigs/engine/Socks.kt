@@ -94,6 +94,100 @@ object Socks {
     }
 
     /**
+     * فحص فائق السرعة لدفعات الـ 500 كونفيق (مثل urltest في sing-box / Hiddify / Clash):
+     * يفرض سقفًا زمنيًا كلّيًا صارمًا (Hard Wall-Clock Deadline) بحيث لا تتراكم مهل القراءة أبدًا،
+     * ويتحقق من عمل النفق المشفّر وحل DNS البعيد واستجابة HTTP 204 مع قياس RTT الدافئ.
+     */
+    fun fastTunnelProbe(
+        proxyPort: Int,
+        url: String = SingBox.FAST_PROBE_URL,
+        timeoutMs: Int = 1_450,
+    ): HttpProbe {
+        val uri = java.net.URI(url)
+        val host = uri.host ?: throw IllegalArgumentException("Invalid URL host: $url")
+        val isHttps = uri.scheme.equals("https", true)
+        val port = if (uri.port > 0) uri.port else if (isHttps) 443 else 80
+        val path = (uri.rawPath.ifBlank { "/" }) + (uri.rawQuery?.let { "?$it" } ?: "")
+
+        val connectStartNs = System.nanoTime()
+        val hardDeadlineNs = connectStartNs + timeoutMs.coerceIn(500, 6_000).toLong() * 1_000_000L
+        fun remainingMs(): Int = ((hardDeadlineNs - System.nanoTime()) / 1_000_000L).toInt()
+
+        var raw: Socket? = null
+        var activeSock: Socket? = null
+        try {
+            val pair = openTunnelSocket(proxyPort, host, port, isHttps, remainingMs().coerceAtLeast(150))
+            val estabMs = ((System.nanoTime() - connectStartNs) / 1_000_000L).coerceAtLeast(1L)
+            raw = pair.first
+            activeSock = pair.second
+
+            val rem1 = remainingMs()
+            if (rem1 < 60) throw java.net.SocketTimeoutException("probe budget exhausted")
+            activeSock.soTimeout = rem1
+
+            val out = activeSock.getOutputStream()
+            val input = BufferedInputStream(activeSock.getInputStream())
+
+            val req1 = buildString {
+                append("GET ").append(path).append(" HTTP/1.1\r\n")
+                append("Host: ").append(host).append("\r\n")
+                append("User-Agent: bahrain-vpn/2.2\r\n")
+                append("Connection: keep-alive\r\n\r\n")
+            }.toByteArray(Charsets.US_ASCII)
+
+            val t1 = System.nanoTime()
+            out.write(req1)
+            out.flush()
+
+            val (status1, contentLen1, connClose1) = readResponseHeaders(input)
+            if (status1 !in listOf(200, 204)) {
+                return HttpProbe(status1, 0L, 0L, establishMs = estabMs)
+            }
+            if (status1 != 204 && contentLen1 != null && contentLen1 > 0L) {
+                skipFully(input, minOf(contentLen1, 2048L).toInt())
+            }
+            val rtt1 = ((System.nanoTime() - t1) / 1_000_000L).coerceAtLeast(1L)
+
+            // إذا استجاب السيرفر بسرعة وبقيت ميزانية كافية، نأخذ نبضة دافئة سريعة لفصل مصافحة التأسيس عن البنق الصافي
+            var bestRtt = rtt1
+            var measuredJitter = 0.0
+            val rem2 = remainingMs()
+            if (!connClose1 && status1 == 204 && estabMs < 800L && rem2 >= 280) {
+                runCatching {
+                    activeSock.soTimeout = minOf(rem2, 480)
+                    val req2 = buildString {
+                        append("GET ").append(path).append(" HTTP/1.1\r\n")
+                        append("Host: ").append(host).append("\r\n")
+                        append("User-Agent: bahrain-vpn/2.2\r\n")
+                        append("Connection: close\r\n\r\n")
+                    }.toByteArray(Charsets.US_ASCII)
+                    val t2 = System.nanoTime()
+                    out.write(req2)
+                    out.flush()
+                    val (status2, _, _) = readResponseHeaders(input)
+                    if (status2 in listOf(200, 204)) {
+                        val rtt2 = ((System.nanoTime() - t2) / 1_000_000L).coerceAtLeast(1L)
+                        bestRtt = minOf(rtt1, rtt2)
+                        measuredJitter = kotlin.math.abs(rtt1 - rtt2).toDouble()
+                    }
+                }
+            }
+
+            return HttpProbe(
+                status = status1,
+                elapsedMs = bestRtt,
+                bytes = 0L,
+                transferMs = bestRtt,
+                establishMs = estabMs,
+                jitterMs = measuredJitter,
+            )
+        } finally {
+            runCatching { if (activeSock !== raw) activeSock?.close() }
+            runCatching { raw?.close() }
+        }
+    }
+
+    /**
      * قياس Real Delay (Current) الحقيقي مثل v2rayNG / Hiddify:
      * 1) يؤسس النفق ومصافحة TLS كاملةً أولًا (للتأكد أن السيرفر شغّال فعليًا ويمرر HTTPS).
      * 2) يقيس زمن ذهاب وعودة طلب HTTP generate_204 الصافي عبر النفق الدافئ (Keep-Alive)
@@ -193,6 +287,7 @@ object Socks {
         timeoutMs: Int,
         maxBytes: Long = 0,
         captureText: Boolean = false,
+        maxTransferMs: Long = 0L,
     ): HttpProbe {
         val uri = java.net.URI(url)
         val host = uri.host ?: throw IllegalArgumentException("Invalid URL host: $url")
@@ -201,6 +296,7 @@ object Socks {
         val path = (uri.rawPath.ifBlank { "/" }) + (uri.rawQuery?.let { "?$it" } ?: "")
 
         val started = System.nanoTime()
+        val connectDeadlineNs = started + timeoutMs.toLong() * 1_000_000L
         var raw: Socket? = null
         var activeSock: Socket? = null
 
@@ -208,6 +304,11 @@ object Socks {
             val pair = openTunnelSocket(proxyPort, host, port, isHttps, timeoutMs)
             raw = pair.first
             activeSock = pair.second
+
+            if (maxTransferMs > 0L) {
+                val remHeaderMs = ((connectDeadlineNs - System.nanoTime()) / 1_000_000L).toInt().coerceAtLeast(150)
+                activeSock.soTimeout = remHeaderMs
+            }
 
             val request = buildString {
                 append("GET ").append(path).append(" HTTP/1.1\r\n")
@@ -241,11 +342,25 @@ object Socks {
             }
 
             val firstByteStarted = System.nanoTime()
-            val buf = ByteArray(16 * 1024)
+            val streamDeadlineNs = if (maxTransferMs > 0L) {
+                firstByteStarted + maxTransferMs * 1_000_000L
+            } else {
+                Long.MAX_VALUE
+            }
+            val buf = ByteArray(32 * 1024)
             val captured = if (captureText) ByteArrayOutputStream() else null
             var read = 0L
             while (read < limit) {
-                val n = input.read(buf, 0, minOf(buf.size.toLong(), limit - read).toInt())
+                if (maxTransferMs > 0L) {
+                    val remStreamMs = ((streamDeadlineNs - System.nanoTime()) / 1_000_000L).toInt()
+                    if (remStreamMs <= 20) break
+                    activeSock.soTimeout = minOf(timeoutMs, remStreamMs.coerceAtLeast(80))
+                }
+                val n = try {
+                    input.read(buf, 0, minOf(buf.size.toLong(), limit - read).toInt())
+                } catch (_: java.net.SocketTimeoutException) {
+                    if (maxTransferMs > 0L && read >= 8_192L) break else throw java.net.SocketTimeoutException("stream timeout")
+                }
                 if (n <= 0) break
                 if (captured != null && captured.size() < 8192) {
                     captured.write(buf, 0, minOf(n, 8192 - captured.size()))

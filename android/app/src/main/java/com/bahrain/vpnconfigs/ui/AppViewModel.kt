@@ -267,7 +267,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val newProfile = ScanNetworkProfile.fromTransportCode(netSnap.transport.code)
                 if (newProfile != state.activeNetworkProfile && state.configs.isNotEmpty()) {
                     val (rebuilt, telMap) = withContext(Dispatchers.IO) {
-                        buildServerList(state.configs, state.results, state.sortMode, newProfile) to
+                        buildServerList(state.configs, emptyList(), state.sortMode, newProfile) to
                             clientDb.getAllServerTelemetryMap()
                     }
                     val topCnt = rebuilt.count { it.localPoolTier == LocalPoolTier.TOP_50 }
@@ -275,6 +275,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val sel = resolveSelected(state.selectedCfg, rebuilt)
                     state = state.copy(
                         activeNetworkProfile = newProfile,
+                        results = emptyList(),
                         servers = rebuilt,
                         telemetryById = telMap,
                         top50Count = topCnt,
@@ -283,7 +284,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         smartDecision = computeSmartDecisionFor(rebuilt, telMap),
                     )
                 } else if (newProfile != state.activeNetworkProfile) {
-                    state = state.copy(activeNetworkProfile = newProfile)
+                    state = state.copy(activeNetworkProfile = newProfile, results = emptyList())
                 }
             }
         }
@@ -476,7 +477,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val nowMs = System.currentTimeMillis()
         val sortMode = ServerSortMode.fromKey(modeKey)
         val favSet = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
-        val favIdSet = clientDb.favoriteServerIds()
+        val favRows = clientDb.listFavorites()
+        val favIdSet = favRows.map { it.serverId }.toHashSet()
+        val favCustomNamesById = favRows.associate { it.serverId to it.customName }
         val customs = prefs.customConfigs.map { Converters.cleanUri(it) }
         val customSet = customs.toHashSet()
         val vipNodes = licenseGuard.getAuthorizedVipNodes()
@@ -542,7 +545,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // القياسات المعروضة والمعتمدة في الترتيب الشخصي تأتي فقط من الفحص الحقيقي على نفس نوع الشبكة (WIFI أو MOBILE_DATA)
             val localProfileLat = if (!failed && netStat != null && netStat.isQualifiedLocally) {
                 netStat.latestLatencyMs
-            } else if (!failed && local != null && local.latencyMs > 0L && netStat != null) {
+            } else if (!failed && local != null && local.latencyMs > 0L) {
                 local.latencyMs
             } else {
                 0L
@@ -588,7 +591,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 ServerRanker.computeOverallScore(rankable, nowMs)
             }
-            val customFavName = clientDb.getFavorite(sid)?.customName.orEmpty()
+            val customFavName = favCustomNamesById[sid].orEmpty()
             val item = ServerItem(
                 cfg = cfg,
                 name = customFavName.ifBlank { vipNode?.label.orEmpty() },
@@ -1259,6 +1262,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         testJob = viewModelScope.launch {
             try {
                 val basePrevResults = state.results
+                var lastUiProgressAtMs = 0L
                 val summary = sequentialScanner.executeScan(
                     scanMode = scanMode,
                     allCandidateConfigs = pool,
@@ -1272,8 +1276,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     skipFreshWithinTtl = false,
                     activeNetworkSupplier = { currentNetworkProfile() },
                     onProgress = { p ->
-                        withContext(Dispatchers.Main.immediate) {
-                            state = state.copy(progress = p)
+                        val nowUi = android.os.SystemClock.elapsedRealtime()
+                        if (p.done == 0 || p.done >= p.total || nowUi - lastUiProgressAtMs >= 65L) {
+                            lastUiProgressAtMs = nowUi
+                            withContext(Dispatchers.Main.immediate) {
+                                state = state.copy(progress = p)
+                            }
                         }
                     },
                     onRankingUpdated = { _, aliveSoFar, failedSoFar ->

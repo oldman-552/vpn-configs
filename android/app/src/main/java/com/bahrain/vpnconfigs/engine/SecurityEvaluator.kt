@@ -7,8 +7,10 @@
 package com.bahrain.vpnconfigs.engine
 
 import android.net.Uri
+import com.bahrain.vpnconfigs.util.AppI18n
 import com.bahrain.vpnconfigs.util.tr
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 data class ServerSecurityProfile(
     val securityAssessment: String,   // Verified | Partial | Unknown | Failed
@@ -36,6 +38,7 @@ object SecurityEvaluator {
 
     private val BROKEN_CIPHERS = setOf("none", "plain", "rc4", "rc4-md5", "table", "des-cfb")
     private val SUSPICIOUS_PORTS = setOf(21, 22, 23, 25, 110, 135, 139, 143, 445, 3306, 3389, 5432, 6379, 27017)
+    private val evalCache = ConcurrentHashMap<String, ServerSecurityProfile>()
 
     fun evaluate(
         rawCfg: String,
@@ -45,6 +48,21 @@ object SecurityEvaluator {
         hintRisk: String = "",
     ): ServerSecurityProfile {
         val cleaned = Converters.cleanUri(rawCfg)
+        val cacheKey = "$cleaned|$isVipAttested|$hintSecurity|$hintPrivacy|$hintRisk|${AppI18n.isEnglish}"
+        evalCache[cacheKey]?.let { return it }
+        val computed = evaluateInternal(cleaned, isVipAttested, hintSecurity, hintPrivacy, hintRisk)
+        if (evalCache.size > 4096) evalCache.clear()
+        evalCache[cacheKey] = computed
+        return computed
+    }
+
+    private fun evaluateInternal(
+        cleaned: String,
+        isVipAttested: Boolean,
+        hintSecurity: String,
+        hintPrivacy: String,
+        hintRisk: String,
+    ): ServerSecurityProfile {
         if (cleaned.isBlank() || !Converters.isSupported(cleaned)) {
             return ServerSecurityProfile(
                 securityAssessment = "Failed",
