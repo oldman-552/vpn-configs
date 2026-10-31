@@ -7,7 +7,12 @@ import com.bahrain.vpnconfigs.engine.ProbeObservations
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class CensorshipProbeTest {
     private val clean = ProbeObservations(
         systemDnsIps = listOf("142.250.1.1"), dohIps = listOf("142.250.1.1"),
