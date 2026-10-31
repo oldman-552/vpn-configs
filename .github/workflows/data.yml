@@ -98,7 +98,7 @@ jobs:
           if [ ! -f dist/enterprise/bundle.json ]; then
             NEEDS_BUNDLE=1
           elif [ ! -f dist/enterprise/vault.enc.json ] && [ ! -f dist/enterprise/vault_sqlite.enc.json ]; then
-            if ! python -c 'import json,sys; sys.exit(0 if json.load(open("dist/enterprise/bundle.json",encoding="utf-8")).get("bundle",{}).get("bundle_release")=="1.0" else 1)' 2>/dev/null; then
+            if ! python -c 'import json,sys; sys.exit(0 if json.load(open("dist/enterprise/bundle.json",encoding="utf-8")).get("bundle",{}).get("bundle_release")=="2.0" else 1)' 2>/dev/null; then
               NEEDS_BUNDLE=1
             fi
           fi
@@ -175,13 +175,13 @@ jobs:
           cp -r dist/. "$OUT"/
 
           cat > "$OUT/README.md" <<EOF
-          # bahrain-vpn v1 (@data) — مخرجات البيانات السحابية الرسمية المولّدة آليًا
+          # bahrain-vpn v2 (@data) — مخرجات البيانات السحابية الرسمية المولّدة آليًا
 
-          هذا الفرع (\`data\`) يتبع الإصدار الرسمي الموحّد **\`bahrain-vpn v1\`** ويُعاد بناؤه والتحقق التشفيري منه آليًا كل 30 دقيقة عبر \`.github/workflows/data.yml\` — لا تعدّله يدويًا.
+          هذا الفرع (\`data\`) يتبع الإصدار الرسمي الموحّد **\`bahrain-vpn v2\`** ويُعاد بناؤه والتحقق التشفيري منه آليًا كل 30 دقيقة عبر \`.github/workflows/data.yml\` — لا تعدّله يدويًا.
 
-          - **الإصدار الرسمي لتطبيق الأندرويد والمشرف (\`bahrain-vpn v1\` — العربية أساسية + الإنجليزية):** https://github.com/${GITHUB_REPOSITORY}/releases/tag/v1
+          - **الإصدار الرسمي لتطبيق الأندرويد والمشرف (\`bahrain-vpn v2\` — العربية أساسية + الإنجليزية):** https://github.com/${GITHUB_REPOSITORY}/releases/tag/v2
 
-          | الملف | الوصف الهندسي (\`v1\`) | الرابط المباشر (\`jsDelivr CDN\`) |
+          | الملف | الوصف الهندسي (\`v2\`) | الرابط المباشر (\`jsDelivr CDN\`) |
           |---|---|---|
           | \`top500.manifest.json\` | بيان الإصدار وبصمات SHA-256 وحالة التحديث التفاضلي لحزمة المرشّحات المركزية | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.manifest.json |
           | \`top500.json\` | حزمة المرشّحات المركزية المؤهّلة (حتى 500 سيرفر بدون حشو — اختيار Top 50 محلي على أندرويد فقط) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.json |
@@ -202,12 +202,12 @@ jobs:
           | \`servers-performance.json\` | تحليلات الأداء النافذية (avg/median/p95 للتأخير والتذبذب والسرعة) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/servers-performance.json |
           | \`servers-statistics.json\` | الإحصاءات الشاملة والجاهزية وفئات الأعطال الـ 10 | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/servers-statistics.json |
           | \`api/v1/statistics.json\` | واجهة الإحصاءات العامة القرائية المعماة (\`OpenAPI 3.1.0\`) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/api/v1/statistics.json |
-          | \`enterprise/bundle.json\` | حزمة التراخيص الموقّعة (\`ECDSA P-256\` — \`v1\` / \`1.0\`) وعُقد VIP المشفّرة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/enterprise/bundle.json |
+          | \`enterprise/bundle.json\` | حزمة التراخيص الموقّعة (\`ECDSA P-256\` — \`v2\` / \`2.0\`) وعُقد VIP المشفّرة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/enterprise/bundle.json |
           | \`promo/ads.json\` | البطاقات الترويجية الخمس الدوّارة والصور المرافقة | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/promo/ads.json |
           | \`countries.json\` | فهرس الدول المُحقّقة عبر النفق الفعلي | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/countries.json |
           | \`source_health.json\` | تقرير صحّة وتفرّد المصادر وعزلها (بدون أسرار) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/source_health.json |
           | \`all.txt.gz\` | المجمع البنيوي النظيف الكامل مضغوطًا | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/all.txt.gz |
-          | \`meta.json\` | ملخص الدورة الشامل ومؤشرات الصحّة والأمان (\`v1\`) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/meta.json |
+          | \`meta.json\` | ملخص الدورة الشامل ومؤشرات الصحّة والأمان (\`v2\`) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/meta.json |
           EOF
 
           cd "$OUT"

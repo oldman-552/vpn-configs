@@ -1,18 +1,18 @@
-# bahrain-vpn — منصة ULTIMATE VPN ENTERPRISE `v1` الرسمية المتكاملة
+# bahrain-vpn — منصة ULTIMATE VPN ENTERPRISE `v2` الرسمية المتكاملة
 
-[![Release](https://img.shields.io/badge/Release-v1%20(Official)-success?style=for-the-badge)](https://github.com/oldman-552/vpn-configs/releases/tag/v1)
+[![Release](https://img.shields.io/badge/Release-v2%20(Official)-success?style=for-the-badge)](https://github.com/oldman-552/vpn-configs/releases/tag/v2)
 [![Languages](https://img.shields.io/badge/APK%20Languages-Arabic%20(Primary)%20%2B%20English-0ea5e9?style=for-the-badge)](android/README.md)
 [![Architecture](https://img.shields.io/badge/Architecture-Central%20Top%20500%20%2B%20Local%20Top%2050-blue?style=for-the-badge)](docs/ANDROID_ARCHITECTURE.md)
 [![Play Protect](https://img.shields.io/badge/Play%20Protect-Zero%20Dropper%20%2B%20RSA--4096%20v2%2Fv3-brightgreen?style=for-the-badge)](SECURITY.md)
 [![Infrastructure](https://img.shields.io/badge/100%25%20GitHub-Zero%20External%20VPS-24292f?style=for-the-badge)](DEPLOYMENT.md)
 
-منظومة VPN مؤسسية وسحابية متكاملة تعمل آليًا بالكامل **100% داخل بيئة GitHub دون أي خوادم خارجية (`Zero VPS / Zero Third-Party Cloud`)** تحت الهوية الموحّدة **`bahrain-vpn`** والإصدار الرسمي المعتمد **`v1`**:
+منظومة VPN مؤسسية وسحابية متكاملة تعمل آليًا بالكامل **100% داخل بيئة GitHub دون أي خوادم خارجية (`Zero VPS / Zero Third-Party Cloud`)** تحت الهوية الموحّدة **`bahrain-vpn`** والإصدار الرسمي المعتمد **`v2`**:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                          منظومة ULTIMATE VPN ENTERPRISE v1 (Pure-GitHub)                         │
+│                          منظومة ULTIMATE VPN ENTERPRISE v2 (Pure-GitHub)                         │
 ├────────────────────────────────────────────────┬─────────────────────────────────────────────────┤
-│ 1) قاعدة بيانات GitHub المركزية (Top 500)      │ 2) تطبيق المشترك الذكي للأندرويد (User APK v1)  │
+│ 1) قاعدة بيانات GitHub المركزية (Top 500)      │ 2) تطبيق المشترك الذكي للأندرويد (User APK v2)  │
 │ • 277 قناة تلغرام + 26 تغذية GitHub منتقاة     │ • ثنائي اللغة: العربية أساسية (RTL) + الإنجليزية│
 │ • فحص بنيوي + إزالة تكرار 5 طبقات + حجر صحي    │ • استثناء تلقائي لنطاقات .ir مباشرة (زر تحكم)  │
 │ • اختيار حتى 500 مرشح مؤهّل فقط بدون أي حشو    │ • هوتسبوت VPN بدون روت (HTTP/SOCKS5/PAC آمن)    │
@@ -20,7 +20,7 @@
 │ • قاعدة ذكاء تاريخي SQLite (24h/7d/30d/90d)     │ • متوافق مع Play Protect (Zero Dropper + v2/v3) │
 │   + واجهة إحصاءات عامة (/api/v1/* + OAS 3.1)   │   + منع تسرب DNS/IPv6 + Kill Switch + عقد VIP💎 │
 ├────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
-│ 3) تطبيق المشرف المستقل (Admin APK v1)         │ 4) لوحة الإدارة + شاشة المراقبة الحيّة (Web v1)  │
+│ 3) تطبيق المشرف المستقل (Admin APK v2)         │ 4) لوحة الإدارة + شاشة المراقبة الحيّة (Web v2)  │
 │ • ثنائي اللغة: العربية أساسية (RTL) + الإنجليزية│ • 17 صفحة إدارة مشفّرة (index.html على Pages)   │
 │ • موقّعة بشهادة إصدار RSA-4096 APK v2/v3       │ • لوحة مراقبة حيّة عامة (monitor.html AR/EN)    │
 │ • توثيق ثنائي TOTP 2FA + خزنة AES-256-GCM      │ • مؤشر Central Candidate Pool (Top 500) الحي    │
@@ -31,23 +31,23 @@
 
 ---
 
-## 1) التحميل المباشر للإصدار الرسمي `v1` (`Latest`) والتحقق الأمني
+## 1) التحميل المباشر للإصدار الرسمي `v2` (`Latest`) والتحقق الأمني
 
-جميع حزم الإصدار الرسمي **`v1`** (`versionName = "1.0"`, `versionCode = 1`) مبنية وموقّعة آليًا عبر مسار `.github/workflows/apk.yml` بشهادة إصدار **`RSA-4096` (`APK Signature Scheme v1 + v2 + v3` — بدون شهادة `Android Debug`)**، وتدعم **اللغة العربية كلغة أساسية افتراضية (`RTL`) مع دعم كامل للغة الإنجليزية (`LTR`) وتبديل فوري بضغطة واحدة**، ومحصّنة للتوافق مع **Google Play Protect** (خالية تمامًا من صلاحية `REQUEST_INSTALL_PACKAGES` وسلوك `Dropper`)، مع تقليص الحجم عبر **`R8 + Resource Shrinking`**:
+جميع حزم الإصدار الرسمي **`v2`** (`versionName = "2.0"`, `versionCode = 2`) مبنية وموقّعة آليًا عبر مسار `.github/workflows/apk.yml` بشهادة إصدار **`RSA-4096` (`APK Signature Scheme v1 + v2 + v3` — بدون شهادة `Android Debug`)**، وتدعم **اللغة العربية كلغة أساسية افتراضية (`RTL`) مع دعم كامل للغة الإنجليزية (`LTR`) وتبديل فوري بضغطة واحدة**، ومحصّنة للتوافق مع **Google Play Protect** (خالية تمامًا من صلاحية `REQUEST_INSTALL_PACKAGES` وسلوك `Dropper`)، مع تقليص الحجم عبر **`R8 + Resource Shrinking`**:
 
-- **صفحة الإصدار الرسمي الموقّع:** [**GitHub Releases — `bahrain-vpn v1` (`Latest`)**](https://github.com/oldman-552/vpn-configs/releases/tag/v1)
+- **صفحة الإصدار الرسمي الموقّع:** [**GitHub Releases — `bahrain-vpn v2` (`Latest`)**](https://github.com/oldman-552/vpn-configs/releases/tag/v2)
 
-| الحزمة الرسمية (`v1`) | الاستخدام الموصى به | معرّف النسخة | اللغات المدعومة | رابط التحميل المباشر (`HTTPS`) |
+| الحزمة الرسمية (`v2`) | الاستخدام الموصى به | معرّف النسخة | اللغات المدعومة | رابط التحميل المباشر (`HTTPS`) |
 |---|---|---|---|---|
-| **`app-arm64-v8a-release.apk`** | **تطبيق المشترك** لجميع هواتف أندرويد الحديثة (`ARM64`) | `versionCode = 1` (`v1`) | العربية (أساسية) + English | [تحميل ARM64 v1](https://github.com/oldman-552/vpn-configs/releases/download/v1/app-arm64-v8a-release.apk) |
-| **`app-x86_64-release.apk`** | **تطبيق المشترك** لأجهزة ومحاكيات `x86_64` | `versionCode = 1` (`v1`) | العربية (أساسية) + English | [تحميل x86_64 v1](https://github.com/oldman-552/vpn-configs/releases/download/v1/app-x86_64-release.apk) |
-| **`app-release.apk`** | **تطبيق المشترك الشامل** (`Universal`: يضم كل المعماريات) | `versionCode = 1` (`v1`) | العربية (أساسية) + English | [تحميل Universal v1](https://github.com/oldman-552/vpn-configs/releases/download/v1/app-release.apk) |
-| **`app-admin-release.apk`** | **تطبيق المشرف المستقل** (`com.bahrain.vpnadmin`) | `versionCode = 1` (`v1`) | العربية (أساسية) + English | [تحميل Admin v1](https://github.com/oldman-552/vpn-configs/releases/download/v1/app-admin-release.apk) |
-| **`SHA256SUMS.txt`** | ملف البصمات التشفيرية المجمّع (`SHA-256`) لجميع الحزم الموقّعة في الإصدار الرسمي `v1` | `v1` (`1.0`) | — | [تحميل SHA256SUMS.txt](https://github.com/oldman-552/vpn-configs/releases/download/v1/SHA256SUMS.txt) |
+| **`app-arm64-v8a-release.apk`** | **تطبيق المشترك** لجميع هواتف أندرويد الحديثة (`ARM64`) | `versionCode = 2` (`v2`) | العربية (أساسية) + English | [تحميل ARM64 v2](https://github.com/oldman-552/vpn-configs/releases/download/v2/app-arm64-v8a-release.apk) |
+| **`app-x86_64-release.apk`** | **تطبيق المشترك** لأجهزة ومحاكيات `x86_64` | `versionCode = 2` (`v2`) | العربية (أساسية) + English | [تحميل x86_64 v2](https://github.com/oldman-552/vpn-configs/releases/download/v2/app-x86_64-release.apk) |
+| **`app-release.apk`** | **تطبيق المشترك الشامل** (`Universal`: يضم كل المعماريات) | `versionCode = 2` (`v2`) | العربية (أساسية) + English | [تحميل Universal v2](https://github.com/oldman-552/vpn-configs/releases/download/v2/app-release.apk) |
+| **`app-admin-release.apk`** | **تطبيق المشرف المستقل** (`com.bahrain.vpnadmin`) | `versionCode = 2` (`v2`) | العربية (أساسية) + English | [تحميل Admin v2](https://github.com/oldman-552/vpn-configs/releases/download/v2/app-admin-release.apk) |
+| **`SHA256SUMS.txt`** | ملف البصمات التشفيرية المجمّع (`SHA-256`) لجميع الحزم الموقّعة في الإصدار الرسمي `v2` | `v2` (`2.0`) | — | [تحميل SHA256SUMS.txt](https://github.com/oldman-552/vpn-configs/releases/download/v2/SHA256SUMS.txt) |
 
 ---
 
-## 2) المعمارية الهندسية والأمنية في الإصدار الرسمي `v1`
+## 2) المعمارية الهندسية والأمنية في الإصدار الرسمي `v2`
 
 ### أ) واجهة ثنائية اللغة (العربية أساسية `RTL` + الإنجليزية `LTR`) وتوجيه مباشر لنطاقات `.ir`
 1. **اللغة العربية هي اللغة الأساسية والافتراضية:** يعمل كل من تطبيق المشترك (`com.bahrain.vpnconfigs`) وتطبيق المشرف (`com.bahrain.vpnadmin`) باللغة العربية وتخطيط `RTL` افتراضيًا عند التثبيت الأول (`Prefs.appLanguage = "ar"` + `res/xml/locales_config.xml`).
@@ -67,7 +67,7 @@
      - **فحص شامل (`Full Scan`):** يقيّم كامل حزمة الـ `Top 500` بالتسلسل لاكتشاف السيرفرات الأسرع وتحديث `TOP_50` ومجمّع `BACKUP_POOL`.
    - **عزل تام حسب الشبكة (`WIFI` مقابل `MOBILE_DATA`):** ترتيب `TOP_50` ومجمّع الاحتياطي والسجل التاريخي التراكمي (`Append-Only`) منفصلة كليًا لكل نوع شبكة.
 
-### ج) التوافق الأمني مع Google Play Protect والتوقيع الرسمي (`v1`)
+### ج) التوافق الأمني مع Google Play Protect والتوقيع الرسمي (`v2`)
 1. **إزالة بصمة المحمّلات (`Zero Dropper Behavior`):**
    - خالٍ تمامًا من صلاحية `android.permission.REQUEST_INSTALL_PACKAGES` ومن أي تنزيل داخلي لملفات `.apk` أو استدعاء `"application/vnd.android.package-archive"`.
    - يفوّض `AppUpdateManager` تحميل الحزمة المناسبة لمعمارية المعالج (`arm64-v8a` / `x86_64` / `universal`) إلى المتصفح الرسمي للنظام حصريًا عبر روابط `HTTPS` الموثّقة في `enterprise/bundle.json` مع نسخ بصمة `SHA-256` للحافظة.
@@ -114,13 +114,13 @@
 | **`servers-performance.json`** | تحليلات الأداء النافذية (`avg/median/p95` للتأخير، التذبذب، فقدان الحزم، والسرعة) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-performance.json` |
 | **`servers-statistics.json`** | الإحصاءات الشاملة والجاهزية وفئات الأعطال الـ 10 (`countries-statistics.json` / `sources-statistics.json`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/servers-statistics.json` |
 | **`api/v1/statistics.json`** | واجهة الإحصاءات العامة المعماة (`v1`) ومواصفة `api/v1/openapi.json` | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/api/v1/statistics.json` |
-| **`enterprise/bundle.json`** | حزمة التراخيص الموقّعة (`ECDSA P-256` — `v1` / `"1.0"`)، التحديثات، وعُقد `VIP` المشفّرة | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/enterprise/bundle.json` |
+| **`enterprise/bundle.json`** | حزمة التراخيص الموقّعة (`ECDSA P-256` — `v2` / `"2.0"`)، التحديثات، وعُقد `VIP` المشفّرة | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/enterprise/bundle.json` |
 | **`promo/ads.json`** | توصيف البطاقات الترويجية الخمس الدوّارة والصور المرافقة (`ad1.png..ad5.png`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/promo/ads.json` |
 | **`meta.json`** | ملخص الدورة الشامل ومؤشرات الصحّة والأمان (`top500_qualified`, `security_summary`) | `https://cdn.jsdelivr.net/gh/oldman-552/vpn-configs@data/meta.json` |
 
 ---
 
-## 4) الهيكل الهندسي للمستودع والملفات الرئيسية (`v1`)
+## 4) الهيكل الهندسي للمستودع والملفات الرئيسية (`v2`)
 
 | المسار | الوظيفة الهندسية |
 |---|---|
@@ -131,11 +131,11 @@
 | `dedupe.py` / `scoring.py` | إزالة التكرار خماسية الطبقات والهوية المعماة `server_id` + التقييم متعدد الأبعاد و5 ملفات ترتيب |
 | `collector.py` / `tester.py` / `server/build_data.py` | الجلب المحصّن بـ `ETag` لـ 277 قناة تلغرام و26 تغذية GitHub + فحص النفق عبر `Xray-core` و`sing-box` + حماية `Last-Known-Good` |
 | `public_api.py` | مصدّر وخادم واجهة الإحصاءات العامة القرائية (`/api/v1/*` + `OpenAPI 3.1.0` + `ETag/304`) |
-| `enterprise/` | نواة المنصة المؤسسية `v1` (`database.py`, `crypto_security.py`, `ai_intelligence.py`, `publisher.py`) |
-| `web-admin/` | لوحة التحكم الويب المعيارية من 17 صفحة (`index.html`) + لوحة المراقبة الحيّة العامة (`monitor.html`) بإصدار `v1` |
-| `android/app/` | تطبيق المشترك الرسمي `v1` (`versionCode = 1`, `versionName = "1.0"`): ثنائي اللغة `AR` أساسية + `EN` (`AppI18n.kt`)، `LocalServerIntelligence.kt`، `ClientDatabase.kt`، `AppUpdateManager.kt`، `BahrainVpnService.kt`، `LeakProtectionEngine.kt`، `KillSwitchController.kt`، `ConnectionSecurityClassifier.kt` |
-| `android/admin/` | تطبيق المشرف المستقل `v1` (`versionCode = 1`, `versionName = "1.0"`): ثنائي اللغة `AR` أساسية + `EN`، `AdminMainActivity.kt`، `AdminGitHubEngine.kt`، وتوقيع `RSA-4096 v1/v2/v3` |
-| `.github/workflows/` | مسارات الأتمتة الأربع المثبّتة ببصمات `40-char SHA` (`ci.yml`, `data.yml`, `enterprise.yml`, `apk.yml`) |
+| `enterprise/` | نواة المنصة المؤسسية `v2` (`database.py`, `crypto_security.py`, `ai_intelligence.py`, `publisher.py`) |
+| `web-admin/` | لوحة التحكم الويب المعيارية من 17 صفحة (`index.html`) + لوحة المراقبة الحيّة العامة (`monitor.html`) بإصدار `v2` |
+| `android/app/` | تطبيق المشترك الرسمي `v2` (`versionCode = 2`, `versionName = "2.0"`): ثنائي اللغة `AR` أساسية + `EN` (`AppI18n.kt`)، `VpnHotspotManager.kt`، `CommunityTestingManager.kt`، `LocalServerIntelligence.kt`، `ClientDatabase.kt`، `AppUpdateManager.kt`، `BahrainVpnService.kt`، `LeakProtectionEngine.kt`، `KillSwitchController.kt`، `ConnectionSecurityClassifier.kt` |
+| `android/admin/` | تطبيق المشرف المستقل `v2` (`versionCode = 2`, `versionName = "2.0"`): ثنائي اللغة `AR` أساسية + `EN`، `AdminMainActivity.kt`، `AdminGitHubEngine.kt`، وتوقيع `RSA-4096 v1/v2/v3` |
+| `.github/workflows/` | مسارات الأتمتة الخمس المثبّتة ببصمات `40-char SHA` (`ci.yml`, `data.yml`, `community_rankings.yml`, `enterprise.yml`, `apk.yml`) |
 
 ---
 
@@ -160,23 +160,23 @@ base64 -w0 bahrain-vpn-release.p12
 
 ---
 
-## 6) التشغيل اليدوي والاختبارات الآلية الشاملة (`v1`)
+## 6) التشغيل اليدوي والاختبارات الآلية الشاملة (`v2`)
 
 ```bash
 pip install -r requirements.txt
 
-# 1. جمع وفحص العُقد السحابية وبناء قوائم dist/ شاملةً top500.* و servers-*.json و api/v1/
+# 1. جمع وفحص العُقد السحابية وبناء قوائم dist/ شاملةً top500.* و iran-top500.* و servers-*.json و api/v1/
 TEST_TOP=400 python server/build_data.py
 
-# 2. توليد حزمة التراخيص الموقّعة (bundle.json v1)
+# 2. توليد حزمة التراخيص الموقّعة (bundle.json v2)
 ENTERPRISE_MASTER_KEY="your-strong-passphrase" python -m enterprise.publisher \
   --vault enterprise/vault/enterprise_vault.enc.json \
   --alive dist/alive.json \
   --bundle-out dist/enterprise/bundle.json \
   --backup-dir dist/enterprise/backups
 
-# 3. التحقق من لوحتَي الويب والمراقبة وتشغيل حزمة الاختبارات الشاملة (51 اختبار pytest)
-for jsf in web-admin/*.js web-admin/modules/*.js; do node --check "$jsf"; done
+# 3. التحقق من لوحتَي الويب والمراقبة وتشغيل حزمة الاختبارات الشاملة (54 اختبار pytest)
+for jsf in web-admin/*.js web-admin/modules/*.js community-worker/worker.js; do node --check "$jsf"; done
 pytest -v
 ```
 
@@ -186,9 +186,9 @@ pytest -v
 
 ---
 
-## 7) التوثيق الهندسي المرجعي الكامل والشفافية الأمنية (`v1`)
+## 7) التوثيق الهندسي المرجعي الكامل والشفافية الأمنية (`v2`)
 
-- **معمارية أندرويد (`v1` — Bilingual AR/EN + Central Top 500 + Local Personalized Top 50 + Play Protect Hardening):** [`docs/ANDROID_ARCHITECTURE.md`](docs/ANDROID_ARCHITECTURE.md) | [`docs/ANDROID_BATTERY_OPTIMIZATION.md`](docs/ANDROID_BATTERY_OPTIMIZATION.md) | [`android/README.md`](android/README.md)
+- **معمارية أندرويد (`v2` — Bilingual AR/EN + Rootless VPN Hotspot + Community Verification + Central Top 500 + Local Personalized Top 50):** [`docs/ANDROID_ARCHITECTURE.md`](docs/ANDROID_ARCHITECTURE.md) | [`docs/ANDROID_BATTERY_OPTIMIZATION.md`](docs/ANDROID_BATTERY_OPTIMIZATION.md) | [`android/README.md`](android/README.md)
 - **مخططات قواعد البيانات ونموذج الأمان والخصوصية:** [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) | [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md) | [`SECURITY.md`](SECURITY.md) | [`PRIVACY.md`](PRIVACY.md)
 - **البنية المعمارية الشاملة والنشر السحابي وسجل الإصدارات:** [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`DEPLOYMENT.md`](DEPLOYMENT.md) | [`docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md`](docs/ENTERPRISE_ARCHITECTURE_AND_OPERATIONS.md) | [`CHANGELOG.md`](CHANGELOG.md)
 - **توثيق واجهة الإحصاءات العامة (`API v1`) وتقارير الاختبار:** [`API.md`](API.md) | [`TESTING.md`](TESTING.md) | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)

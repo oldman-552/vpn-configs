@@ -181,7 +181,7 @@ fun AppHealthAndFailoverCard(
                 Icon(Icons.Filled.HealthAndSafety, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    tr("مفتاح الإيقاف والتبديل الذكي وصحة النفق (v1)", "Kill Switch, Smart Failover & Tunnel Health (v1)"),
+                    tr("مفتاح الإيقاف والتبديل الذكي وصحة النفق (v2)", "Kill Switch, Smart Failover & Tunnel Health (v2)"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )

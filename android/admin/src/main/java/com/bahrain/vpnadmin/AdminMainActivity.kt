@@ -1,5 +1,5 @@
 // =====================================================================
-// AdminMainActivity.kt — تطبيق الإدارة المستقل (bahrain-vpn Admin APK v1)
+// AdminMainActivity.kt — تطبيق الإدارة المستقل (bahrain-vpn Admin APK v2)
 // يدعم اللغتين العربية (اللغة الأساسية RTL) والإنجليزية (LTR) مع تبديل فوري،
 // ويوفر تحكمًا فوريًا بمشتركي المنصة، التجارب المجانية 48 ساعة، الأجهزة،
 // الخوادم، الإعدادات البعيدة، وتقارير الذكاء الاصطناعي عبر GitHub حصريًا.
@@ -265,7 +265,7 @@ private fun AdminRootApp(vaultMgr: AdminGitHubVaultManager) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("bahrain-vpn ADMIN v1", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+                Text("bahrain-vpn ADMIN v2", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
                 OutlinedButton(onClick = { AdminI18n.toggle(ctx) }) {
                     Icon(Icons.Filled.Language, contentDescription = null)
                     Text(if (AdminI18n.isEnglish) " عربي" else " EN")
@@ -317,7 +317,7 @@ private fun AdminRootApp(vaultMgr: AdminGitHubVaultManager) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("bahrain-vpn ADMIN v1", fontWeight = FontWeight.Bold) },
+                title = { Text("bahrain-vpn ADMIN v2", fontWeight = FontWeight.Bold) },
                 actions = {
                     TextButton(onClick = { AdminI18n.toggle(ctx) }) {
                         Text(if (AdminI18n.isEnglish) "عربي" else "EN", fontWeight = FontWeight.Bold)

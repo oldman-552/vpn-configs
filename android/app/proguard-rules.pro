@@ -1,5 +1,5 @@
 # =====================================================================
-# R8 Tree-Shaking + Resource Shrinking Rules for bahrain-vpn v1
+# R8 Tree-Shaking + Resource Shrinking Rules for bahrain-vpn v2
 # Strips unused Material Icons (~25-30 MB DEX) & unused AndroidX classes
 # while keeping JNI bridges, WorkManager, and app classes 100% intact.
 # =====================================================================

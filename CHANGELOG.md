@@ -1,10 +1,10 @@
 # Changelog
 
-## [v1] — 2026-10-31 — Official `bahrain-vpn v1` Production Release (`1.0`)
+## [v2] — 2026-10-31 — Official `bahrain-vpn v2` Production Release (`2.0`)
 
 ### Official Release Highlights
-- **Official `v1` Clean-Slate Versioning (`versionCode = 1`, `versionName = "1.0"`, Tag `v1`)**:
-  - Unified User APK (`com.bahrain.vpnconfigs`), Admin APK (`com.bahrain.vpnadmin`), Enterprise License Bundle (`bundle_release = "1.0"`), Web Admin Console (`web-admin/`), and GitHub Releases under the single official **`v1`** release tag, purging legacy pre-`v1` tags, releases, and obsolete audit artifacts.
+- **Official `v2` Unified Tag & Release (`versionCode = 2`, `versionName = "2.0"`, Tag `v2`)**:
+  - Unified User APK (`com.bahrain.vpnconfigs`), Admin APK (`com.bahrain.vpnadmin`), Enterprise License Bundle (`bundle_release = "2.0"`), Web Admin Console (`web-admin/`), `@data/README.md`, and GitHub Releases under the single official **`v2`** release tag (`Latest`), purging stale legacy releases/tags so zero version conflicts exist across the repository.
 - **Full Bilingual APK Support — Arabic Primary (`RTL`) + English Secondary (`LTR`)**:
   - Added `AppI18n.kt` (`:app`), `AdminI18n` (`:admin`), `res/xml/locales_config.xml`, and `res/values-en/strings.xml` across both Android modules.
   - **Arabic (`ar`)** is strictly preserved as the primary default language (`LayoutDirection.Rtl`) on fresh installation, with instant one-tap switching to **English (`en`, `LayoutDirection.Ltr`)** from the top bar (`EN / عربي`) or Settings without restarting the app.

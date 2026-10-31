@@ -1,5 +1,5 @@
 // =====================================================================
-// Screens.kt — الواجهات الأربع لتطبيق bahrain-vpn (v1) بتصميم Material 3
+// Screens.kt — الواجهات الأربع لتطبيق bahrain-vpn (v2) بتصميم Material 3
 // ودعم ثنائي اللغة (العربية أساسية RTL + الإنجليزية LTR):
 //   1) ConnectHomeScreen      — زر الاتصال الدائري، العداد، السرعة الحية، السيرفر النشط
 //   2) ServersListScreen      — قائمة سيرفرات bahrain-vpn كاملة مع الفلاتر والفحص والمفضلة
@@ -1891,7 +1891,7 @@ fun SettingsAndExportScreen(
                 Text(tr("حول التطبيق والتراخيص القانونية", "About & Open-Source Licenses"), style = MaterialTheme.typography.titleMedium)
                 val aboutUpdated = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
                 Text(
-                    "bahrain-vpn v1$aboutUpdated",
+                    "bahrain-vpn v2$aboutUpdated",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                 )

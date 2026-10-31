@@ -24,7 +24,7 @@ const GovernanceViews = {
                   <td>${t("خوادم ذات زمن استجابة مرتفع (>= 650ms)", "High-latency VPN endpoints (>= 650ms)")}</td>
                   <td>${degraded.length} / ${totalSrv} (${((degraded.length / totalSrv) * 100).toFixed(1)}%)</td>
                   <td><span class="badge ${degraded.length > totalSrv * 0.3 ? "b-err" : "b-warn"}">${degraded.length > totalSrv * 0.3 ? "HIGH" : "MEDIUM"} / ${confidence}</span></td>
-                  <td>${t("إبقاء الترتيب الشخصي المحلي Top 50 والتبديل الذكي الاستباقي (Auto-Failover v1).", "Keep Personalized Local Top 50 ranking and Proactive Smart Auto-Failover v1 active.")}</td>
+                  <td>${t("إبقاء الترتيب الشخصي المحلي Top 50 والتبديل الذكي الاستباقي (Auto-Failover v2).", "Keep Personalized Local Top 50 ranking and Proactive Smart Auto-Failover v2 active.")}</td>
                 </tr>`}
               </tbody>
             </table>
@@ -69,7 +69,7 @@ const GovernanceViews = {
         return `
           <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-              <h3>${t("إدارة الإصدارات والتحديث الرسمي الآمن حسب المعمارية (Split ABI v1)", "ABI-Aware Signed APK Version & Update Manager (v1)")}</h3>
+              <h3>${t("إدارة الإصدارات والتحديث الرسمي الآمن حسب المعمارية (Split ABI v2)", "ABI-Aware Signed APK Version & Update Manager (v2)")}</h3>
               <button class="btn no-print" onclick="triggerApkReleaseBuild()">${t("بناء ونشر APK جديد عبر GitHub Actions", "Trigger Signed APK Build")}</button>
             </div>
             <table>
