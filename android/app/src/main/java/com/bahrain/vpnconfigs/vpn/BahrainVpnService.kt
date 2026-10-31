@@ -38,7 +38,9 @@ import com.bahrain.vpnconfigs.engine.SingBox
 import com.bahrain.vpnconfigs.engine.Socks
 import com.bahrain.vpnconfigs.enterprise.AppHealthMonitor
 import com.bahrain.vpnconfigs.enterprise.EnterpriseLicenseGuard
+import com.bahrain.vpnconfigs.util.AppI18n
 import com.bahrain.vpnconfigs.util.UiMessages
+import com.bahrain.vpnconfigs.util.tr
 import hev.htproxy.TProxyService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -305,8 +307,8 @@ class BahrainVpnService : VpnService() {
         serviceScope.launch {
             opLock.withLock {
                 finalizeActiveSessionRow()
-                VpnStateManager.appendEvent("تم قطع الاتصال بطلب المستخدم")
-                teardownInternal(null, "تم قطع الاتصال", userInitiated = true)
+                VpnStateManager.appendEvent(tr("تم قطع الاتصال بطلب المستخدم", "Disconnected by user"))
+                teardownInternal(null, tr("تم قطع الاتصال", "Disconnected"), userInitiated = true)
             }
             stopSelf()
         }
@@ -324,11 +326,12 @@ class BahrainVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        AppI18n.initFromPrefs(applicationContext)
         val action = intent?.action ?: ACTION_CONNECT
 
         val initialLabel = intent?.getStringExtra(EXTRA_LABEL)
             ?: VpnStateManager.status.value.activeLabel.ifBlank { prefs.selectedLabel }
-        promoteToForeground(buildNotification("جارٍ المعالجة…", initialLabel, ""))
+        promoteToForeground(buildNotification(tr("جارٍ المعالجة…", "Processing…"), initialLabel, ""))
 
         if (action == ACTION_DISCONNECT) {
             requestDisconnect()
@@ -585,7 +588,7 @@ class BahrainVpnService : VpnService() {
                 killSwitchActive = killSwitchOn,
                 osLockdownActive = osLockdown,
                 reconnectAttempt = 0,
-                statusMessage = "متّصل بأمان عبر $chosenLabel (${initialPing} ms)",
+                statusMessage = tr("متّصل بأمان عبر $chosenLabel (${initialPing} ms)", "Connected via $chosenLabel (${initialPing} ms)"),
                 error = null,
             )
         }
@@ -1012,7 +1015,11 @@ class BahrainVpnService : VpnService() {
                         val st = VpnStateManager.status.value
                         val pingTxt = if (st.livePingMs > 0) " • ${st.livePingMs} ms" else ""
                         val detail = "↓ ${VpnStateManager.formatSpeed(downSpd)}  ↑ ${VpnStateManager.formatSpeed(upSpd)}$pingTxt"
-                        val prefix = if (st.phase == VpnPhase.CONNECTION_DEGRADED) "متّصل (تذبذب)" else "متّصل"
+                        val prefix = if (st.phase == VpnPhase.CONNECTION_DEGRADED) {
+                            tr("متّصل (تذبذب)", "Connected (Degraded)")
+                        } else {
+                            tr("متّصل", "Connected")
+                        }
                         updateNotification("$prefix (${st.activeLabel})", detail)
                     }
                 }
@@ -1418,10 +1425,13 @@ class BahrainVpnService : VpnService() {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val ch = NotificationChannel(
                 CHANNEL_ID,
-                "اتصال bahrain-vpn",
+                tr("اتصال bahrain-vpn", "bahrain-vpn Tunnel"),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "يعرض حالة اتصال الـ VPN ومفتاح الإيقاف والسرعة الحيّة"
+                description = tr(
+                    "يعرض حالة اتصال الـ VPN ومفتاح الإيقاف والسرعة الحيّة",
+                    "Shows VPN tunnel state, Kill Switch status, and live speed",
+                )
                 setShowBadge(false)
             }
             nm.createNotificationChannel(ch)
@@ -1481,14 +1491,14 @@ class BahrainVpnService : VpnService() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_vpn_tile)
             .setContentTitle(title)
-            .setContentText(body.ifBlank { "اضغط لفتح لوحة التحكم" })
+            .setContentText(body.ifBlank { tr("اضغط لفتح لوحة التحكم", "Tap to open control panel") })
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(openAppIntent)
-            .addAction(0, "السيرفر التالي", nextIntent)
-            .addAction(0, "قطع الاتصال", stopIntent)
+            .addAction(0, tr("السيرفر التالي", "Next Server"), nextIntent)
+            .addAction(0, tr("قطع الاتصال", "Disconnect"), stopIntent)
             .build()
     }
 }

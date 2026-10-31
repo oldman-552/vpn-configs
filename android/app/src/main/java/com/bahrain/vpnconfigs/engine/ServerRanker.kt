@@ -21,15 +21,19 @@
 // =====================================================================
 package com.bahrain.vpnconfigs.engine
 
+import com.bahrain.vpnconfigs.util.tr
 import kotlin.math.ln
 
-enum class ServerSortMode(val key: String, val titleAr: String) {
-    FASTEST_DOWNLOAD("FASTEST_DOWNLOAD", "الأسرع في التنزيل"),
-    LOWEST_LATENCY("LOWEST_LATENCY", "الأقل تأخيرًا"),
-    MOST_STABLE("MOST_STABLE", "الأكثر استقرارًا"),
-    BEST_OVERALL("BEST_OVERALL", "الأفضل إجمالًا"),
-    PRIVACY_AWARE("PRIVACY_AWARE", "الأعلى أمانًا وخصوصية"),
-    RECENTLY_TESTED("RECENTLY_TESTED", "الأحدث اختبارًا");
+enum class ServerSortMode(val key: String, val titleAr: String, val titleEn: String) {
+    FASTEST_DOWNLOAD("FASTEST_DOWNLOAD", "الأسرع في التنزيل", "Fastest Download"),
+    LOWEST_LATENCY("LOWEST_LATENCY", "الأقل تأخيرًا", "Lowest Latency"),
+    MOST_STABLE("MOST_STABLE", "الأكثر استقرارًا", "Most Stable"),
+    BEST_OVERALL("BEST_OVERALL", "الأفضل إجمالًا", "Best Overall"),
+    PRIVACY_AWARE("PRIVACY_AWARE", "الأعلى أمانًا وخصوصية", "Privacy & Security"),
+    RECENTLY_TESTED("RECENTLY_TESTED", "الأحدث اختبارًا", "Recently Tested");
+
+    val displayTitle: String
+        get() = tr(titleAr, titleEn)
 
     companion object {
         val DEFAULT: ServerSortMode = FASTEST_DOWNLOAD

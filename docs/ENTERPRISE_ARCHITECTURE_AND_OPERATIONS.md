@@ -1,4 +1,4 @@
-# ULTIMATE VPN ENTERPRISE v3.2 — التوثيق الهندسي، الأمني، والتشغيلي الشامل (100% على GitHub)
+# ULTIMATE VPN ENTERPRISE v1 — التوثيق الهندسي، الأمني، والتشغيلي الشامل (100% على GitHub)
 
 ## 1. المعمارية السحابية الخالية من الخوادم الخارجية (100% Pure-GitHub Architecture)
 
@@ -6,8 +6,8 @@
 
 | المكوّن | المسار البرمجي | آلية التشغيل على GitHub |
 |---|---|---|
-| **تطبيق المشترك (User APK `v3.2`)** | `android/app/` (`com.bahrain.vpnconfigs` — `versionCode = 10`) | مقلّص الحجم عبر `R8` (`27.63 MB` لـ `ARM64`)، يضم حماية صارمة من تسرب `DNS/IPv6`، مفتاح إيقاف حقيقي (`Fail-Closed Kill Switch`)، تبديلًا استباقيًا (`OFF/SMART/AGGRESSIVE`)، فك تشفير عقد `VIP 💎`، ومحدّث `Split ABI` الموثّق ببصمات `SHA-256` على **GitHub Releases**. |
-| **تطبيق المشرف المستقل (Admin APK `v3.2`)** | `android/admin/` (`com.bahrain.vpnadmin` — `versionCode = 3`) | تطبيق مستقل رشيق (`2.19 MB`) يتحقق من رمز `TOTP 2FA`، يدير ويشفّر عقد `VIP` الخاصة (`AES-256-GCM`)، ويوقّع التراخيص (`ECDSA P-256`) عبر `api.github.com`. |
+| **تطبيق المشترك (User APK `v1`)** | `android/app/` (`com.bahrain.vpnconfigs` — `versionCode = 1`, `versionName = "1.0"`) | ثنائي اللغة (**العربية أساسية `RTL` + الإنجليزية `LTR`**)، مقلّص الحجم عبر `R8`، يضم حماية صارمة من تسرب `DNS/IPv6`، مفتاح إيقاف حقيقي (`Fail-Closed Kill Switch`)، تبديلًا استباقيًا (`OFF/SMART/AGGRESSIVE`)، فك تشفير عقد `VIP 💎`، ومحدّث `Split ABI` الموثّق ببصمات `SHA-256` على **GitHub Releases (`v1`)**. |
+| **تطبيق المشرف المستقل (Admin APK `v1`)** | `android/admin/` (`com.bahrain.vpnadmin` — `versionCode = 1`, `versionName = "1.0"`) | تطبيق مستقل رشيق ثنائي اللغة (`AR/EN`) يتحقق من رمز `TOTP 2FA`، يدير ويشفّر عقد `VIP` الخاصة (`AES-256-GCM`)، ويوقّع التراخيص (`ECDSA P-256`) عبر `api.github.com`. |
 | **لوحة الإدارة (17 صفحة) + المراقبة الحيّة** | `web-admin/` + `web-admin/modules/` + `monitor.{html,js}` | مستضافة على **GitHub Pages** (`gh-pages`): لوحة مشرف مشفّرة بـ **WebCrypto** (`index.html`) + شاشة مراقبة حيّة عامة قرائية (`monitor.html`) ثنائية اللغة (AR/EN) مع رسوم اتجاهات `SVG`. |
 | **محرك الذكاء الأمني والبيانات وواجهة `API v1`** | `enterprise/` + `security_intelligence.py` + `public_api.py` | يعمل عبر **GitHub Actions** (`enterprise.yml` + `data.yml`) على قاعدة SQLite من **24 جدولًا مطبّعًا** (`001..003`)، مع حجر صحي للعُقد المشبوهة وتصدير واجهة `/api/v1/*` المعماة. |
 
@@ -74,15 +74,15 @@
 1. **تفعيل لوحتَي الإدارة والمراقبة (GitHub Pages):**
    - ينشر سير عمل `.github/workflows/enterprise.yml` محتويات `web-admin/` تلقائيًا إلى فرع `gh-pages`.
    - من إعدادات المستودع على GitHub (`Settings -> Pages`)، اختر الفرع `gh-pages` والمجلد `/ (root)` لتعمل لوحة الإدارة المشفّرة على `https://oldman-552.github.io/vpn-configs/` وشاشة المراقبة العامة على `https://oldman-552.github.io/vpn-configs/monitor.html`.
-2. **تطبيقات الأندرويد الموقّعة (GitHub Releases `v3.2`):**
-   - يبني `.github/workflows/apk.yml` كلاً من تطبيق المشترك (`app-arm64-v8a-release.apk`, `app-release.apk`, `app-x86_64-release.apk`) وتطبيق المشرف المستقل (`app-admin-release.apk`) مع ضغط `R8 + Resource Shrinking` ويرفق ملف البصمات `SHA256SUMS.txt` في إصدارات GitHub الرسمية (`v3.2` و`latest-apk`).
+2. **تطبيقات الأندرويد الموقّعة (GitHub Releases `v1`):**
+   - يبني `.github/workflows/apk.yml` كلاً من تطبيق المشترك (`app-arm64-v8a-release.apk`, `app-release.apk`, `app-x86_64-release.apk`) وتطبيق المشرف المستقل (`app-admin-release.apk`) باللغتين العربية (أساسية) والإنجليزية مع ضغط `R8 + Resource Shrinking` وتوقيع `RSA-4096 v1/v2/v3` ويرفق ملف البصمات `SHA256SUMS.txt` في الإصدار الرسمي الوحيد **`v1`** (`Latest`).
 
 ---
 
-## 6. ترقيات الإصدارين `v3.1` و`v3.2` الهندسية
+## 6. المميزات الهندسية الأساسية في الإصدار الرسمي `v1`
 
-1. **تقليص الحجم (`R8 + Resource Shrinking`) والتحديث الذكي حسب معمارية المعالج (`Split per ABI`):** إزالة آلاف كلاسات الأيقونات غير المستخدمة، وتوجيه `AppUpdateManager` لتحميل حزمة `arm64-v8a` الرشيقة (`27.63 MB`) تلقائيًا على هواتف `ARM64` مع التحقق الصارم من بصمة `SHA-256`.
-2. **سيرفرات `VIP` الخاصة المشفّرة للمشتركين فقط (`Encrypted VIP Private Nodes`):** تُشفّر بـ `AES-256-GCM` (`AAD = bahrain-vpn-vip-nodes-v31`) داخل `bundle.json`، ولا يُكشف مفتاح فك تشفيرها إلا داخل مغلف شهادة المشترك النشط (`envelope_b64`)، مع منع نسخ الرابط الخام أو تصديره في الملفات النصية.
-3. **منع تسرب `DNS/IPv6` ومفتاح الإيقاف الصارم (`v3.2 Zero-Leak & Fail-Closed Kill Switch`):** توجيه `tunnel-dns` إجباريًا داخل النفق (`detour="proxy"`)، التقاط المسار `::/0` دائمًا لمنع تسرب IPv6 على الشبكات المزدوجة، قفل `tun0` قبل فحص السيرفر، والاحتفاظ بالحجب الفعّال (`PROTECTION_ACTIVE`) عند انقطاع جميع البدائل.
-4. **محرك التبديل التلقائي الاستباقي وذكاء الأمان وواجهة `API v1` (`v3.2`):** دعم سياسات `OFF / SMART / AGGRESSIVE` مع `Hysteresis 25s` وفحص البدائل على المنافذ `20901..20904` دون قطع النفق، فصل تقييم الأمان والخصوصية عن السرعة (`security_intelligence.py` + `SecurityEvaluator.kt`)، ونشر واجهة الإحصاءات العامة المعماة `/api/v1/*` مع مواصفة `OpenAPI 3.1.0`.
+1. **واجهة ثنائية اللغة (العربية أساسية `RTL` + الإنجليزية `LTR`) وتقليص الحجم (`R8 + Split per ABI`):** دعم كامل للغتين مع بقاء العربية اللغة الافتراضية الأساسية، وتوجيه `AppUpdateManager` لتحميل حزمة `arm64-v8a` الرشيقة تلقائيًا عبر متصفح النظام الرسمي مع التحقق من بصمة `SHA-256`.
+2. **سيرفرات `VIP` الخاصة المشفّرة للمشتركين فقط (`Encrypted VIP Private Nodes`):** تُشفّر بـ `AES-256-GCM` داخل `bundle.json`، ولا يُكشف مفتاح فك تشفيرها إلا داخل مغلف شهادة المشترك النشط (`envelope_b64`)، مع منع نسخ الرابط الخام أو تصديره في الملفات النصية.
+3. **منع تسرب `DNS/IPv6` ومفتاح الإيقاف الصارم (`Zero-Leak & Fail-Closed Kill Switch`):** توجيه `tunnel-dns` إجباريًا داخل النفق (`detour="proxy"`)، التقاط المسار `::/0` دائمًا لمنع تسرب IPv6 على الشبكات المزدوجة، قفل `tun0` قبل فحص السيرفر، والاحتفاظ بالحجب الفعّال (`PROTECTION_ACTIVE`) عند انقطاع جميع البدائل.
+4. **محرك التبديل التلقائي الاستباقي وذكاء الأمان وواجهة `API v1`:** دعم سياسات `OFF / SMART / AGGRESSIVE` مع `Hysteresis 25s` وفحص البدائل على المنافذ `20901..20904` دون قطع النفق، فصل تقييم الأمان والخصوصية عن السرعة (`security_intelligence.py` + `SecurityEvaluator.kt`)، ونشر واجهة الإحصاءات العامة المعماة `/api/v1/*` مع مواصفة `OpenAPI 3.1.0`.
 

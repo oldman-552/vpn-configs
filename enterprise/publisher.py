@@ -52,31 +52,31 @@ def run_serverless_cycle(
 
         db = EnterpriseDB(tmp_db_path)
 
-        # Ensure current User & Admin APK v3.5 version metadata (with ABI-aware HTTPS release assets) exists in app_versions
+        # Ensure official User & Admin APK v1 version metadata (with ABI-aware HTTPS release assets) exists in app_versions
         abi_assets = {
             "arm64-v8a": {
-                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-arm64-v8a-release.apk",
+                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-arm64-v8a-release.apk",
                 "apk_sha256": "",
             },
             "x86_64": {
-                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-x86_64-release.apk",
+                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-x86_64-release.apk",
                 "apk_sha256": "",
             },
             "universal": {
-                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-release.apk",
+                "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-release.apk",
                 "apk_sha256": "",
             },
         }
         with db.tx() as conn:
-            conn.execute("UPDATE app_versions SET is_active = 0 WHERE version_name IN ('3.0', '3.1', '3.2', '3.3', '3.4')")
+            conn.execute("DELETE FROM app_versions WHERE version_name != '1.0'")
             conn.execute(
                 """INSERT OR REPLACE INTO app_versions
                    (id, target_app, version_code, version_name, release_notes, release_date,
                     mandatory, min_supported_code, apk_url, apk_sha256, signing_cert_sha256, is_active, abi_assets_json)
-                   VALUES ('ver_user_3_5', 'USER', 13, '3.5',
-                           'إصدار ULTIMATE VPN ENTERPRISE v3.5: معمارية Central Top 500 + Local Personalized Top 50 (Wi-Fi/Mobile)، التوافق الكامل مع Play Protect، والتوقيع الرسمي RSA-4096 v2/v3',
-                           ?, 0, 11,
-                           'https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-arm64-v8a-release.apk',
+                   VALUES ('ver_user_1_0', 'USER', 1, '1.0',
+                           'الإصدار الرسمي bahrain-vpn v1: دعم كامل للغتين العربية (اللغة الأساسية RTL) والإنجليزية (LTR)، ومعمارية Central Top 500 + Local Personalized Top 50 (Wi-Fi/Mobile)، والتوافق مع Play Protect، وتوقيع RSA-4096 v1/v2/v3',
+                           ?, 0, 1,
+                           'https://github.com/oldman-552/vpn-configs/releases/download/v1/app-arm64-v8a-release.apk',
                            '', '', 1, ?)""",
                 (fmt_iso_utc(now_dt), json.dumps(abi_assets, ensure_ascii=False)),
             )
@@ -84,10 +84,10 @@ def run_serverless_cycle(
                 """INSERT OR REPLACE INTO app_versions
                    (id, target_app, version_code, version_name, release_notes, release_date,
                     mandatory, min_supported_code, apk_url, apk_sha256, signing_cert_sha256, is_active, abi_assets_json)
-                   VALUES ('ver_admin_3_5', 'ADMIN', 6, '3.5',
-                           'تطبيق إدارة ULTIMATE VPN ENTERPRISE v3.5 الرشيق الموقّع رسميًا مع إدارة سيرفرات VIP المشفّرة وتوقيع الحزم عبر GitHub',
-                           ?, 0, 4,
-                           'https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-admin-release.apk',
+                   VALUES ('ver_admin_1_0', 'ADMIN', 1, '1.0',
+                           'تطبيق إدارة bahrain-vpn v1 الرسمي (عربي + إنجليزي) مع إدارة سيرفرات VIP المشفّرة وتوقيع الحزم عبر GitHub',
+                           ?, 0, 1,
+                           'https://github.com/oldman-552/vpn-configs/releases/download/v1/app-admin-release.apk',
                            '', '', 1, '{}')""",
                 (fmt_iso_utc(now_dt),),
             )

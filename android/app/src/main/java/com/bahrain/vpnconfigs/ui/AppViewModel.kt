@@ -48,6 +48,8 @@ import com.bahrain.vpnconfigs.engine.TestResult
 import com.bahrain.vpnconfigs.engine.Tester
 import com.bahrain.vpnconfigs.enterprise.AccountLicenseState
 import com.bahrain.vpnconfigs.enterprise.AppHealthMonitor
+import com.bahrain.vpnconfigs.util.AppI18n
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.enterprise.AppHealthSnapshot
 import com.bahrain.vpnconfigs.enterprise.AppUpdateInfo
 import com.bahrain.vpnconfigs.enterprise.AppUpdateManager
@@ -526,7 +528,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 cfg = cfg,
                 name = customFavName.ifBlank { vipNode?.label.orEmpty() },
                 proto = Converters.protocolBadge(cfg),
-                endpoint = if (vipNode != null) "عقدة VIP مشفّرة ومحمية" else Converters.endpointLabel(cfg),
+                endpoint = if (vipNode != null) tr("عقدة VIP مشفّرة ومحمية", "Encrypted VIP Node") else Converters.endpointLabel(cfg),
                 latencyMs = displayLatency,
                 jitterMs = effectiveJitter,
                 speedKbps = effectiveSpeed,
@@ -633,7 +635,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             connectionHistory = emptyList(),
             sqliteHistory = emptyList(),
             sqliteHistoryTotal = 0,
-            info = "تم مسح سجل الاتصالات",
+            info = tr("تم مسح سجل الاتصالات", "Connection history cleared"),
+        )
+    }
+
+    /** يعيد توليد الملصقات المعتمدة على اللغة («آخر تحديث» وعناوين VIP) عند التبديل الحي للغة. */
+    fun refreshLanguageLabels() {
+        AppI18n.initFromPrefs(getApplication())
+        val updatedLbl = UiMessages.formatLastUpdated(state.meta.generatedAt, prefs.lastUpdatedEpochMs)
+        val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
+        state = state.copy(
+            lastUpdatedLabel = updatedLbl,
+            servers = rebuilt,
+            info = null,
+            error = null,
         )
     }
 
@@ -769,7 +784,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             servers = rebuilt,
             favoritesList = clientDb.listFavorites(state.favoriteGroupFilter, state.favoriteSortOrder),
             favoriteGroups = clientDb.listFavoriteGroups(),
-            info = "تم تحديث السيرفر المفضّل",
+            info = tr("تم تحديث السيرفر المفضّل", "Favorite server updated"),
         )
     }
 
@@ -782,7 +797,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             servers = rebuilt,
             favoritesList = clientDb.listFavorites(state.favoriteGroupFilter, state.favoriteSortOrder),
             favoriteGroups = clientDb.listFavoriteGroups(),
-            info = "تمت إزالة السيرفر من المفضّلة",
+            info = tr("تمت إزالة السيرفر من المفضّلة", "Removed from favorites"),
         )
     }
 
@@ -842,14 +857,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             servers = rebuilt,
             availableCountries = countries,
             selectedCfg = sel,
-            info = "تم حذف السيرفر المخصّص",
+            info = tr("تم حذف السيرفر المخصّص", "Custom server removed"),
         )
     }
 
     fun importConfigsFromText(rawText: String) {
         val trimmed = rawText.trim().take(4_000_000)
         if (trimmed.isBlank()) {
-            state = state.copy(error = "الحافظة فارغة — انسخ رابط سيرفر أو حزمة اشتراك أولًا")
+            state = state.copy(
+                error = tr(
+                    "الحافظة فارغة — انسخ رابط سيرفر أو حزمة اشتراك أولًا",
+                    "Clipboard is empty — copy a config URI or subscription bundle first",
+                )
+            )
             return
         }
         val decodedText = if (!trimmed.contains("://")) {
@@ -872,7 +892,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .toList()
 
         if (extracted.isEmpty()) {
-            state = state.copy(error = "لم يُعثر على إعداد اتصال صالح وآمن في النص المدخل")
+            state = state.copy(
+                error = tr(
+                    "لم يُعثر على إعداد اتصال صالح وآمن في النص المدخل",
+                    "No valid supported VPN config found in input text",
+                )
+            )
             return
         }
 
@@ -895,7 +920,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             availableCountries = countries,
             selectedCfg = newSel,
             error = null,
-            info = "تمت إضافة ${extracted.size} سيرفر تحت اسم bahrain-vpn",
+            info = tr(
+                "تمت إضافة ${extracted.size} سيرفر تحت اسم bahrain-vpn",
+                "Imported ${extracted.size} server(s) to bahrain-vpn",
+            ),
         )
     }
 
@@ -997,14 +1025,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 top50Count = rebuilt.count { it.localPoolTier == LocalPoolTier.TOP_50 },
                 backupPoolCount = rebuilt.count { it.localPoolTier == LocalPoolTier.BACKUP_POOL },
                 error = if (!silent && !refreshSucceededLive) {
-                    UiMessages.sanitizeError(res.error, UiMessages.MSG_UPDATE_FAILED)
+                    UiMessages.sanitizeError(res.error, UiMessages.msgUpdateFailed())
                 } else null,
                 info = if (!silent) {
                     if (refreshSucceededLive) {
-                        val deltaTag = if (res.incrementalApplied) " (تحديث تفاضلي موثّق)" else ""
-                        "تم تحديث حزمة المرشّحين (${newConfigs.size} سيرفر)$deltaTag — جارٍ الفحص السريع لـ ${netProfile.labelAr}…"
+                        val deltaTag = if (res.incrementalApplied) tr(" (تحديث تفاضلي موثّق)", " (verified delta)") else ""
+                        tr(
+                            "تم تحديث حزمة المرشّحين (${newConfigs.size} سيرفر)$deltaTag — جارٍ الفحص السريع لـ ${netProfile.labelAr}…",
+                            "Updated candidate pool (${newConfigs.size} servers)$deltaTag — running Quick Scan on ${netProfile.labelEn}…",
+                        )
                     } else if (res.recoveredFromLastValid) {
-                        "تمت استعادة آخر حزمة محقّقة محليًا (${newConfigs.size} سيرفر)"
+                        tr(
+                            "تمت استعادة آخر حزمة محقّقة محليًا (${newConfigs.size} سيرفر)",
+                            "Restored last locally verified pool (${newConfigs.size} servers)",
+                        )
                     } else null
                 } else state.info,
             )
@@ -1034,11 +1068,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val vipUris = licenseGuard.getAuthorizedVipNodes().map { it.uri }
         val pool = (vipUris + prefs.customConfigs + state.configs).distinct()
         if (pool.isEmpty()) {
-            if (!autoAfterRefresh) state = state.copy(error = UiMessages.MSG_NO_SERVERS)
+            if (!autoAfterRefresh) state = state.copy(error = UiMessages.msgNoServers())
             return
         }
         if (!sequentialScanner.engineAvailable) {
-            if (!autoAfterRefresh) state = state.copy(error = UiMessages.MSG_ENGINE_UNAVAILABLE)
+            if (!autoAfterRefresh) state = state.copy(error = UiMessages.msgEngineUnavailable())
             return
         }
         testJob?.cancel()
@@ -1051,7 +1085,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             activeScanMode = scanMode,
             activeNetworkProfile = scanProfile,
             error = if (autoAfterRefresh) state.error else null,
-            info = if (autoAfterRefresh && state.info != null) state.info else "جارٍ ${scanMode.labelAr} بالتسلسل على ${scanProfile.labelAr}…",
+            info = if (autoAfterRefresh && state.info != null) state.info else tr(
+                "جارٍ ${scanMode.labelAr} بالتسلسل على ${scanProfile.labelAr}…",
+                "Running sequential ${scanMode.labelEn} on ${scanProfile.labelEn}…",
+            ),
             progress = null,
         )
 
@@ -1179,22 +1216,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     bestFile = bestPair?.first ?: state.bestFile,
                     subFile = bestPair?.second ?: state.subFile,
                     info = if (top50Cnt > 0 && topItem != null) {
-                        val earlyTxt = if (summary.stoppedEarly) " (توقف ذكي بعد الاكتفاء)" else ""
-                        "أفضل $top50Cnt سيرفرًا مخصّصة لـ ${scanProfile.labelAr}$earlyTxt • الاحتياطي: $bakCnt • المتصدر ${topItem.name} (${topItem.latencyMs} ms)"
+                        val earlyTxt = if (summary.stoppedEarly) tr(" (توقف ذكي بعد الاكتفاء)", " (smart early stop)") else ""
+                        tr(
+                            "أفضل $top50Cnt سيرفرًا مخصّصة لـ ${scanProfile.labelAr}$earlyTxt • الاحتياطي: $bakCnt • المتصدر ${topItem.name} (${topItem.latencyMs} ms)",
+                            "Top $top50Cnt personalized for ${scanProfile.labelEn}$earlyTxt • Backup: $bakCnt • Best: ${topItem.name} (${topItem.latencyMs} ms)",
+                        )
                     } else null,
                     error = if (summary.results.isEmpty() && top50Cnt == 0) {
-                        "لم يتأهل أي سيرفر على ${scanProfile.labelAr} حاليًا — جرّب الفحص الشامل أو المحاولة لاحقًا"
+                        tr(
+                            "لم يتأهل أي سيرفر على ${scanProfile.labelAr} حاليًا — جرّب الفحص الشامل أو المحاولة لاحقًا",
+                            "No server qualified on ${scanProfile.labelEn} right now — try Full Scan or retry shortly",
+                        )
                     } else null,
                 )
             } catch (_: CancellationException) {
-                state = state.copy(testing = false, activeScanMode = null, progress = null, info = "تم إيقاف الفحص")
+                state = state.copy(testing = false, activeScanMode = null, progress = null, info = tr("تم إيقاف الفحص", "Scan stopped"))
             } catch (e: Exception) {
                 AppDiag.w("AppViewModel", "sequential scan failed", e)
                 state = state.copy(
                     testing = false,
                     activeScanMode = null,
                     progress = null,
-                    error = UiMessages.MSG_TEST_FAILED,
+                    error = UiMessages.msgTestFailed(),
                 )
             }
         }
@@ -1252,9 +1295,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val sel = resolveSelected(state.selectedCfg, rebuilt)
                 val newItem = rebuilt.firstOrNull { it.cfg == cleanedCfg }
                 val speedSummary = if (res.speedKbps >= 1024.0) {
-                    String.format(Locale.US, " • سرعة جهازك %.2f MB/s", res.speedKbps / 1024.0)
+                    String.format(Locale.US, tr(" • سرعة جهازك %.2f MB/s", " • Speed %.2f MB/s"), res.speedKbps / 1024.0)
                 } else if (res.speedKbps > 0.0) {
-                    " • سرعة جهازك ${res.speedKbps.toInt()} KB/s"
+                    tr(" • سرعة جهازك ${res.speedKbps.toInt()} KB/s", " • Speed ${res.speedKbps.toInt()} KB/s")
                 } else ""
                 state = state.copy(
                     pingingSingleCfg = null,
@@ -1263,7 +1306,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     top50Count = rebuilt.count { it.localPoolTier == LocalPoolTier.TOP_50 },
                     backupPoolCount = rebuilt.count { it.localPoolTier == LocalPoolTier.BACKUP_POOL },
                     selectedCfg = sel,
-                    info = "${newItem?.name ?: item.name} (${netProfile.labelAr}): ${res.latencyMs} ms$speedSummary",
+                    info = "${newItem?.name ?: item.name} (${netProfile.displayLabel}): ${res.latencyMs} ms$speedSummary",
                 )
             } else {
                 AppDiag.d("AppViewModel", "single server check failed code=${res.error}")
@@ -1289,7 +1332,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cancelTest() {
         testJob?.cancel()
-        state = state.copy(testing = false, activeScanMode = null, progress = null, info = "تم إيقاف الفحص")
+        state = state.copy(testing = false, activeScanMode = null, progress = null, info = tr("تم إيقاف الفحص", "Scan stopped"))
     }
 
     // ── استثناء التطبيقات (Split Tunneling) ──
@@ -1330,7 +1373,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun applyTunnelReload() {
         BahrainVpnService.reloadTunnelIfConnected(getApplication())
-        state = state.copy(tunnelNeedsReload = false, info = "تم تحديث قواعد التطبيقات في النفق النشط")
+        state = state.copy(
+            tunnelNeedsReload = false,
+            info = tr("تم تحديث قواعد التطبيقات في النفق النشط", "Updated split-tunnel app rules on active VPN"),
+        )
     }
 
     // ── حفظ الإعدادات دون تغيير هوية المستودع التشغيلي أو قطع السيرفر النشط بدون داعٍ ──
@@ -1388,7 +1434,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val sel = resolveSelected(state.selectedCfg, rebuilt)
         state = state.copy(
             error = null,
-            info = "تم حفظ الإعدادات بنجاح",
+            info = tr("تم حفظ الإعدادات بنجاح", "Settings saved and applied"),
             sortMode = normalizedSort.key,
             servers = rebuilt,
             selectedCfg = sel,
@@ -1470,7 +1516,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
                     val countries = computeCountryCounts(rebuilt)
                     val sel = resolveSelected(state.selectedCfg, rebuilt)
-                    val vipMsg = if (acct.vipNodesUnlocked > 0) " • تم فتح ${acct.vipNodesUnlocked} عقدة VIP خاصة" else ""
+                    val vipMsg = if (acct.vipNodesUnlocked > 0) {
+                        tr(" • تم فتح ${acct.vipNodesUnlocked} عقدة VIP خاصة", " • Unlocked ${acct.vipNodesUnlocked} VIP node(s)")
+                    } else ""
                     state = state.copy(
                         authLoading = false,
                         authError = null,
@@ -1478,13 +1526,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         servers = rebuilt,
                         availableCountries = countries,
                         selectedCfg = sel,
-                        info = "تم تسجيل الدخول بنجاح (${acct.username})$vipMsg",
+                        info = tr("تم تسجيل الدخول بنجاح (${acct.username})$vipMsg", "Signed in as ${acct.username}$vipMsg"),
                     )
                 },
                 onFailure = { err ->
                     state = state.copy(
                         authLoading = false,
-                        authError = err.message ?: "تعذّر تسجيل الدخول",
+                        authError = err.message ?: tr("تعذّر تسجيل الدخول", "Sign-in failed"),
                         accountState = licenseGuard.currentState(),
                     )
                 },
@@ -1506,7 +1554,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             servers = rebuilt,
             availableCountries = countries,
             selectedCfg = sel,
-            info = "تم تسجيل الخروج وإغلاق عقد VIP الخاصة",
+            info = tr("تم تسجيل الخروج وإغلاق عقد VIP الخاصة", "Signed out and locked private VIP nodes"),
         )
     }
 
@@ -1514,11 +1562,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (state.speedTestRunning) return
         val vpnSt = VpnStateManager.status.value
         val viaVpn = vpnSt.isTunnelVerified
-        val label = if (viaVpn) vpnSt.activeLabel else "الشبكة المباشرة"
+        val label = if (viaVpn) vpnSt.activeLabel else tr("الشبكة المباشرة", "Direct Network")
         val bw = state.accountState.bandwidth
         state = state.copy(
             speedTestRunning = true,
-            speedTestStage = "جارٍ تهيئة القياس…",
+            speedTestStage = tr("جارٍ تهيئة القياس…", "Initializing speed test…"),
             liveSpeedGaugeMbps = 0.0,
             liveSpeedCurve = emptyList(),
         )
@@ -1542,7 +1590,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 speedTestStage = "",
                 latestSpeedRecord = rec,
                 speedHistory = diagnosticsEngine.loadSpeedHistory(),
-                info = String.format(Locale.US, "اكتمل القياس: ↓ %.2f Mbps • ↑ %.2f Mbps", rec.downloadMbps, rec.uploadMbps),
+                info = String.format(
+                    Locale.US,
+                    tr("اكتمل القياس: ↓ %.2f Mbps • ↑ %.2f Mbps", "Speed test complete: ↓ %.2f Mbps • ↑ %.2f Mbps"),
+                    rec.downloadMbps,
+                    rec.uploadMbps,
+                ),
             )
         }
     }
@@ -1607,14 +1660,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val res = AppUpdateManager.openVerifiedUpdateInSystemBrowser(getApplication(), upd)
         res.fold(
             onSuccess = {
-                val shaHint = if (upd.apkSha256.length == 64) " (تم نسخ بصمة SHA-256 للتحقق)" else ""
+                val shaHint = if (upd.apkSha256.length == 64) tr(" (تم نسخ بصمة SHA-256 للتحقق)", " (SHA-256 copied)") else ""
                 state = state.copy(
                     updatingApk = false,
-                    info = "تم فتح رابط التحديث الرسمي الآمن لحزمة ${upd.selectedAbi} في المتصفح$shaHint",
+                    info = tr(
+                        "تم فتح رابط التحديث الرسمي الآمن لحزمة ${upd.selectedAbi} في المتصفح$shaHint",
+                        "Opened official HTTPS download for ${upd.selectedAbi} in browser$shaHint",
+                    ),
                 )
             },
             onFailure = { err ->
-                state = state.copy(updatingApk = false, error = err.message ?: "تعذّر فتح رابط التحديث الرسمي")
+                state = state.copy(
+                    updatingApk = false,
+                    error = err.message ?: tr("تعذّر فتح رابط التحديث الرسمي", "Could not open official update URL"),
+                )
             },
         )
     }

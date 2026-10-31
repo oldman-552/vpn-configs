@@ -19,6 +19,7 @@ import com.bahrain.vpnconfigs.data.LocalPoolTier
 import com.bahrain.vpnconfigs.data.NetworkServerProfileStats
 import com.bahrain.vpnconfigs.data.PersonalizedRankEntry
 import com.bahrain.vpnconfigs.data.ScanNetworkProfile
+import com.bahrain.vpnconfigs.util.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
@@ -31,9 +32,12 @@ import kotlin.coroutines.coroutineContext
 import kotlin.math.max
 import kotlin.math.min
 
-enum class LocalScanMode(val code: String, val labelAr: String) {
-    QUICK_SCAN("QUICK_SCAN", "فحص سريع (Top 50)"),
-    FULL_SCAN("FULL_SCAN", "فحص شامل (500)");
+enum class LocalScanMode(val code: String, val labelAr: String, val labelEn: String) {
+    QUICK_SCAN("QUICK_SCAN", "فحص سريع (Top 50)", "Quick Scan (Top 50)"),
+    FULL_SCAN("FULL_SCAN", "فحص شامل (500)", "Full Scan (500)");
+
+    val displayLabel: String
+        get() = tr(labelAr, labelEn)
 }
 
 data class TunnelProbeRequest(

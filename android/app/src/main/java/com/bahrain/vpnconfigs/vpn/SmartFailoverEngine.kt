@@ -11,14 +11,45 @@
 package com.bahrain.vpnconfigs.vpn
 
 import com.bahrain.vpnconfigs.engine.Converters
+import com.bahrain.vpnconfigs.util.tr
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-enum class FailoverMode(val key: String, val titleAr: String, val subtitleAr: String) {
-    OFF("OFF", "إيقاف (يدوي)", "البقاء على السيرفر المختار دون تبديل تلقائي"),
-    SMART("SMART", "ذكي ومتوازن", "تبديل تلقائي سلس عند انقطاع السيرفر أو تدهوره الحاد"),
-    AGGRESSIVE("AGGRESSIVE", "استباقي فائق", "ينتقل تلقائيًا لأفضل سيرفر بديل فور رصد بطء ملحوظ");
+enum class FailoverMode(
+    val key: String,
+    val titleAr: String,
+    val subtitleAr: String,
+    val titleEn: String,
+    val subtitleEn: String,
+) {
+    OFF(
+        "OFF",
+        "إيقاف (يدوي)",
+        "البقاء على السيرفر المختار دون تبديل تلقائي",
+        "Off (Manual)",
+        "Stay on selected server without automatic switching",
+    ),
+    SMART(
+        "SMART",
+        "ذكي ومتوازن",
+        "تبديل تلقائي سلس عند انقطاع السيرفر أو تدهوره الحاد",
+        "Smart Balanced",
+        "Seamless auto-switch if tunnel drops or severely degrades",
+    ),
+    AGGRESSIVE(
+        "AGGRESSIVE",
+        "استباقي فائق",
+        "ينتقل تلقائيًا لأفضل سيرفر بديل فور رصد بطء ملحوظ",
+        "Proactive Fast",
+        "Proactively switches to faster verified backup on slowdown",
+    );
+
+    val displayTitle: String
+        get() = tr(titleAr, titleEn)
+
+    val displaySubtitle: String
+        get() = tr(subtitleAr, subtitleEn)
 
     companion object {
         fun fromKey(raw: String?): FailoverMode = when (raw?.trim()?.uppercase()) {

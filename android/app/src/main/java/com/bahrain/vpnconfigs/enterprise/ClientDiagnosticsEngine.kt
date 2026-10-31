@@ -9,6 +9,7 @@ import android.content.Context
 import android.os.SystemClock
 import com.bahrain.vpnconfigs.engine.SingBox
 import com.bahrain.vpnconfigs.engine.Socks
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.util.AppDiag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -251,7 +252,7 @@ class ClientDiagnosticsEngine(private val ctx: Context) {
         var lostProbes = 0
         val totalProbes = 5
 
-        onStageUpdate("جارٍ قياس الاستجابة (Ping) وفقدان الحزم…", 0.0, emptyList())
+        onStageUpdate(tr("جارٍ قياس الاستجابة (Ping) وفقدان الحزم…", "Measuring Ping & Packet Loss…"), 0.0, emptyList())
         for (i in 0 until totalProbes) {
             val rtt = runCatching {
                 if (viaVpnTunnel) {
@@ -284,7 +285,7 @@ class ClientDiagnosticsEngine(private val ctx: Context) {
         var totalDownBytes = 0L
         var dlElapsedMs = 1L
 
-        onStageUpdate("جارٍ قياس سرعة التنزيل الفعلية…", 0.0, curve)
+        onStageUpdate(tr("جارٍ قياس سرعة التنزيل الفعلية…", "Measuring Real Download Speed…"), 0.0, curve)
         runCatching {
             val conn = openConnection(downloadUrl, viaTunnel = viaVpnTunnel, timeoutMs = 12_000)
             try {
@@ -307,7 +308,7 @@ class ClientDiagnosticsEngine(private val ctx: Context) {
                                 val instMbps = ((bucketBytes * 8.0) / (bucketMs / 1000.0)) / 1_000_000.0
                                 val rounded = ((instMbps * 100.0).roundToInt()) / 100.0
                                 curve.add(rounded)
-                                onStageUpdate("جارٍ قياس سرعة التنزيل الفعلية…", rounded, curve.toList())
+                                onStageUpdate(tr("جارٍ قياس سرعة التنزيل الفعلية…", "Measuring Real Download Speed…"), rounded, curve.toList())
                                 bucketStartNs = nowNs
                                 bucketBytes = 0L
                             }
@@ -330,7 +331,7 @@ class ClientDiagnosticsEngine(private val ctx: Context) {
         var totalUpBytes = 0L
         var ulElapsedMs = 1L
         val upShaper = TokenBucketShaper(bandwidthPolicy.maxUploadKbps)
-        onStageUpdate("جارٍ قياس سرعة الرفع الفعلية…", dlMbps, curve.toList())
+        onStageUpdate(tr("جارٍ قياس سرعة الرفع الفعلية…", "Measuring Real Upload Speed…"), dlMbps, curve.toList())
         runCatching {
             val payloadSize = 512 * 1024
             val conn = openConnection(uploadUrl, viaTunnel = viaVpnTunnel, timeoutMs = 10_000).apply {
@@ -376,7 +377,7 @@ class ClientDiagnosticsEngine(private val ctx: Context) {
         val record = SpeedTestRecord(
             id = "spd_${System.currentTimeMillis()}",
             testedAtIso = Instant.ofEpochMilli(EnterpriseClock.trustedNowMs()).toString(),
-            serverLabel = serverLabel.ifBlank { if (viaVpnTunnel) "نفق VPN" else "الشبكة المباشرة" },
+            serverLabel = serverLabel.ifBlank { if (viaVpnTunnel) tr("نفق VPN", "VPN Tunnel") else tr("الشبكة المباشرة", "Direct Network") },
             viaVpnTunnel = viaVpnTunnel,
             downloadMbps = dlMbps,
             uploadMbps = ulMbps,

@@ -16,6 +16,7 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.provider.Settings
+import com.bahrain.vpnconfigs.util.AppI18n
 
 data class KillSwitchState(
     val appKillSwitchEnabled: Boolean,
@@ -32,10 +33,20 @@ object KillSwitchController {
 
     val ALWAYS_ON_STEPS_AR: List<String> = listOf(
         "١. افتح إعدادات الشبكة والـ VPN في نظام أندرويد عبر الزر أدناه.",
-        "٢. اضغط على أيقونة الترس ⚙️ بجانب تطبيق Bahrain VPN.",
+        "٢. اضغط على أيقونة الترس ⚙️ بجانب تطبيق bahrain-vpn.",
         "٣. فعّل خيار «شبكة VPN نشطة دائمًا» (Always-on VPN).",
         "٤. فعّل خيار «حظر الاتصالات بدون VPN» (Block connections without VPN) لتفعيل القفل الصارم من النواة.",
     )
+
+    val ALWAYS_ON_STEPS_EN: List<String> = listOf(
+        "1. Open Android Network & VPN settings using the button below.",
+        "2. Tap the gear ⚙️ icon next to bahrain-vpn.",
+        "3. Enable \"Always-on VPN\".",
+        "4. Enable \"Block connections without VPN\" for strict OS-level kernel lockdown.",
+    )
+
+    fun alwaysOnSteps(): List<String> =
+        if (AppI18n.isEnglish) ALWAYS_ON_STEPS_EN else ALWAYS_ON_STEPS_AR
 
     fun createSystemVpnSettingsIntent(): Intent =
         Intent(Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

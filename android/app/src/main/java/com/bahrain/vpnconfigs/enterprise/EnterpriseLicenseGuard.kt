@@ -10,6 +10,7 @@ import android.os.SystemClock
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.bahrain.vpnconfigs.util.tr
 import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigInteger
@@ -106,7 +107,13 @@ data class AccountLicenseState(
     val monthlyUsedBytes: Long = 0L,
     val vipNodesUnlocked: Int = 0,
     val loginHistory: List<String> = emptyList(),
-)
+) {
+    val displayStatusDetail: String
+        get() = tr(
+            statusDetailAr,
+            statusHeadlineEn.ifBlank { statusDetailAr },
+        )
+}
 
 object EnterpriseCrypto {
     private const val PBKDF2_ITERATIONS = 120_000
@@ -432,10 +439,10 @@ class EnterpriseLicenseGuard(ctx: Context) {
     fun loginWithBundle(username: String, password: String, rememberMe: Boolean): Result<AccountLicenseState> {
         val cleanUser = username.trim().lowercase(Locale.ROOT)
         if (cleanUser.length < 3 || password.length < 6) {
-            return Result.failure(IllegalArgumentException("يرجى إدخال اسم مستخدم وكلمة مرور صحيحة"))
+            return Result.failure(IllegalArgumentException(tr("يرجى إدخال اسم مستخدم وكلمة مرور صحيحة", "Please enter a valid username and password")))
         }
         val bundleRaw = sp.getString("verified_bundle_json", null)
-            ?: return Result.failure(IllegalStateException("لم تتوفر حزمة التراخيص الموقّعة بعد — حدّث القائمة أولًا"))
+            ?: return Result.failure(IllegalStateException(tr("لم تتوفر حزمة التراخيص الموقّعة بعد — حدّث القائمة أولًا", "Signed license bundle not synced yet — please refresh first")))
 
         return try {
             val outer = JSONObject(bundleRaw)
@@ -443,7 +450,7 @@ class EnterpriseLicenseGuard(ctx: Context) {
             val pubKeyB64 = bundle.optString("public_key_spki_b64", "")
             val lookupId = EnterpriseCrypto.computeUserLookupId(cleanUser)
             val licEntry = bundle.optJSONObject("licenses")?.optJSONObject(lookupId)
-                ?: return Result.failure(SecurityException("بيانات الدخول غير صحيحة"))
+                ?: return Result.failure(SecurityException(tr("بيانات الدخول غير صحيحة", "Invalid login credentials")))
 
             val opened = runCatching {
                 EnterpriseCrypto.openUserLicenseEnvelope(
@@ -454,7 +461,7 @@ class EnterpriseLicenseGuard(ctx: Context) {
                 )
             }.getOrElse {
                 recordLoginHistoryEntry(cleanUser, succeeded = false)
-                return Result.failure(SecurityException("بيانات الدخول غير صحيحة"))
+                return Result.failure(SecurityException(tr("بيانات الدخول غير صحيحة", "Invalid login credentials")))
             }
 
             val cert = opened.getJSONObject("certificate")
@@ -462,7 +469,7 @@ class EnterpriseLicenseGuard(ctx: Context) {
             if (certSig.isNotBlank()) {
                 val certBytes = EnterpriseCrypto.canonicalJsonString(cert).toByteArray(Charsets.UTF_8)
                 if (!EnterpriseCrypto.verifyEcdsaP256(pubKeyB64, certBytes, certSig)) {
-                    return Result.failure(SecurityException("توقيع شهادة الحساب غير صالح"))
+                    return Result.failure(SecurityException(tr("توقيع شهادة الحساب غير صالح", "Invalid account certificate signature")))
                 }
             }
 
@@ -472,7 +479,12 @@ class EnterpriseLicenseGuard(ctx: Context) {
             if (allowedIds.isNotEmpty() && deviceInstallId !in allowedIds) {
                 recordLoginHistoryEntry(cleanUser, succeeded = false)
                 return Result.failure(
-                    SecurityException("تم الوصول للحد الأقصى للأجهزة المسموحة لهذا الحساب (رمز جهازك: $deviceInstallId)")
+                    SecurityException(
+                        tr(
+                            "تم الوصول للحد الأقصى للأجهزة المسموحة لهذا الحساب (رمز جهازك: $deviceInstallId)",
+                            "Device limit reached for this account (Device ID: $deviceInstallId)",
+                        )
+                    )
                 )
             }
 
@@ -486,7 +498,7 @@ class EnterpriseLicenseGuard(ctx: Context) {
             recordLoginHistoryEntry(cleanUser, succeeded = true)
             Result.success(currentState())
         } catch (e: Exception) {
-            Result.failure(SecurityException(e.message ?: "تعذّر التحقق من الحساب"))
+            Result.failure(SecurityException(e.message ?: tr("تعذّر التحقق من الحساب", "Failed to verify account")))
         }
     }
 

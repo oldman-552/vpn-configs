@@ -5,6 +5,7 @@
 package com.bahrain.vpnconfigs.engine
 
 import android.content.Context
+import com.bahrain.vpnconfigs.util.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -127,7 +128,7 @@ class Tester(private val ctx: Context) {
         var alive = 0
         val liveAlive = ArrayList<TestResult>()
         val liveDead = LinkedHashSet<String>()
-        onProgress(TestProgress("فحص الاتصال", 0, candidates.size, 0))
+        onProgress(TestProgress(tr("فحص الاتصال", "Connectivity Check"), 0, candidates.size, 0))
 
         val firstStage = coroutineScope {
             candidates.map { cfg ->
@@ -153,7 +154,7 @@ class Tester(private val ctx: Context) {
                             liveDead.add(Converters.cleanUri(r.cfg))
                         }
                         if (done % 4 == 0 || done == candidates.size) {
-                            snap = TestProgress("قياس الاستجابة", done, candidates.size, alive)
+                            snap = TestProgress(tr("قياس الاستجابة", "Measuring Latency"), done, candidates.size, alive)
                         }
                         if (done % 10 == 0 || done == candidates.size) {
                             partialSnap = liveAlive.toList() to liveDead.toSet()
@@ -187,7 +188,7 @@ class Tester(private val ctx: Context) {
             val speedConc = minOf(conc, 3)
             val speedPorts = allocatePortPool(speedConc, basePort = 21600)
             var sdone = 0
-            onProgress(TestProgress("قياس السرعة وترتيب الأسرع", 0, speedPool.size, 0))
+            onProgress(TestProgress(tr("قياس السرعة وترتيب الأسرع", "Measuring Speed & Ranking"), 0, speedPool.size, 0))
             try {
                 coroutineScope {
                     speedPool.map { res ->
@@ -216,7 +217,7 @@ class Tester(private val ctx: Context) {
                                     speedTsMap[res.cfg] = System.currentTimeMillis()
                                 }
                                 sdone++
-                                snap = TestProgress("قياس السرعة وترتيب الأسرع", sdone, speedPool.size, speedMap.size)
+                                snap = TestProgress(tr("قياس السرعة وترتيب الأسرع", "Measuring Speed & Ranking"), sdone, speedPool.size, speedMap.size)
                                 if (sdone % 2 == 0 || sdone == speedPool.size) {
                                     partialSpeedSnap = okList.map { item ->
                                         val sp = speedMap[item.cfg] ?: 0.0

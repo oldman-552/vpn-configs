@@ -1,4 +1,4 @@
-# Security & Privacy Model (`v3.5`)
+# Security & Privacy Model (`v1`)
 
 ## 1. Epistemic Honesty in Connection Security Classification
 Most consumer VPN apps mislead users by displaying `"100% Secure & Anonymous"` whenever a TUN interface opens. `ConnectionSecurityClassifier.kt` replaces binary marketing claims with **9 explicit, independently verified states**:

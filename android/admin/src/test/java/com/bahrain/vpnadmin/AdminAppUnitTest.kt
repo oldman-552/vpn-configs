@@ -105,7 +105,7 @@ class AdminAppUnitTest {
         assertFalse(rawStr.contains("11223344-5566-7788"))
 
         val bundleObj = pubBundle.getJSONObject("bundle")
-        assertEquals("3.5", bundleObj.optString("bundle_release"))
+        assertEquals("1.0", bundleObj.optString("bundle_release"))
         val vipEnc = bundleObj.getString("vip_nodes_enc_b64")
         assertTrue(vipEnc.isNotBlank())
 

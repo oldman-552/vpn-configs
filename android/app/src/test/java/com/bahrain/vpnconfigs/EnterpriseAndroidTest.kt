@@ -103,10 +103,10 @@ class EnterpriseAndroidTest {
                 JSONArray().put(
                     JSONObject()
                         .put("target_app", "USER")
-                        .put("version_code", 14)
-                        .put("version_name", "3.6")
+                        .put("version_code", 2)
+                        .put("version_name", "1.1")
                         .put("mandatory", true)
-                        .put("min_supported_code", 14)
+                        .put("min_supported_code", 2)
                         .put("apk_url", "https://example.com/update.apk")
                         .put("apk_sha256", "a".repeat(64))
                         .put("is_active", true)
@@ -138,7 +138,7 @@ class EnterpriseAndroidTest {
         val upd = AppUpdateManager.evaluateAvailableUpdate(ctx, guard.getVerifiedAppUpdates())
         assertNotNull(upd)
         assertTrue(upd!!.mandatory)
-        assertEquals("3.6", upd.versionName)
+        assertEquals("1.1", upd.versionName)
 
         // Wrong password rejected
         assertTrue(guard.loginWithBundle("ahmed_bh", "WrongPass!", true).isFailure)
@@ -248,8 +248,8 @@ class EnterpriseAndroidTest {
         // 1. ABI-aware APK selection (arm64-v8a vs x86_64 vs universal fallback)
         val updateObj = JSONObject()
             .put("target_app", "USER")
-            .put("version_code", 15)
-            .put("version_name", "3.6")
+            .put("version_code", 3)
+            .put("version_name", "1.2")
             .put("is_active", true)
             .put("apk_url", "https://example.com/fallback-universal.apk")
             .put("apk_sha256", "f".repeat(64))
@@ -316,7 +316,7 @@ class EnterpriseAndroidTest {
         val lookup = EnterpriseCrypto.computeUserLookupId("noor_vip")
         val bundle = JSONObject()
             .put("schema_version", 3)
-            .put("bundle_release", "3.1")
+            .put("bundle_release", "1.0")
             .put("generated_at", java.time.Instant.ofEpochMilli(t0Ms).toString())
             .put("public_key_spki_b64", pubSpkiB64)
             .put("remote_config", JSONObject().put("auto_failover_enabled", true))
@@ -362,7 +362,7 @@ class EnterpriseAndroidTest {
     }
 
     @Test
-    fun v35PlayProtectAntiDropperAndHttpsBrowserUpdateVerification() {
+    fun v1PlayProtectAntiDropperAndHttpsBrowserUpdateVerification() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val pkgInfo = ctx.packageManager.getPackageInfo(
             ctx.packageName,
@@ -374,8 +374,12 @@ class EnterpriseAndroidTest {
             requested.contains("android.permission.REQUEST_INSTALL_PACKAGES")
         )
 
+        // Official v1 version verification
+        assertEquals(1, AppUpdateManager.currentVersionCode(ctx))
+        assertEquals("1.0", AppUpdateManager.currentVersionName(ctx))
+
         // Safe HTTPS URLs accepted; HTTP, file://, loopback, LAN, and embedded credentials rejected
-        assertNotNull(AppUpdateManager.validateSafeUpdateHttpsUrl("https://releases.example.org/v3.5/app-arm64-v8a-release.apk"))
+        assertNotNull(AppUpdateManager.validateSafeUpdateHttpsUrl("https://releases.example.org/v1/app-arm64-v8a-release.apk"))
         assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("http://releases.example.org/app.apk") == null)
         assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("file:///sdcard/Download/app.apk") == null)
         assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("content://com.example.provider/app.apk") == null)
@@ -384,12 +388,12 @@ class EnterpriseAndroidTest {
         assertTrue(AppUpdateManager.validateSafeUpdateHttpsUrl("https://admin:secret@releases.example.org/app.apk") == null)
 
         val safeInfo = com.bahrain.vpnconfigs.enterprise.AppUpdateInfo(
-            versionCode = 15,
-            versionName = "3.6",
+            versionCode = 2,
+            versionName = "1.1",
             releaseNotes = "Security update",
             mandatory = false,
-            minSupportedCode = 13,
-            apkUrl = "https://releases.example.org/v3.6/app-arm64-v8a-release.apk",
+            minSupportedCode = 1,
+            apkUrl = "https://releases.example.org/v1.1/app-arm64-v8a-release.apk",
             apkSha256 = "b".repeat(64),
             signingCertSha256 = "",
             selectedAbi = "arm64-v8a",
@@ -398,5 +402,52 @@ class EnterpriseAndroidTest {
         assertEquals(android.content.Intent.ACTION_VIEW, intent.action)
         assertTrue(intent.categories.contains(android.content.Intent.CATEGORY_BROWSABLE))
         assertTrue("Browser delegation must never set package-archive MIME type", intent.type == null)
+    }
+
+    @Test
+    fun officialV1BilingualArabicPrimaryAndEnglishToggleVerification() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        val prefs = com.bahrain.vpnconfigs.data.Prefs(ctx)
+        try {
+            // 1. Arabic is strictly the primary/default language on fresh install
+            assertEquals("ar", prefs.appLanguage)
+            val initLang = com.bahrain.vpnconfigs.util.AppI18n.initFromPrefs(ctx)
+            assertEquals(com.bahrain.vpnconfigs.util.AppLang.AR, initLang)
+            assertEquals(androidx.compose.ui.unit.LayoutDirection.Rtl, initLang.layoutDirection)
+            assertEquals("الاتصال", com.bahrain.vpnconfigs.util.tr("الاتصال", "Connect"))
+            assertEquals(
+                "الأسرع في التنزيل",
+                com.bahrain.vpnconfigs.engine.ServerSortMode.FASTEST_DOWNLOAD.displayTitle,
+            )
+            assertTrue(
+                com.bahrain.vpnconfigs.util.UiMessages
+                    .formatLastUpdated("2026-10-31T08:00:00Z", 0L)
+                    .startsWith("آخر تحديث:"),
+            )
+
+            // 2. Live toggle switches to English (LTR) and persists across restarts
+            val toggled = com.bahrain.vpnconfigs.util.AppI18n.toggleLanguage(ctx)
+            assertEquals(com.bahrain.vpnconfigs.util.AppLang.EN, toggled)
+            assertEquals("en", prefs.appLanguage)
+            assertEquals(androidx.compose.ui.unit.LayoutDirection.Ltr, toggled.layoutDirection)
+            assertEquals("Connect", com.bahrain.vpnconfigs.util.tr("الاتصال", "Connect"))
+            assertEquals(
+                "Fastest Download",
+                com.bahrain.vpnconfigs.engine.ServerSortMode.FASTEST_DOWNLOAD.displayTitle,
+            )
+            assertTrue(
+                com.bahrain.vpnconfigs.util.UiMessages
+                    .formatLastUpdated("2026-10-31T08:00:00Z", 0L)
+                    .startsWith("Updated:"),
+            )
+
+            // 3. Toggle back restores Arabic as active primary language
+            val restored = com.bahrain.vpnconfigs.util.AppI18n.toggleLanguage(ctx)
+            assertEquals(com.bahrain.vpnconfigs.util.AppLang.AR, restored)
+            assertEquals("ar", prefs.appLanguage)
+        } finally {
+            com.bahrain.vpnconfigs.util.AppI18n.setLanguage(ctx, com.bahrain.vpnconfigs.util.AppLang.AR)
+        }
     }
 }

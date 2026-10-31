@@ -12,6 +12,8 @@
 // =====================================================================
 package com.bahrain.vpnconfigs.vpn
 
+import com.bahrain.vpnconfigs.util.tr
+
 data class TunLeakProtectionPlan(
     val captureIpv4Route: Boolean = true,
     val captureIpv6Route: Boolean = true,
@@ -126,8 +128,11 @@ object LeakProtectionEngine {
         if (!viaVpnTunnel) {
             return WebRtcGuidance(
                 level = WebRtcExposureLevel.EXPOSED_VPN_DISCONNECTED,
-                summaryAr = "مكشوف (الـ VPN غير متّصل)",
-                detailAr = "عنوان IP الحقيقي لجهازك مرئي لمواقع الويب وخوادم STUN لأن نفق الـ VPN متوقف حاليًا.",
+                summaryAr = tr("مكشوف (الـ VPN غير متّصل)", "Exposed (VPN Disconnected)"),
+                detailAr = tr(
+                    "عنوان IP الحقيقي لجهازك مرئي لمواقع الويب وخوادم STUN لأن نفق الـ VPN متوقف حاليًا.",
+                    "Your real IP address is visible to websites and STUN servers while the VPN tunnel is disconnected.",
+                ),
             )
         }
 
@@ -140,15 +145,21 @@ object LeakProtectionEngine {
         if (browserBypassed) {
             return WebRtcGuidance(
                 level = WebRtcExposureLevel.SPLIT_TUNNEL_BYPASS_WARNING,
-                summaryAr = "تنبيه: متصفح مستثنى من النفق قد يكشف IP عبر WebRTC",
-                detailAr = "أحد المتصفحات مستثنى في إعدادات تقسيم النفق (Split Tunneling)، مما يسمح لطلبات WebRTC/STUN بالخروج مباشرة.",
+                summaryAr = tr("تنبيه: متصفح مستثنى من النفق قد يكشف IP عبر WebRTC", "Warning: Split-tunneled browser may leak IP via WebRTC"),
+                detailAr = tr(
+                    "أحد المتصفحات مستثنى في إعدادات تقسيم النفق (Split Tunneling)، مما يسمح لطلبات WebRTC/STUN بالخروج مباشرة.",
+                    "A browser is excluded in Split Tunneling, allowing WebRTC/STUN traffic to bypass the VPN directly.",
+                ),
             )
         }
 
         return WebRtcGuidance(
             level = WebRtcExposureLevel.TUNNEL_ROUTED_BROWSER_ADVISORY,
-            summaryAr = "موجّه داخل النفق • يُنصح بتقييد WebRTC في المتصفح",
-            detailAr = "توجيه النظام يمرّر حزم UDP/TCP عبر النفق المشفّر، لكن لا يمكن لطبقة VPN وحدها منع المتصفح من قراءة عناوين الواجهات المحلية؛ للحماية القصوى فعّل خيار تعطيل UDP غير الممرّر عبر الوكيل في متصفحك.",
+            summaryAr = tr("موجّه داخل النفق • يُنصح بتقييد WebRTC في المتصفح", "Routed via Tunnel • Browser WebRTC restriction advised"),
+            detailAr = tr(
+                "توجيه النظام يمرّر حزم UDP/TCP عبر النفق المشفّر، لكن لا يمكن لطبقة VPN وحدها منع المتصفح من قراءة عناوين الواجهات المحلية؛ للحماية القصوى فعّل خيار تعطيل UDP غير الممرّر عبر الوكيل في متصفحك.",
+                "OS routing sends UDP/TCP inside the encrypted tunnel, though VPN interfaces alone cannot prevent browsers from reading local interface IPs; disable non-proxied UDP in browser settings for maximum privacy.",
+            ),
         )
     }
 }

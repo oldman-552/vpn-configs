@@ -55,7 +55,7 @@ function createEmptyDb() {
   const now = new Date().toISOString();
   return {
     schema_version: 3,
-    bundle_release: "3.2",
+    bundle_release: "1.0",
     signing_keys: null,
     vip_key_hex: EnterpriseWebCrypto.randomHex(32),
     vip_servers: [],
@@ -79,43 +79,43 @@ function createEmptyDb() {
     connection_logs: [],
     app_versions: [
       {
-        id: "ver_user_3_5",
+        id: "ver_user_1_0",
         target_app: "USER",
-        version_code: 13,
-        version_name: "3.5",
-        release_notes: "ULTIMATE VPN ENTERPRISE v3.5 — Central Top 500 + Local Personalized Top 50 + Play Protect Hardened + RSA-4096 v2/v3 Signing",
+        version_code: 1,
+        version_name: "1.0",
+        release_notes: "bahrain-vpn v1 Official Release — Bilingual AR (Primary) + EN, Central Top 500 + Local Personalized Top 50, Play Protect Hardened & RSA-4096 v1/v2/v3 Signed",
         release_date: now,
         mandatory: false,
-        min_supported_code: 11,
-        apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-arm64-v8a-release.apk",
+        min_supported_code: 1,
+        apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-arm64-v8a-release.apk",
         apk_sha256: "",
         signing_cert_sha256: "",
         abi_assets: {
           "arm64-v8a": {
-            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-arm64-v8a-release.apk",
+            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-arm64-v8a-release.apk",
             apk_sha256: "",
           },
           x86_64: {
-            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-x86_64-release.apk",
+            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-x86_64-release.apk",
             apk_sha256: "",
           },
           universal: {
-            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-release.apk",
+            apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-release.apk",
             apk_sha256: "",
           },
         },
         is_active: true,
       },
       {
-        id: "ver_admin_3_5",
+        id: "ver_admin_1_0",
         target_app: "ADMIN",
-        version_code: 6,
-        version_name: "3.5",
-        release_notes: "ULTIMATE VPN ADMIN v3.5 - RSA-4096 v2/v3 Signed + Encrypted VIP Private Nodes + Slim R8 Build",
+        version_code: 1,
+        version_name: "1.0",
+        release_notes: "bahrain-vpn Admin v1 Official Release — Bilingual AR (Primary) + EN, Encrypted VIP Private Nodes & RSA-4096 v1/v2/v3 Signed",
         release_date: now,
         mandatory: false,
-        min_supported_code: 4,
-        apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v3.5/app-admin-release.apk",
+        min_supported_code: 1,
+        apk_url: "https://github.com/oldman-552/vpn-configs/releases/download/v1/app-admin-release.apk",
         apk_sha256: "",
         signing_cert_sha256: "",
         abi_assets: {},
@@ -139,7 +139,7 @@ function createEmptyDb() {
 
 function ensureVaultV31Defaults(db) {
   if (!db) return createEmptyDb();
-  db.bundle_release = "3.5";
+  db.bundle_release = "1.0";
   if (!db.vip_key_hex || db.vip_key_hex.length !== 64) {
     db.vip_key_hex = EnterpriseWebCrypto.randomHex(32);
   }
@@ -149,13 +149,16 @@ function ensureVaultV31Defaults(db) {
     db.remote_config.auto_failover_enabled = {
       value: true,
       sensitive: false,
-      desc: "Proactive Smart Auto-Failover v3.5 to fastest verified backup server",
+      desc: "Proactive Smart Auto-Failover v1 to fastest verified backup server",
     };
   }
-  if (Array.isArray(db.app_versions) && !db.app_versions.some((v) => v.version_name === "3.5")) {
-    const defaults = createEmptyDb().app_versions;
-    db.app_versions.forEach((v) => { v.is_active = false; });
-    db.app_versions.unshift(...defaults);
+  if (Array.isArray(db.app_versions)) {
+    db.app_versions = db.app_versions.filter((v) => v.version_name === "1.0" || Number(v.version_code || 0) <= 5);
+    if (!db.app_versions.some((v) => v.version_name === "1.0")) {
+      db.app_versions = createEmptyDb().app_versions;
+    }
+  } else {
+    db.app_versions = createEmptyDb().app_versions;
   }
   return db;
 }
@@ -256,7 +259,7 @@ async function syncFromGitHub() {
     if (!AppState.db.signing_keys) {
       AppState.db.signing_keys = await EnterpriseWebCrypto.generateEcdsaP256KeyPair();
     }
-    if (statusEl) statusEl.textContent = t("متصل بـ GitHub (v3.5) ✓", "Synced with GitHub (v3.5) ✓");
+    if (statusEl) statusEl.textContent = t("متصل بـ GitHub (v1) ✓", "Synced with GitHub (v1) ✓");
     renderAll();
   } catch (err) {
     alert(t("خطأ في فك تشفير الخزنة أو اتصال GitHub: ", "Vault/GitHub error: ") + err.message);
@@ -342,7 +345,7 @@ async function saveAndPublishToGitHub(commitReason = "Update enterprise state") 
 
     const bundleBody = {
       schema_version: 3,
-      bundle_release: "3.5",
+      bundle_release: "1.0",
       generated_at: new Date().toISOString(),
       public_key_spki_b64: AppState.db.signing_keys.publicSpkiB64,
       remote_config: rcFlat,
@@ -364,11 +367,11 @@ async function saveAndPublishToGitHub(commitReason = "Update enterprise state") 
       "enterprise/bundle.json",
       signedBundle,
       AppState.bundleSha,
-      `chore(bundle): sign & publish v3.5 client bundle`
+      `chore(bundle): sign & publish v1 client bundle`
     );
     AppState.bundleSha = bundlePut.content?.sha || AppState.bundleSha;
 
-    if (statusEl) statusEl.textContent = t("تم الحفظ والتوقيع على GitHub (v3.5) ✓", "Encrypted & Signed on GitHub (v3.5) ✓");
+    if (statusEl) statusEl.textContent = t("تم الحفظ والتوقيع على GitHub (v1) ✓", "Encrypted & Signed on GitHub (v1) ✓");
     renderAll();
   } catch (err) {
     alert(t("تعذّر النشر على GitHub: ", "Publish failed: ") + err.message);

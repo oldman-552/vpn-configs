@@ -34,6 +34,17 @@ class Prefs(ctx: Context) {
         get() = (sp.getString("feed_profile", "smart") ?: "smart").ifBlank { "smart" }
         set(v) = sp.edit { putString("feed_profile", v.trim().ifBlank { "smart" }) }
 
+    /** لغة واجهة التطبيق: "ar" افتراضيًا (اللغة العربية هي الأساسية)، أو "en" للإنجليزية. */
+    var appLanguage: String
+        get() {
+            val raw = (sp.getString("app_language", "ar") ?: "ar").trim().lowercase()
+            return if (raw == "en") "en" else "ar"
+        }
+        set(v) {
+            val norm = if (v.trim().equals("en", ignoreCase = true)) "en" else "ar"
+            sp.edit { putString("app_language", norm) }
+        }
+
     var testTop: Int
         get() = sp.getInt("test_top", 400)
         set(v) = sp.edit { putInt("test_top", v.coerceAtLeast(10)) }

@@ -14,14 +14,18 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.bahrain.vpnconfigs.engine.Converters
+import com.bahrain.vpnconfigs.util.tr
 import kotlin.math.abs
 import kotlin.math.max
 
-enum class HistorySortOrder(val key: String, val labelAr: String) {
-    RECENT("RECENT", "الأحدث"),
-    BEST_PERFORMANCE("BEST_PERFORMANCE", "الأعلى سرعة"),
-    LOWEST_LATENCY("LOWEST_LATENCY", "الأقل تأخيرًا"),
-    LONGEST_DURATION("LONGEST_DURATION", "الأطول مدة");
+enum class HistorySortOrder(val key: String, val labelAr: String, val labelEn: String) {
+    RECENT("RECENT", "الأحدث", "Newest"),
+    BEST_PERFORMANCE("BEST_PERFORMANCE", "الأعلى سرعة", "Top Speed"),
+    LOWEST_LATENCY("LOWEST_LATENCY", "الأقل تأخيرًا", "Lowest Ping"),
+    LONGEST_DURATION("LONGEST_DURATION", "الأطول مدة", "Longest");
+
+    val displayLabel: String
+        get() = tr(labelAr, labelEn)
 
     companion object {
         fun fromKey(raw: String?): HistorySortOrder =
@@ -29,11 +33,14 @@ enum class HistorySortOrder(val key: String, val labelAr: String) {
     }
 }
 
-enum class FavoriteSortOrder(val key: String, val labelAr: String) {
-    RECENT("RECENT", "الأحدث إضافة"),
-    NAME("NAME", "الاسم"),
-    GROUP("GROUP", "المجموعة"),
-    PERFORMANCE("PERFORMANCE", "الأفضل أداءً");
+enum class FavoriteSortOrder(val key: String, val labelAr: String, val labelEn: String) {
+    RECENT("RECENT", "الأحدث إضافة", "Recently Added"),
+    NAME("NAME", "الاسم", "Name"),
+    GROUP("GROUP", "المجموعة", "Group"),
+    PERFORMANCE("PERFORMANCE", "الأفضل أداءً", "Best Performance");
+
+    val displayLabel: String
+        get() = tr(labelAr, labelEn)
 
     companion object {
         fun fromKey(raw: String?): FavoriteSortOrder =
@@ -118,6 +125,9 @@ enum class ScanNetworkProfile(val code: String, val labelAr: String, val labelEn
     WIFI("WIFI", "شبكة Wi‑Fi", "Wi-Fi"),
     MOBILE_DATA("MOBILE_DATA", "بيانات الجوال", "Mobile Data");
 
+    val displayLabel: String
+        get() = tr(labelAr, labelEn)
+
     companion object {
         fun fromTransportCode(raw: String?): ScanNetworkProfile {
             val u = raw?.trim()?.uppercase().orEmpty()
@@ -126,10 +136,13 @@ enum class ScanNetworkProfile(val code: String, val labelAr: String, val labelEn
     }
 }
 
-enum class LocalPoolTier(val code: String, val labelAr: String) {
-    TOP_50("TOP_50", "أفضل 50 للشبكة"),
-    BACKUP_POOL("BACKUP_POOL", "الاحتياطي المؤهّل"),
-    CANDIDATE_ONLY("CANDIDATE_ONLY", "مرشّح غير مفحوص محليًا");
+enum class LocalPoolTier(val code: String, val labelAr: String, val labelEn: String) {
+    TOP_50("TOP_50", "أفضل 50 للشبكة", "Network Top 50"),
+    BACKUP_POOL("BACKUP_POOL", "الاحتياطي المؤهّل", "Qualified Backup"),
+    CANDIDATE_ONLY("CANDIDATE_ONLY", "مرشّح غير مفحوص محليًا", "Untested Candidate");
+
+    val displayLabel: String
+        get() = tr(labelAr, labelEn)
 
     companion object {
         fun fromCode(raw: String?): LocalPoolTier =

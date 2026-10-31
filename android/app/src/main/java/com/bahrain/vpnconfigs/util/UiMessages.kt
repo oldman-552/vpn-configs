@@ -19,6 +19,13 @@ object UiMessages {
     const val MSG_ENGINE_UNAVAILABLE = "محرّك الاتصال غير جاهز حاليًا"
     const val MSG_SERVER_UNREACHABLE = "تعذر الاتصال بالسيرفر المحدد. حاول مرة أخرى"
 
+    fun msgUpdating(): String = tr(MSG_UPDATING, "Updating server list…")
+    fun msgUpdateFailed(): String = tr(MSG_UPDATE_FAILED, "Could not update server list. Please try again.")
+    fun msgNoServers(): String = tr(MSG_NO_SERVERS, "No servers currently available")
+    fun msgTestFailed(): String = tr(MSG_TEST_FAILED, "Could not complete server scan. Please try again.")
+    fun msgEngineUnavailable(): String = tr(MSG_ENGINE_UNAVAILABLE, "VPN engine is currently unavailable")
+    fun msgServerUnreachable(): String = tr(MSG_SERVER_UNREACHABLE, "Could not reach selected server. Please try again.")
+
     private val TECHNICAL_LEAK_RE = Regex(
         "(" +
             "https?://|" +
@@ -42,21 +49,22 @@ object UiMessages {
         return trimmed
     }
 
-    /** تنسيق موحّد وواضح لسطر «آخر تحديث: [الوقت]» دون أي إشارة للمصدر الداخلي. */
+    /** تنسيق موحّد وواضح لسطر «آخر تحديث: [الوقت]» / «Updated: [time]» دون أي إشارة للمصدر الداخلي. */
     fun formatLastUpdated(remoteGeneratedAt: String?, localRefreshEpochMs: Long): String {
+        val prefix = tr("آخر تحديث:", "Updated:")
         if (localRefreshEpochMs > 0L) {
             val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
-            return "آخر تحديث: ${fmt.format(Date(localRefreshEpochMs))}"
+            return "$prefix ${fmt.format(Date(localRefreshEpochMs))}"
         }
         val cleanRemote = remoteGeneratedAt?.trim().orEmpty()
         if (cleanRemote.isNotEmpty() && cleanRemote != "—" && cleanRemote.length >= 16) {
             val parsedMs = parseIsoUtcMillis(cleanRemote)
             if (parsedMs > 0L) {
                 val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
-                return "آخر تحديث: ${fmt.format(Date(parsedMs))}"
+                return "$prefix ${fmt.format(Date(parsedMs))}"
             }
             val normalized = cleanRemote.take(16).replace('T', ' ')
-            return "آخر تحديث: $normalized"
+            return "$prefix $normalized"
         }
         return ""
     }

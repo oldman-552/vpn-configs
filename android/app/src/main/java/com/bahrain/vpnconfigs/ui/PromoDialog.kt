@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.bahrain.vpnconfigs.data.ResolvedPromoBanner
+import com.bahrain.vpnconfigs.util.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -170,7 +171,7 @@ fun PromoPopupDialog(
                         bitmap?.let { img ->
                             Image(
                                 bitmap = img,
-                                contentDescription = banner.title.ifBlank { "إعلان" },
+                                contentDescription = banner.title.ifBlank { tr("إعلان", "Promo") },
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -200,7 +201,7 @@ fun PromoPopupDialog(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Close,
-                                        contentDescription = "إغلاق الإعلان",
+                                        contentDescription = tr("إغلاق الإعلان", "Close promo"),
                                         tint = Color.White,
                                         modifier = Modifier.size(20.dp),
                                     )
@@ -253,7 +254,7 @@ fun PromoPopupDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
                                 ) {
-                                    Text(banner.buttonText.ifBlank { "التفاصيل" })
+                                    Text(banner.buttonText.ifBlank { tr("التفاصيل", "Details") })
                                 }
                             } else {
                                 Spacer(Modifier.height(2.dp))

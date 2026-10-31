@@ -1,7 +1,7 @@
-# Android Battery & Resource Optimization (`v3.3`)
+# Android Battery & Resource Optimization (`v1`)
 
 ## 1. Architectural Energy Principles
-VPN clients run long-lived foreground services, so uncontrolled background timers, duplicate network handovers, or CPU wake locks rapidly drain mobile batteries. Version `3.3` enforces five strict power-saving invariants across `BahrainVpnService`, `ResourceAndBatteryMonitor`, `AutoReconnectManager`, and `ConnectHomeScreen`:
+VPN clients run long-lived foreground services, so uncontrolled background timers, duplicate network handovers, or CPU wake locks rapidly drain mobile batteries. Release `v1` enforces five strict power-saving invariants across `BahrainVpnService`, `ResourceAndBatteryMonitor`, `AutoReconnectManager`, and `ConnectHomeScreen`:
 
 1. **Zero `WakeLock`s (`wakeLocksHeld = 0`):**
    - Neither `BahrainVpnService` nor `RefreshWorker` acquires `PowerManager.WakeLock`. Packet forwarding inside `hev-socks5-tunnel` and `sing-box` wakes only on kernel socket readiness (`epoll`), allowing the SoC to enter idle sleep whenever no packets are in flight.

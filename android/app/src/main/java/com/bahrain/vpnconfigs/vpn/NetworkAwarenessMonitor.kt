@@ -15,17 +15,21 @@ import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import com.bahrain.vpnconfigs.util.tr
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.net.Inet6Address
 
-enum class UnderlyingTransport(val code: String, val labelAr: String) {
-    WIFI("WIFI", "واي فاي (Wi-Fi)"),
-    CELLULAR("CELLULAR", "بيانات الجوال"),
-    ETHERNET("ETHERNET", "إيثرنت سلكي"),
-    OTHER("OTHER", "شبكة أخرى"),
-    NONE("NONE", "غير متّصل بالشبكة");
+enum class UnderlyingTransport(val code: String, val labelAr: String, val labelEn: String) {
+    WIFI("WIFI", "واي فاي (Wi-Fi)", "Wi-Fi"),
+    CELLULAR("CELLULAR", "بيانات الجوال", "Mobile Data"),
+    ETHERNET("ETHERNET", "إيثرنت سلكي", "Ethernet"),
+    OTHER("OTHER", "شبكة أخرى", "Other Network"),
+    NONE("NONE", "غير متّصل بالشبكة", "Offline");
+
+    val displayLabel: String
+        get() = tr(labelAr, labelEn)
 }
 
 data class NetworkSnapshot(

@@ -1,5 +1,5 @@
 // =====================================================================
-// EnterpriseScreens.kt — المنسّق المعياري لشاشة المركز المؤسسي وبوابة الدخول (v3.1).
+// EnterpriseScreens.kt — المنسّق المعياري لشاشة المركز المؤسسي وبوابة الدخول (v1).
 // تم تفكيك المكوّنات الفرعية إلى حزمة `com.bahrain.vpnconfigs.ui.enterprise`
 // لسهولة الصيانة والتوسع المستقبلي.
 // =====================================================================
@@ -43,6 +43,7 @@ import com.bahrain.vpnconfigs.ui.enterprise.AppHealthAndFailoverCard
 import com.bahrain.vpnconfigs.ui.enterprise.NetworkDiagnosticsCard
 import com.bahrain.vpnconfigs.ui.enterprise.SignedAppUpdateBanner
 import com.bahrain.vpnconfigs.ui.enterprise.TunnelSpeedStudioCard
+import com.bahrain.vpnconfigs.util.tr
 import com.bahrain.vpnconfigs.vpn.VpnStatus
 import kotlinx.coroutines.delay
 
@@ -60,24 +61,27 @@ fun MandatoryLoginGateDialog(
     AlertDialog(
         onDismissRequest = { /* إلزامي عند تفعيل اشتراط الحساب من المشرف */ },
         icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
-        title = { Text("تسجيل الدخول الإلزامي", fontWeight = FontWeight.Bold) },
+        title = { Text(tr("تسجيل الدخول الإلزامي", "Account Login Required"), fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "يلزم تسجيل الدخول بحساب فعّال أو فترة تجريبية (48 ساعة) للوصول إلى خوادم الـ VPN وعقد VIP الخاصة.",
+                    tr(
+                        "يلزم تسجيل الدخول بحساب فعّال أو فترة تجريبية (48 ساعة) للوصول إلى خوادم الـ VPN وعقد VIP الخاصة.",
+                        "Please sign in with an active account or 48-hour trial to access VPN servers and private VIP nodes.",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("اسم المستخدم") },
+                    label = { Text(tr("اسم المستخدم", "Username")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("كلمة المرور") },
+                    label = { Text(tr("كلمة المرور", "Password")) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -85,7 +89,10 @@ fun MandatoryLoginGateDialog(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = rememberMe, onCheckedChange = { rememberMe = it })
-                    Text("تذكّرني بأمان (تشفير Android Keystore)", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        tr("تذكّرني بأمان (تشفير Android Keystore)", "Remember me securely (Android Keystore)"),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -93,22 +100,25 @@ fun MandatoryLoginGateDialog(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        "رمز الجهاز: ${state.accountState.deviceInstallId.take(16)}…",
+                        tr("رمز الجهاز: ${state.accountState.deviceInstallId.take(16)}…", "Device ID: ${state.accountState.deviceInstallId.take(16)}…"),
                         style = MaterialTheme.typography.labelSmall,
                     )
                     TextButton(onClick = { onCopyDeviceId(state.accountState.deviceInstallId) }) {
-                        Text("نسخ الرمز")
+                        Text(tr("نسخ الرمز", "Copy ID"))
                     }
                 }
                 if (showResetHelp) {
                     Text(
-                        "لإعادة تعيين كلمة المرور أو تفعيل جهاز جديد، أرسل اسم المستخدم ورمز جهازك للمشرف لإصدار شهادة محدّثة.",
+                        tr(
+                            "لإعادة تعيين كلمة المرور أو تفعيل جهاز جديد، أرسل اسم المستخدم ورمز جهازك للمشرف لإصدار شهادة محدّثة.",
+                            "To reset your password or authorize a new device, send your username and Device ID to the administrator.",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
                 } else {
                     TextButton(onClick = { showResetHelp = true }) {
-                        Text("نسيت كلمة المرور؟")
+                        Text(tr("نسيت كلمة المرور؟", "Forgot password?"))
                     }
                 }
                 state.authError?.let { err ->
@@ -121,12 +131,12 @@ fun MandatoryLoginGateDialog(
                 onClick = { vm.loginEnterpriseAccount(username, password, rememberMe) },
                 enabled = !state.authLoading,
             ) {
-                Text(if (state.authLoading) "جارٍ التحقق…" else "تسجيل الدخول")
+                Text(if (state.authLoading) tr("جارٍ التحقق…", "Verifying…") else tr("تسجيل الدخول", "Sign In"))
             }
         },
         dismissButton = {
             OutlinedButton(onClick = { vm.syncEnterpriseBundle() }) {
-                Text("تحديث التراخيص")
+                Text(tr("تحديث التراخيص", "Sync Licenses"))
             }
         },
     )

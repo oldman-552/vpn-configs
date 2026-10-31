@@ -1,42 +1,35 @@
-# bahrain-vpn — تطبيق VPN أندرويد متكامل
+# bahrain-vpn — تطبيق الأندرويد الرسمي `v1` (العربية أساسية + الإنجليزية)
 
-تطبيق **bahrain-vpn** متكامل يعمل بمفرده بالكامل دون الحاجة لأي برنامج خارجي: ينزّل السيرفرات الحيّة تلقائيًا من مستودع `oldman-552/vpn-configs`، يعرضها باسم موحّد **`bahrain-vpn #1`، `bahrain-vpn #2`…**، يفحص سرعتها على شبكة هاتفك، **ويتّصل بالـ VPN مباشرة بضغطة زر واحدة** عبر نفق أصلي (`Android VpnService` + `hev-socks5-tunnel` + `sing-box`).
+تطبيق **bahrain-vpn `v1`** (`versionCode = 1`, `versionName = "1.0"`) متكامل يعمل بمفرده بالكامل دون الحاجة لأي برنامج خارجي، بواجهة **ثنائية اللغة تعتمد العربية لغةً أساسية افتراضية (`RTL`) مع دعم كامل للغة الإنجليزية (`LTR`) وتبديل فوري بضغطة زر واحدة**: يزامن حزمة المرشّحات الموثّقة ببصمات `SHA-256` (`Top 500`)، يفحصها تسلسليًا على شبكة هاتفك الفعلية لاختيار **أفضل 50 سيرفرًا مخصّصًا (`Personalized Top 50`)** لكل من `Wi-Fi` و`Mobile Data` على حدة، ويتّصل بالـ VPN مباشرة عبر نفق أصلي (`Android VpnService` + `hev-socks5-tunnel` + `sing-box`).
 
-## أبرز المميزات
+## أبرز المميزات في الإصدار الرسمي `v1`
 
-- **اتصال VPN مدمج بالكامل:** لا حاجة لتطبيقات خارجية — نفق TUN أصلي بكتابة C/lwIP مع `MapDNS` لمنع تسريب DNS ودعم كامل لبروتوكولات `VLESS`, `VMess`, `Trojan`, `Hysteria2`, `TUIC`, `Shadowsocks`.
-- **تسمية موحّدة (`bahrain-vpn`):** جميع السيرفرات داخل التطبيق وفي ملفات الاشتراك والتصدير تحمل اسم `bahrain-vpn`.
-- **اتصال ذكي وتبديل تلقائي (Smart Parallel Failover):** يتحقّق من عمل الإنترنت فعليًا عند الاتصال وينتقل تلقائيًا لأسرع سيرفر شغّال إذا توقّف السيرفر الحالي دون هدم نفق الـ VPN، مع دعم انتقال الشبكة السلس بين Wi-Fi و 5G.
-- **استثناء التطبيقات (Split Tunneling):** استثناء تطبيقات البنوك والخدمات المحلية من الـ VPN (أو قصر الـ VPN على تطبيقات محددة).
-- **مراقبة حيّة وإشعار تفاعلي + زر شريط الإشعارات (Quick Settings Tile):** عدّاد مدة الاتصال، سرعة التنزيل والرفع اللحظية، إجمالي استهلاك البيانات، البينغ الحيّ، وعلم دولة الخروج مع الـ IP المحمي.
-- **قائمة سيرفرات متكاملة:** بحث، فلترة حسب البروتوكول والمفضلة ⭐، فحص سريع (Ping) وفحص سرعة تنزيل، إضافة كانفيغات مخصّصة من الحافظة، وتصدير `best100.txt` / `sub.txt` / `config.txt`.
+- **اللغة العربية أساسية + دعم كامل للإنجليزية (`AR Primary / EN Secondary`):** يبدأ التطبيق باللغة العربية وتخطيط `RTL` افتراضيًا، مع زر تبديل فوري (`EN / عربي`) في الشاشة الرئيسية وفي الإعدادات يحدّث جميع الشاشات والإشعارات وزر شريط الإشعارات العلوي (`Quick Settings Tile`) فورًا دون إعادة تشغيل.
+- **اتصال VPN مدمج بالكامل ومنع تسرب `DNS/IPv6`:** نفق TUN أصلي مع `MapDNS` وتوجيه `tunnel-dns` داخل النفق (`detour="proxy"`) وحجز المسار `::/0`، ودعم كامل لبروتوكولات `VLESS`, `VMess`, `Trojan`, `Hysteria2`, `TUIC`, `Shadowsocks`.
+- **ذكاء محلي مخصّص لكل شبكة (`Local Personalized Top 50`):** فحص تسلسلي آمن عبر النفق الحقيقي (`Concurrency = 1`) يعزل نتائج وترتيب `Wi-Fi` عن `Mobile Data` في قاعدة `SQLite WAL`.
+- **متوافق مع Google Play Protect وموقّع بـ `RSA-4096 v1/v2/v3`:** خالٍ تمامًا من صلاحية `REQUEST_INSTALL_PACKAGES` وسلوك `Dropper`، ومفوّض لمتصفح النظام الرسمي عبر `HTTPS` مع نسخ بصمة `SHA-256`.
+- **اتصال ذكي وتبديل تلقائي (`Smart Failover`) + `Kill Switch` + استثناء التطبيقات (`Split Tunneling`) + عُقد `VIP 💎` المشفّرة.**
 
-## البنية
+## البنية البرمجية (`android/`)
 
 ```
 android/
-├── app/src/main/java/com/bahrain/vpnconfigs/
-│   ├── MainActivity.kt            # Material 3 + RTL + 4 تبويبات + صلاحيات الـ VPN والإشعارات
-│   ├── vpn/
-│   │   ├── BahrainVpnService.kt   # نفق VpnService + hev-socks5-tunnel + sing-box + التبديل الذكي
-│   │   ├── VpnState.kt            # الحالة التفاعلية المشتركة للإحصاءات الحيّة والسرعة
-│   │   ├── QuickTileService.kt    # زر التشغيل السريع في شريط إشعارات أندرويد العلوي
-│   │   └── InstalledApps.kt       # قراءة التطبيقات المثبّتة لميزة Split Tunneling
-│   ├── engine/
-│   │   ├── Converters.kt          # URI → outbound sing-box + التسمية الموحّدة bahrain-vpn
-│   │   ├── Socks.kt               # فحص socks5h + TLS وقياس الزمن والسرعة وعنوان الخروج
-│   │   ├── SingBox.kt             # إدارة عملية sing-box للفحص ولنفق الـ VPN
-│   │   └── Tester.kt              # فحص متوازٍ آمن: فحص سريع (Ping) أو فحص سرعة شامل
-│   ├── data/{Repo,Prefs}.kt       # جلب البيانات، الكاش المحلي، المفضلة، والإعدادات
-│   ├── ui/{Theme,Screens,AppViewModel}.kt
-│   └── work/RefreshWorker.kt      # تحديث القائمة الحيّة دوريًا في الخلفية
-└── scripts/fetch-engines.sh       # ينزّل libsingbox.so + hev-socks5-tunnel.aar
+├── app/src/main/java/com/bahrain/vpnconfigs/      # تطبيق المشترك الرسمي v1 (com.bahrain.vpnconfigs)
+│   ├── MainActivity.kt                            # Material 3 + التبديل اللحظي RTL/LTR (AR أساسية + EN)
+│   ├── util/{AppI18n,UiMessages,Converters,AppDiag}.kt
+│   ├── data/{Repo,Prefs,ClientDatabase}.kt        # تزامن Top 500 بـ SHA-256 + قاعدة SQLite WAL
+│   ├── engine/{LocalServerIntelligence,SmartServerSelector,SecurityEvaluator,SingBox,Socks,Tester}.kt
+│   ├── vpn/{BahrainVpnService,LeakProtectionEngine,KillSwitchController,ConnectionSecurityClassifier,SmartFailoverEngine,QuickTileService}.kt
+│   ├── enterprise/{EnterpriseLicenseGuard,EnterpriseCrypto,AppUpdateManager,ClientDiagnosticsEngine}.kt
+│   └── ui/{Screens,EnterpriseScreens,SecurityStatusScreen,FavoritesScreen,ServerHistoryScreen,PromoDialog,AppViewModel}.kt
+├── admin/src/main/java/com/bahrain/vpnadmin/      # تطبيق المشرف المستقل v1 (com.bahrain.vpnadmin — AR/EN)
+└── scripts/fetch-engines.sh                       # يجلب ويتحقق من بصمات SHA-256 لـ libsingbox.so + hev-socks5-tunnel.aar
 ```
 
-## البناء
+## البناء والاختبار
 
 ```bash
 cd android
 bash scripts/fetch-engines.sh --all
-gradle assembleDebug assembleRelease
+./gradlew testReleaseUnitTest assembleRelease :admin:assembleRelease
 ```

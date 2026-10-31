@@ -12,6 +12,8 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import com.bahrain.vpnconfigs.MainActivity
 import com.bahrain.vpnconfigs.data.Prefs
+import com.bahrain.vpnconfigs.util.AppI18n
+import com.bahrain.vpnconfigs.util.tr
 
 class QuickTileService : TileService() {
 
@@ -68,12 +70,13 @@ class QuickTileService : TileService() {
 
     private fun syncTile(forceActive: Boolean? = null) {
         val tile = qsTile ?: return
+        AppI18n.initFromPrefs(applicationContext)
         val st = VpnStateManager.status.value
         val active = forceActive ?: st.isActive
         tile.state = if (active) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.label = "bahrain-vpn"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.subtitle = if (active) st.activeLabel else "غير متّصل"
+            tile.subtitle = if (active) st.activeLabel else tr("غير متّصل", "Disconnected")
         }
         tile.updateTile()
     }
