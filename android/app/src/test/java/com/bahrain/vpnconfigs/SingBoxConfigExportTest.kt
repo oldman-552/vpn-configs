@@ -61,4 +61,28 @@ class SingBoxConfigExportTest {
         export("warp", json)
         export("warp-irbypass", SingBox(ctx).buildConfig(WarpManager.WARP_URI, 20808, bypassIrDomains = true)!!)
     }
+
+    @Test fun batchMultiOutboundConfig() {
+        Prefs(ctx).tlsFragmentMode = "OFF"
+        val uris = listOf(
+            "vless://11111111-2222-3333-4444-555555555555@vless.example.com:443?type=ws&security=tls&sni=vless.example.com&path=%2Fws#bahrain-vpn 1",
+            "trojan://secretpass@trojan.example.com:443?security=tls&sni=trojan.example.com#bahrain-vpn 2",
+            "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@198.51.100.12:8388#bahrain-vpn 3",
+            "socks5://user1:pass1@198.51.100.15:1080#bahrain-vpn 4",
+            "http://user2:pass2@198.51.100.16:8080#bahrain-vpn 5",
+        )
+        val built = SingBox(ctx).buildBatchConfigJson(
+            rawUris = uris,
+            baseSocksPort = 22100,
+            dnsServer = "1.1.1.1",
+            useDoh = true,
+        )
+        assertNotNull(built)
+        assertEquals(5, built!!.second.size)
+        val root = JSONObject(built.first)
+        assertEquals(5, root.getJSONArray("inbounds").length())
+        assertTrue(root.getJSONArray("outbounds").length() >= 6) // 5 proxy + direct
+        assertEquals(5, root.getJSONObject("route").getJSONArray("rules").length())
+        export("batch-multi-outbound", built.first)
+    }
 }

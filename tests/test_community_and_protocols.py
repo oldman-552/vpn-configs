@@ -13,14 +13,16 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from central_top500 import compute_config_fingerprint
+from central_top500 import compute_config_fingerprint, is_qualified_for_central_pool
 from community_ranking import (
     build_catalog_index,
     compute_country_community_rankings,
     export_community_country_datasets,
 )
 from dedupe import parse_identity
+import scoring
 from server.sync_community_rankings import sync_and_export
+import tester
 
 
 def test_socks_and_http_proxy_identity_parsing_and_secret_redaction() -> None:
@@ -50,6 +52,117 @@ def test_socks_and_http_proxy_identity_parsing_and_secret_redaction() -> None:
     assert parse_identity("http://example.com") is None
     assert parse_identity("socks5://192.168.1.1:1080") is None
     assert parse_identity("http://127.0.0.1:8080") is None
+
+    # tester.py sing-box outbound builders support socks/socks5/http/https and block private/web URLs
+    assert tester.engine_for(s1) == "singbox"
+    assert tester.engine_for(h2) == "singbox"
+    ob_socks = tester.to_singbox_outbound(s1)
+    ob_https = tester.to_singbox_outbound(h2)
+    assert ob_socks is not None and ob_socks["type"] == "socks" and ob_socks["server_port"] == 1080
+    assert ob_https is not None and ob_https["type"] == "http" and ob_https["tls"]["enabled"] is True
+    assert tester.to_singbox_outbound("https://example.com/some/article.html") is None
+    assert tester.to_singbox_outbound("socks5://192.168.1.1:1080") is None
+
+
+def test_unified_45_30_25_scoring_zero_free_speed_credit_and_hard_allow_insecure_exclusion() -> None:
+    # 1. Zero free credit for unmeasured speed (0.0 instead of 35.0) & 45% throughput weight
+    w = scoring.ScoringWeights().normalized()
+    assert abs(w.throughput - 0.45) < 1e-6
+    assert abs((w.reliability + w.stability + w.freshness) - 0.30) < 1e-6
+    assert abs(w.latency - 0.25) < 1e-6
+
+    score_unmeasured, brk_unmeasured = scoring.compute_composite_score(
+        median_latency_ms=65.0,
+        jitter_ms=5.0,
+        probe_pass_rate=1.0,
+        speed_kbps=0.0,
+        runs_seen=4,
+        runs_alive=4,
+        consecutive_alive=4,
+        ema_reliability=0.92,
+        corroboration_count=2,
+        verified_source_hit=True,
+    )
+    score_fast, brk_fast = scoring.compute_composite_score(
+        median_latency_ms=85.0,
+        jitter_ms=7.0,
+        probe_pass_rate=1.0,
+        speed_kbps=6400.0,
+        runs_seen=4,
+        runs_alive=4,
+        consecutive_alive=4,
+        ema_reliability=0.92,
+        corroboration_count=2,
+        verified_source_hit=True,
+    )
+    assert brk_unmeasured["throughput"] == 0.0
+    assert brk_fast["throughput"] > 75.0
+    assert score_fast > score_unmeasured + 25.0
+
+    # 2. Hard exclusion of allowInsecure=1 from Central Top-500, curated lists, and Community Top-500
+    insecure_uri = "trojan://pass@198.51.100.88:443?security=tls&allowInsecure=1&sni=edge.example.com#bad"
+    safe_uri = "trojan://pass@198.51.100.89:443?security=tls&sni=edge.example.com#good"
+    id_bad = parse_identity(insecure_uri)
+    id_good = parse_identity(safe_uri)
+    assert id_bad is not None and id_good is not None
+
+    bad_node = scoring.ScoredNode(
+        uri=insecure_uri,
+        identity_id=id_bad.identity_id,
+        protocol="trojan",
+        canonical_protocol="trojan",
+        host=id_bad.host,
+        port=id_bad.port,
+        subnet_key=id_bad.subnet_key,
+        latency_ms=30.0,
+        median_latency_ms=30.0,
+        jitter_ms=2.0,
+        probe_pass_rate=1.0,
+        speed_kbps=15_000.0,
+        score=95.0,
+        risk_level="HIGH",
+        security_assessment="Failed",
+    )
+    good_node = scoring.ScoredNode(
+        uri=safe_uri,
+        identity_id=id_good.identity_id,
+        protocol="trojan",
+        canonical_protocol="trojan",
+        host=id_good.host,
+        port=id_good.port,
+        subnet_key=id_good.subnet_key,
+        latency_ms=70.0,
+        median_latency_ms=70.0,
+        jitter_ms=5.0,
+        probe_pass_rate=1.0,
+        speed_kbps=4_500.0,
+        score=82.0,
+        risk_level="LOW",
+        security_assessment="Verified",
+    )
+    assert not is_qualified_for_central_pool(bad_node)
+    assert is_qualified_for_central_pool(good_node)
+    curated = scoring.build_specialized_lists([bad_node, good_node], best_n=10)
+    assert [n.identity_id for n in curated["best100"]] == [good_node.identity_id]
+    assert [n.identity_id for n in curated["high_throughput"]] == [good_node.identity_id]
+
+    now = 1_793_470_000
+    cat_idx = build_catalog_index([{"cfg": insecure_uri}, {"cfg": safe_uri}])
+    fp_bad = compute_config_fingerprint(insecure_uri)
+    fp_good = compute_config_fingerprint(safe_uri)
+    comm = compute_country_community_rankings(
+        [
+            {"config_fingerprint": fp_bad, "reporter_id_hash": "1" * 64, "tested_at_epoch": now - 20, "success": True, "latency_ms": 25, "download_kbps": 20000.0, "verified_country": "IR", "country_confidence": "CF_EDGE_VERIFIED", "vpn_interference": False},
+            {"config_fingerprint": fp_bad, "reporter_id_hash": "2" * 64, "tested_at_epoch": now - 15, "success": True, "latency_ms": 28, "download_kbps": 19000.0, "verified_country": "IR", "country_confidence": "CF_EDGE_VERIFIED", "vpn_interference": False},
+            {"config_fingerprint": fp_good, "reporter_id_hash": "1" * 64, "tested_at_epoch": now - 20, "success": True, "latency_ms": 95, "download_kbps": 4200.0, "verified_country": "IR", "country_confidence": "CF_EDGE_VERIFIED", "vpn_interference": False},
+            {"config_fingerprint": fp_good, "reporter_id_hash": "2" * 64, "tested_at_epoch": now - 15, "success": True, "latency_ms": 100, "download_kbps": 4000.0, "verified_country": "IR", "country_confidence": "CF_EDGE_VERIFIED", "vpn_interference": False},
+        ],
+        cat_idx,
+        target_country="IR",
+        now_epoch=now,
+    )
+    assert comm["qualified_count"] == 1
+    assert comm["servers"][0]["config_fingerprint"] == fp_good
 
 
 def test_iran_community_ranking_anti_manipulation_country_isolation_and_median_scoring(tmp_path: Path) -> None:

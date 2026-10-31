@@ -3,15 +3,27 @@ package com.bahrain.vpnconfigs
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.bahrain.vpnconfigs.data.ClientDatabase
+import com.bahrain.vpnconfigs.data.DeadConfigPurgePolicy
 import com.bahrain.vpnconfigs.data.LocalPoolTier
+import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.data.Repo
+import com.bahrain.vpnconfigs.data.ResultLine
 import com.bahrain.vpnconfigs.data.ScanNetworkProfile
 import com.bahrain.vpnconfigs.data.Top500ServerEntry
+import com.bahrain.vpnconfigs.engine.CentralScoringWeights
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.LocalScanMode
 import com.bahrain.vpnconfigs.engine.PersonalizedTop50Ranker
+import com.bahrain.vpnconfigs.engine.RankableServer
 import com.bahrain.vpnconfigs.engine.SequentialTunnelScanner
+import com.bahrain.vpnconfigs.engine.ServerRanker
+import com.bahrain.vpnconfigs.engine.ServerSortMode
+import com.bahrain.vpnconfigs.engine.SmartSelectionWeights
+import com.bahrain.vpnconfigs.engine.SmartServerCandidateInput
+import com.bahrain.vpnconfigs.engine.SmartServerSelector
 import com.bahrain.vpnconfigs.engine.TestResult
+import com.bahrain.vpnconfigs.engine.TunnelBatchProbeExecutor
+import com.bahrain.vpnconfigs.work.WorkScheduler
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -336,7 +348,7 @@ class Top500AndPersonalizedTop50Test {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val db = ClientDatabase.getInstance(ctx)
 
-        val candidatePool = (1..85).map { buildSampleUri(it, secretToken = "TOPSECRET_PASS_$it") }
+        val candidatePool = (1..130).map { buildSampleUri(it, secretToken = "TOPSECRET_PASS_$it") }
         val activeConcurrent = AtomicInteger(0)
         val maxConcurrentObserved = AtomicInteger(0)
 
@@ -347,18 +359,19 @@ class Top500AndPersonalizedTop50Test {
             val nowActive = activeConcurrent.incrementAndGet()
             maxConcurrentObserved.accumulateAndGet(nowActive) { a, b -> maxOf(a, b) }
             try {
-                Thread.sleep(2)
+                Thread.sleep(1)
                 val clean = Converters.cleanUri(req.cfg)
                 val idx = candidatePool.indexOfFirst { Converters.cleanUri(it) == clean } + 1
-                // On WIFI: servers 1..65 are fast (35..99ms), 66..85 fail
-                // On MOBILE_DATA: servers 60..85 are blazing fast (28ms, 6500 kbps), 1..30 are slow (950ms), 31..59 fail!
+                // On WIFI: servers 1..115 are fast (35..149ms), 116..130 fail -> 100 in Top 100 + 15 in Backup!
+                // On MOBILE_DATA: servers 90..130 (41 servers) are blazing fast (28ms, 6500 kbps),
+                // 1..65 (65 servers) are slow (950ms, 420 kbps), 66..89 fail -> 106 qualified -> 100 Top + 6 Backup!
                 if (req.networkProfile == ScanNetworkProfile.WIFI) {
-                    if (idx in 1..65) {
+                    if (idx in 1..115) {
                         TestResult(
                             cfg = clean,
                             ok = true,
                             latencyMs = 30L + idx,
-                            speedKbps = 5200.0 - idx * 20.0,
+                            speedKbps = 6200.0 - idx * 20.0,
                             establishMs = 180L + idx,
                             jitterMs = 4.5,
                             packetLossPct = 0.0,
@@ -369,17 +382,17 @@ class Top500AndPersonalizedTop50Test {
                     }
                 } else {
                     when (idx) {
-                        in 60..85 -> TestResult(
+                        in 90..130 -> TestResult(
                             cfg = clean,
                             ok = true,
-                            latencyMs = 28L + (idx - 60),
+                            latencyMs = 28L + (idx - 90),
                             speedKbps = 6500.0,
                             establishMs = 160L,
                             jitterMs = 3.0,
                             packetLossPct = 0.0,
                             stabilityScore = 95.0,
                         )
-                        in 1..30 -> TestResult(
+                        in 1..65 -> TestResult(
                             cfg = clean,
                             ok = true,
                             latencyMs = 950L + idx,
@@ -397,8 +410,8 @@ class Top500AndPersonalizedTop50Test {
             }
         }
 
-        // Launch two concurrent Full Scan / Quick Scan calls simultaneously to prove the global sequential Mutex
-        // NEVER allows more than 1 tunnel test at a time!
+        // Launch two concurrent Full Scan calls simultaneously to prove the global scan Mutex
+        // NEVER allows overlapping scan runs!
         val (wifiFull, mobileFull) = coroutineScope {
             val a = async {
                 scanner.executeScan(
@@ -417,31 +430,32 @@ class Top500AndPersonalizedTop50Test {
             awaitAll(a, b)
         }
 
-        // 1. Strict sequentiality: NEVER more than 1 tunnel tested at once!
+        // 1. Strict scan mutex: NEVER more than 1 scan executing at once!
         assertEquals(1, maxConcurrentObserved.get())
 
-        // 2. Full Scan evaluated ALL 85 configurations in the pool
-        assertEquals(85, wifiFull.testedCount)
-        assertEquals(85, mobileFull.testedCount)
+        // 2. Full Scan evaluated ALL 130 configurations in the pool
+        assertEquals(130, wifiFull.testedCount)
+        assertEquals(130, mobileFull.testedCount)
 
-        // 3. WIFI Personalized Top 50 has exactly 50 servers + 15 in Qualified Backup Pool (total 65 qualified on Wi-Fi)
-        val wifiTop50 = db.getPersonalizedRankings(ScanNetworkProfile.WIFI, LocalPoolTier.TOP_50)
+        // 3. WIFI Personalized Top 100 has exactly 100 servers + 15 in Qualified Backup Pool (total 115 qualified on Wi-Fi)
+        assertEquals(100, PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT)
+        val wifiTop100 = db.getPersonalizedRankings(ScanNetworkProfile.WIFI, LocalPoolTier.TOP_50)
         val wifiBackup = db.getPersonalizedRankings(ScanNetworkProfile.WIFI, LocalPoolTier.BACKUP_POOL)
-        assertEquals(50, wifiTop50.size)
+        assertEquals(100, wifiTop100.size)
         assertEquals(15, wifiBackup.size)
 
-        // 4. MOBILE_DATA Personalized Top 50 is COMPLETELY SEPARATE from WIFI!
-        // Servers 60..85 (which failed or ranked >50 on WIFI) are #1..#26 on MOBILE_DATA!
-        val mobileTop50 = db.getPersonalizedRankings(ScanNetworkProfile.MOBILE_DATA, LocalPoolTier.TOP_50)
+        // 4. MOBILE_DATA Personalized Top 100 is COMPLETELY SEPARATE from WIFI!
+        // Servers 90..130 (many of which failed on WIFI) are #1..#41 on MOBILE_DATA!
+        val mobileTop100 = db.getPersonalizedRankings(ScanNetworkProfile.MOBILE_DATA, LocalPoolTier.TOP_50)
         val mobileBackup = db.getPersonalizedRankings(ScanNetworkProfile.MOBILE_DATA, LocalPoolTier.BACKUP_POOL)
-        assertEquals(50, mobileTop50.size)
-        assertEquals(6, mobileBackup.size) // 26 fast + 30 slow = 56 qualified -> 50 Top + 6 Backup
+        assertEquals(100, mobileTop100.size)
+        assertEquals(6, mobileBackup.size) // 41 fast + 65 slow = 106 qualified -> 100 Top + 6 Backup
 
-        val expectedMobileRank1Id = Converters.stableServerId(candidatePool[59]) // idx=60
-        assertEquals(expectedMobileRank1Id, mobileTop50.first().serverId)
-        assertFalse(wifiTop50.first().serverId == mobileTop50.first().serverId)
+        val expectedMobileRank1Id = Converters.stableServerId(candidatePool[89]) // idx=90
+        assertEquals(expectedMobileRank1Id, mobileTop100.first().serverId)
+        assertFalse(wifiTop100.first().serverId == mobileTop100.first().serverId)
 
-        // 5. Quick Scan on MOBILE_DATA prioritizes recent/Top50, avoids scanning all 85, and stops early at target!
+        // 5. Quick Scan on MOBILE_DATA prioritizes recent/Top100, avoids scanning all 130, and stops early at target!
         val mobileQuick = scanner.executeScan(
             scanMode = LocalScanMode.QUICK_SCAN,
             allCandidateConfigs = candidatePool,
@@ -464,7 +478,7 @@ class Top500AndPersonalizedTop50Test {
         val rankSnapshots = db.getRankingHistoryForServer(expectedMobileRank1Id, ScanNetworkProfile.MOBILE_DATA)
         assertTrue("Expected >=2 ranking history snapshots, got ${rankSnapshots.size}", rankSnapshots.size >= 2)
 
-        // 7. Untested Top-500 server NEVER enters Personalized Top 50 even if it existed in central pool
+        // 7. Untested Top-500 server NEVER enters Personalized Top 100 even if it existed in central pool
         val neverTestedUri = buildSampleUri(499, secretToken = "UNTESTED_SECRET")
         val bundleWithUntested = PersonalizedTop50Ranker.computeRankings(
             candidateConfigs = listOf(neverTestedUri),
@@ -472,6 +486,231 @@ class Top500AndPersonalizedTop50Test {
             statsById = db.getNetworkStatsMap(ScanNetworkProfile.WIFI),
             profile = ScanNetworkProfile.WIFI,
         )
-        assertTrue(bundleWithUntested.top50.isEmpty())
+        assertTrue(bundleWithUntested.top100.isEmpty())
+    }
+
+    @Test
+    fun batchScannerRunsStage1AndStage2SpeedProbesAndExcludesAllowInsecureBeforeProbing() = runBlocking {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val db = ClientDatabase.getInstance(ctx)
+
+        val cleanPool = (1..120).map { buildSampleUri(it) }
+        val insecureUri = "trojan://bad@198.51.100.250:443?security=tls&allowInsecure=1&sni=bad.example.com#bad"
+        val fullPool = cleanPool + insecureUri
+
+        val batchCalls = AtomicInteger(0)
+        val speedMeasuredCount = AtomicInteger(0)
+        val seenUris = HashSet<String>()
+
+        val batchExec = TunnelBatchProbeExecutor { req ->
+            batchCalls.incrementAndGet()
+            synchronized(seenUris) { seenUris.addAll(req.cfgs.map { Converters.cleanUri(it) }) }
+            req.cfgs.mapIndexed { idx, raw ->
+                val clean = Converters.cleanUri(raw)
+                val globalIdx = cleanPool.indexOfFirst { Converters.cleanUri(it) == clean } + 1
+                if (req.measureSpeed) speedMeasuredCount.incrementAndGet()
+                if (globalIdx in 1..105) {
+                    TestResult(
+                        cfg = clean,
+                        ok = true,
+                        latencyMs = 35L + globalIdx,
+                        speedKbps = if (req.measureSpeed) (9_000.0 - globalIdx * 50.0).coerceAtLeast(500.0) else 0.0,
+                        establishMs = 120L,
+                        jitterMs = 4.0,
+                        packetLossPct = 0.0,
+                        stabilityScore = 90.0,
+                    )
+                } else {
+                    TestResult(cfg = clean, ok = false, error = "dead", packetLossPct = 100.0)
+                }
+            }
+        }
+
+        val scanner = SequentialTunnelScanner(
+            ctx = ctx,
+            clientDb = db,
+            batchExecutor = batchExec,
+        )
+
+        val summary = scanner.executeScan(
+            scanMode = LocalScanMode.FULL_SCAN,
+            allCandidateConfigs = fullPool,
+            networkProfile = ScanNetworkProfile.WIFI,
+            isMetered = false,
+        )
+
+        // 1. Insecure allowInsecure=1 URI was pre-filtered and NEVER sent to sing-box batch probe!
+        assertFalse(Converters.cleanUri(insecureUri) in seenUris)
+        assertEquals(120, summary.testedCount)
+        assertEquals(105, summary.aliveCount)
+        assertEquals(15, summary.failedCleanUris.size)
+        assertFalse(summary.offlineGuardTriggered)
+
+        // 2. Stage 2 real download speed ran on top 30 Wi-Fi finalists and ranked Top 100 speed-first!
+        assertEquals(30, speedMeasuredCount.get())
+        assertEquals(100, summary.rankingBundle.top100.size)
+        assertTrue(summary.results.first().speedKbps > 8_000.0)
+    }
+
+    @Test
+    fun deadConfigPurgePolicyDeletesDeadConfigsPreservesFavoritesVipOfflineGuardAndTop500Checksum() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val repo = Repo(ctx, baseUrls = emptyList())
+
+        val pool = (1..25).map { buildSampleUri(it) }
+        val cleanPool = pool.map { Converters.cleanUri(it) }
+        val favUri = cleanPool[0]   // #1 is Favorite (protected!)
+        val vipUri = cleanPool[1]   // #2 is VIP (protected!)
+        val deadNormal = cleanPool.subList(2, 10).toSet() // 8 normal dead servers -> MUST be purged!
+        val deadAttempted = setOf(favUri, vipUri) + deadNormal
+
+        // A) Normal online scan with 15 alive & 10 failed -> purges the 8 normal dead, protects Favorite & VIP!
+        val onlineDecision = DeadConfigPurgePolicy.evaluate(
+            currentPool = pool,
+            failedUris = deadAttempted,
+            testedCount = 25,
+            aliveCount = 15,
+            deviceOnline = true,
+            favoriteCleanUris = setOf(favUri),
+            favoriteServerIds = emptySet(),
+            vipCleanUris = setOf(vipUri),
+        )
+        assertTrue(onlineDecision.shouldPurge)
+        assertFalse(onlineDecision.offlineGuardTriggered)
+        assertEquals(8, onlineDecision.purgeableCleanUris.size)
+        assertFalse(favUri in onlineDecision.purgeableCleanUris)
+        assertFalse(vipUri in onlineDecision.purgeableCleanUris)
+        assertEquals(17, onlineDecision.remainingPool.size)
+
+        // B) Offline Guard #1: 20 tested, 0 alive -> refuses mass wipe!
+        val massZeroAliveDecision = DeadConfigPurgePolicy.evaluate(
+            currentPool = pool,
+            failedUris = cleanPool.take(20).toSet(),
+            testedCount = 20,
+            aliveCount = 0,
+            deviceOnline = true,
+            favoriteCleanUris = emptySet(),
+            favoriteServerIds = emptySet(),
+            vipCleanUris = emptySet(),
+        )
+        assertFalse(massZeroAliveDecision.shouldPurge)
+        assertTrue(massZeroAliveDecision.offlineGuardTriggered)
+        assertEquals(25, massZeroAliveDecision.remainingPool.size)
+
+        // C) Offline Guard #2: deviceOnline = false -> refuses deletion even for 1 failed server!
+        val deviceOfflineDecision = DeadConfigPurgePolicy.evaluate(
+            currentPool = pool,
+            failedUris = setOf(cleanPool[5]),
+            testedCount = 1,
+            aliveCount = 0,
+            deviceOnline = false,
+            favoriteCleanUris = emptySet(),
+            favoriteServerIds = emptySet(),
+            vipCleanUris = emptySet(),
+        )
+        assertFalse(deviceOfflineDecision.shouldPurge)
+        assertTrue(deviceOfflineDecision.offlineGuardTriggered)
+
+        // D) Per-Network Purged-Dead ledger cleans WIFI cache & exported files WITHOUT affecting MOBILE_DATA or top500.last_valid.json!
+        repo.writeAll(pool)
+        repo.writeBest(pool.take(10).mapIndexed { i, c -> ResultLine(c, 50L + i, 3000.0, System.currentTimeMillis()) }, 100)
+        repo.recordPurgedDeadAndCleanFiles(
+            profile = ScanNetworkProfile.WIFI,
+            purgeableCleanUris = onlineDecision.purgeableCleanUris,
+            remainingPool = onlineDecision.remainingPool,
+            bestLimit = 100,
+        )
+        val wifiPurgedIds = repo.getActivePurgedDeadServerIds(ScanNetworkProfile.WIFI)
+        val mobilePurgedIds = repo.getActivePurgedDeadServerIds(ScanNetworkProfile.MOBILE_DATA)
+        assertEquals(8, wifiPurgedIds.size)
+        assertTrue(mobilePurgedIds.isEmpty())
+
+        // Clearing WIFI ledger on fresh 3h remote sync restores clean slate
+        repo.clearPurgedDeadForProfile(ScanNetworkProfile.WIFI)
+        assertTrue(repo.getActivePurgedDeadServerIds(ScanNetworkProfile.WIFI).isEmpty())
+    }
+
+    @Test
+    fun unified45_30_25FormulaGivesZeroCreditForUnmeasuredSpeedAndHardExcludesAllowInsecure() {
+        val now = 1_793_400_000_000L
+
+        // Verify unified 45% Download / 30% Stability / 25% Latency+Jitter constants
+        assertEquals(0.45, CentralScoringWeights.W_SPEED, 0.0001)
+        assertEquals(0.30, CentralScoringWeights.W_STABILITY, 0.0001)
+        assertEquals(0.25, CentralScoringWeights.W_LATENCY_JITTER, 0.0001)
+        assertEquals(0.0, CentralScoringWeights.computeSpeedScore(0.0), 0.0001)
+
+        val defaultWeights = SmartSelectionWeights()
+        assertEquals(0.45, defaultWeights.throughput, 0.0001)
+        assertEquals(0.30, defaultWeights.reliability, 0.0001)
+        assertEquals(0.25, defaultWeights.latency, 0.0001)
+
+        // High download throughput (6500 KB/s, 95ms) MUST beat ping-only (0 KB/s, 25ms) across ServerRanker & SmartServerSelector!
+        val fastRealThroughput = RankableServer(
+            cfg = buildSampleUri(1),
+            latencyMs = 95L,
+            jitterMs = 6.0,
+            speedKbps = 6500.0,
+            stabilityRuns = 4,
+            locallyTested = true,
+            lastTestedAtMs = now - 10_000L,
+        )
+        val lowPingZeroSpeed = RankableServer(
+            cfg = buildSampleUri(2),
+            latencyMs = 25L,
+            jitterMs = 2.0,
+            speedKbps = 0.0,
+            stabilityRuns = 4,
+            locallyTested = true,
+            lastTestedAtMs = now - 10_000L,
+        )
+        val fastScore = ServerRanker.computeOverallScore(fastRealThroughput, now)
+        val zeroSpeedScore = ServerRanker.computeOverallScore(lowPingZeroSpeed, now)
+        assertTrue("Expected real throughput ($fastScore) > 0 KB/s ping-only ($zeroSpeedScore)", fastScore > zeroSpeedScore)
+        assertTrue("0 KB/s server must cap <= 55.0 under 45/30/25 weights, got $zeroSpeedScore", zeroSpeedScore <= 55.0)
+
+        // Hard Security Exclusion: allowInsecure=1 URI MUST NEVER be selected as primary or fallback!
+        val insecureCandidate = SmartServerCandidateInput(
+            cfg = "vless://11111111-1111-1111-1111-111111111111@bad.example.com:443?security=tls&allowInsecure=1&sni=bad.example.com",
+            label = "InsecureFast",
+            locallyTested = true,
+            localLatencyMs = 15L,
+            localDownloadKbps = 50_000.0,
+        )
+        val safeCandidate = SmartServerCandidateInput(
+            cfg = buildSampleUri(3),
+            label = "SafeVerified",
+            locallyTested = true,
+            localLatencyMs = 85L,
+            localDownloadKbps = 4_200.0,
+        )
+        val decision = SmartServerSelector.selectBestAndFallback(
+            candidates = listOf(insecureCandidate, safeCandidate),
+            nowMs = now,
+        )
+        assertNotNull(decision.primary)
+        assertEquals("SafeVerified", decision.primary!!.label)
+        val insecureEval = decision.allRanked.first { it.label == "InsecureFast" }
+        assertTrue(insecureEval.excludedFromPrimary)
+    }
+
+    @Test
+    fun workSchedulerConfiguresThreeHourIntervalAndPrefsHonorsOptOut() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = Prefs(ctx)
+
+        assertEquals(3L, WorkScheduler.INTERVAL_HOURS)
+        assertEquals("bahrain_vpn_quality_refresh_3h", WorkScheduler.UNIQUE_WORK_NAME)
+
+        // Default is enabled (true) and synced with autoRefresh
+        prefs.autoServerQualityTesting = true
+        assertTrue(prefs.autoServerQualityTesting)
+        assertTrue(prefs.autoRefresh)
+
+        // Disabling cancels periodic testing while preserving synced preference state
+        prefs.autoServerQualityTesting = false
+        assertFalse(prefs.autoServerQualityTesting)
+        assertFalse(prefs.autoRefresh)
+        prefs.autoServerQualityTesting = true
     }
 }

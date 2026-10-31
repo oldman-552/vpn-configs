@@ -168,13 +168,19 @@ def country_flag(country_code: str) -> str:
     return chr(0x1F1E6 + ord(cc[0]) - ord("A")) + chr(0x1F1E6 + ord(cc[1]) - ord("A"))
 
 
+CENTRAL_THROUGHPUT_WEIGHT = 0.45
+CENTRAL_STABILITY_WEIGHT = 0.30
+CENTRAL_LATENCY_JITTER_WEIGHT = 0.25
+
+
 @dataclass
 class ScoringWeights:
-    reliability: float = 0.35
-    throughput: float = 0.25
-    latency: float = 0.20
-    stability: float = 0.12
-    freshness: float = 0.08
+    # Unified 45% Throughput / 30% Stability+Reliability / 25% Ping+Jitter central contract
+    reliability: float = 0.18
+    throughput: float = 0.45
+    latency: float = 0.25
+    stability: float = 0.08
+    freshness: float = 0.04
 
     def normalized(self) -> "ScoringWeights":
         total = self.reliability + self.throughput + self.latency + self.stability + self.freshness
@@ -489,19 +495,19 @@ def compute_composite_score(
     rel_score = max(0.0, min(100.0, rel_raw * 100.0))
 
     # 2. Throughput (log-scaled: 100 kbps -> ~28, 1 Mbps -> ~60, 5 Mbps -> ~82, 20+ Mbps -> ~98)
+    # Zero free credit (0.0) when download throughput was not measured or returned 0 KB/s.
     if speed_kbps > 0:
         # log10(speed_kbps) from 1.5 (31 kbps) to 4.4 (25 Mbps)
         tp_norm = (math.log10(max(16.0, speed_kbps)) - 1.2) / 3.2
         tp_score = max(5.0, min(100.0, tp_norm * 100.0))
     else:
-        # Unmeasured throughput gets conservative 35.0 so measured fast nodes rank higher,
-        # while ultra-low-latency reliable nodes outside speed_top remain fairly represented.
-        tp_score = 35.0
+        tp_score = 0.0
 
-    # 3. Latency (<=50ms -> ~96, 150ms -> ~83, 350ms -> ~63, 800ms -> ~35, 2000ms -> ~9)
+    # 3. Latency & Jitter (<=50ms -> ~96, 150ms -> ~83, 350ms -> ~63, 800ms -> ~35, 2000ms -> ~9)
     eff_lat = max(15.0, median_latency_ms if median_latency_ms > 0 else 2500.0)
-    lat_score = 100.0 * math.exp(-(eff_lat - 15.0) / 720.0)
-    lat_score = max(0.0, min(100.0, lat_score))
+    lat_base = 100.0 * math.exp(-(eff_lat - 15.0) / 720.0)
+    jitter_drag = min(28.0, max(0.0, jitter_ms) / 9.0)
+    lat_score = max(0.0, min(100.0, lat_base - jitter_drag))
 
     # 4. Stability (penalizes high jitter and partial probe drops)
     rel_jitter = jitter_ms / max(40.0, eff_lat)
@@ -570,19 +576,61 @@ def diversify_scored_nodes(
     return out
 
 
+def has_allow_insecure_uri(uri: str) -> bool:
+    """Return True if a proxy URI explicitly disables TLS certificate verification."""
+    raw = (uri or "").strip()
+    if not raw:
+        return False
+    low = raw.split("#", 1)[0].lower()
+    for bad in (
+        "allowinsecure=1",
+        "allowinsecure=true",
+        "insecure=1",
+        "insecure=true",
+        "skip-cert-verify=1",
+        "skip-cert-verify=true",
+    ):
+        if bad in low:
+            return True
+    if low.startswith("vmess://"):
+        import base64 as _b64
+
+        b64 = raw.split("://", 1)[1].split("#", 1)[0].strip()
+        pad = "=" * ((4 - len(b64) % 4) % 4)
+        try:
+            decoded = _b64.urlsafe_b64decode(b64 + pad).decode("utf-8", "ignore")
+            obj = json.loads(decoded)
+            if isinstance(obj, dict):
+                v = str(obj.get("allowInsecure", obj.get("insecure", ""))).strip().lower()
+                if v in ("1", "true", "yes"):
+                    return True
+        except Exception:
+            pass
+    return False
+
+
 def build_specialized_lists(nodes: list[ScoredNode], *, best_n: int = 100) -> dict[str, list[ScoredNode]]:
     """
     Produce specialized ranked lists from verified alive nodes:
+    - Hard-excludes `allowInsecure=1` and `QUARANTINED` nodes before ranking.
     - best100: top N by composite score (host/subnet diversified)
     - reliable: top N prioritized by reliability + longitudinal streak + low jitter
     - low_latency: top N prioritized by median RTT + stability
-    - high_throughput: top N with verified download speed prioritized by throughput + score
+    - high_throughput: top N with verified download speed prioritized by throughput -> stability -> ping -> jitter
     """
-    by_score = sorted(nodes, key=lambda n: (-n.score, n.median_latency_ms))
+    safe_nodes = [
+        n
+        for n in nodes
+        if str(getattr(n, "risk_level", "")).upper() != "QUARANTINED"
+        and str(getattr(n, "security_assessment", "")).upper() != "QUARANTINED"
+        and not has_allow_insecure_uri(n.uri)
+    ]
+
+    by_score = sorted(safe_nodes, key=lambda n: (-n.score, -n.speed_kbps, n.median_latency_ms, n.jitter_ms))
     best100 = diversify_scored_nodes(by_score, max_per_host=3, max_per_subnet=6, limit=best_n)
 
     by_reliable = sorted(
-        nodes,
+        safe_nodes,
         key=lambda n: (
             -n.consecutive_alive,
             -n.probe_pass_rate,
@@ -594,14 +642,14 @@ def build_specialized_lists(nodes: list[ScoredNode], *, best_n: int = 100) -> di
     reliable = diversify_scored_nodes(by_reliable, max_per_host=3, max_per_subnet=6, limit=best_n)
 
     by_lat = sorted(
-        [n for n in nodes if n.median_latency_ms > 0],
+        [n for n in safe_nodes if n.median_latency_ms > 0],
         key=lambda n: (n.median_latency_ms + 0.5 * n.jitter_ms, -n.score),
     )
     low_latency = diversify_scored_nodes(by_lat, max_per_host=3, max_per_subnet=6, limit=best_n)
 
     by_tp = sorted(
-        [n for n in nodes if n.speed_kbps > 0],
-        key=lambda n: (-n.speed_kbps, -n.score, n.median_latency_ms),
+        [n for n in safe_nodes if n.speed_kbps > 0],
+        key=lambda n: (-n.speed_kbps, -n.ema_reliability, n.median_latency_ms, n.jitter_ms),
     )
     high_throughput = diversify_scored_nodes(by_tp, max_per_host=3, max_per_subnet=6, limit=best_n)
 

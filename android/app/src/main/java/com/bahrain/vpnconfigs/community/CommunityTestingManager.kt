@@ -645,6 +645,92 @@ object CommunityTestingManager {
     }
 
     /**
+     * يزامن تقارير المجتمع مختزلة الخصوصية (Zero-PII) مباشرةً من نتائج الفحص الدوري الموحّد كل 3 ساعات
+     * دون إعادة تشغيل فحص مزدوج في الخلفية، مع احترام الموافقة الصريحة وحدود الحصة وعدم وجود تداخل VPN.
+     */
+    suspend fun syncFromUnifiedQualityScanIfOptedIn(
+        ctx: Context,
+        aliveResults: List<TestResult>,
+        originDetector: OriginCountryDetector = defaultOriginDetector,
+    ): Int = runMutex.withLock {
+        val prefs = Prefs(ctx)
+        if (!prefs.communityTestingEnabled || prefs.communityConsentAtMs <= 0L) return 0
+        if (!prefs.communityBackgroundScheduleEnabled) return 0
+        if (VpnStateManager.status.value.isActive || VpnHotspotManager.state.value.isSharingActive) return 0
+        if (!isBatterySafeForTesting(ctx)) return 0
+
+        val db = ClientDatabase.getInstance(ctx)
+        val nowMs = System.currentTimeMillis()
+        val testedLast24h = db.countCommunityReportsSince(nowMs - 86_400_000L)
+        val remainingToday = (prefs.communityDailyLimit - testedLast24h).coerceAtLeast(0)
+        if (remainingToday <= 0) return 0
+
+        val origin = withContext(Dispatchers.IO) { originDetector.verifyOrigin(ctx) }
+        if (origin.vpnInterference || (prefs.communityWifiOnly && origin.transport != "WIFI")) return 0
+        if (origin.verifiedCountry.isNotBlank()) {
+            prefs.lastVerifiedOriginCountry = origin.verifiedCountry
+        }
+
+        val prioritized = aliveResults
+            .filter { it.ok && it.latencyMs > 0L }
+            .sortedWith(
+                compareByDescending<TestResult> { it.speedKbps > 0.0 }
+                    .thenByDescending { it.speedKbps }
+                    .thenBy { it.latencyMs }
+            )
+            .distinctBy { Converters.stableServerId(Converters.cleanUri(it.cfg)) }
+            .take(minOf(prefs.communityMaxConfigsPerRun, remainingToday))
+
+        if (prioritized.isEmpty()) return 0
+
+        var inserted = 0
+        for (res in prioritized) {
+            val cleanCfg = Converters.cleanUri(res.cfg)
+            val proto = Converters.schemeOf(cleanCfg).let {
+                when (it) {
+                    "hy2" -> "hysteria2"
+                    "socks5" -> "socks"
+                    "https" -> "http"
+                    else -> it
+                }
+            }
+            val sid = Converters.stableServerId(cleanCfg)
+            val fp = Converters.configFingerprint(cleanCfg)
+            if (sid.isBlank() || fp.isBlank()) continue
+            val isUdpNative = proto in setOf("hysteria2", "tuic")
+            val rec = CommunityTestReportRecord(
+                reportId = UUID.randomUUID().toString().replace("-", ""),
+                serverId = sid,
+                configFingerprint = fp,
+                protocol = proto,
+                testedAtMs = res.testedAtMs.takeIf { it > 0L } ?: nowMs,
+                success = true,
+                handshakeMs = res.establishMs.coerceAtLeast(res.latencyMs),
+                latencyMs = res.latencyMs,
+                downloadKbps = res.speedKbps.coerceAtLeast(0.0),
+                stabilityScore = res.stabilityScore.coerceIn(0.0, 100.0),
+                dnsOk = true,
+                tcpOk = !isUdpNative,
+                udpOk = isUdpNative,
+                failureReason = "",
+                verifiedCountry = origin.verifiedCountry,
+                countryConfidence = origin.confidence,
+                vpnInterference = false,
+                networkTransport = origin.transport,
+                submitted = false,
+            )
+            db.insertCommunityReport(rec)
+            inserted++
+        }
+        if (inserted > 0) {
+            prefs.lastCommunityRunAtMs = nowMs
+            runCatching { submitPendingReports(ctx) }
+            refreshSnapshot(ctx)
+        }
+        return inserted
+    }
+
+    /**
      * يبني حزمة التقرير المختزلة الخالية تمامًا من الأسرار أو الروابط الخام أو البيانات الشخصية،
      * ويرسلها عبر HTTPS (أو طابور الاختبار المحلي) مع احترام حدود المعدّل.
      */

@@ -63,7 +63,7 @@ PREV_DIR = Path(os.environ["PREV_DIST"]) if os.environ.get("PREV_DIST") else Non
 LOG = logging.getLogger("build_data")
 
 TEST_TOP = int(os.environ.get("TEST_TOP", "1200"))
-SPEED_TOP = int(os.environ.get("SPEED_TOP", "150"))
+SPEED_TOP = int(os.environ.get("SPEED_TOP", "300"))
 CONCURRENCY = int(os.environ.get("CONCURRENCY", "40"))
 TEST_TIMEOUT = float(os.environ.get("TEST_TIMEOUT", "5"))
 BEST_N = int(os.environ.get("BEST_N", "100"))

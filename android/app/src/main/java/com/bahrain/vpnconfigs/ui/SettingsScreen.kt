@@ -140,7 +140,7 @@ fun SettingsAndExportScreen(
     var conc by remember { mutableStateOf(p.concurrency.toString()) }
     var timeout by remember { mutableStateOf(p.timeoutSec.toString()) }
     var defaultSort by remember(state.sortMode) { mutableStateOf(ServerSortMode.fromKey(state.sortMode).key) }
-    var autoRef by remember { mutableStateOf(p.autoRefresh) }
+    var autoRef by remember(state.autoServerQualityTesting) { mutableStateOf(state.autoServerQualityTesting) }
     var showLicensesDialog by remember { mutableStateOf(false) }
 
     if (showLicensesDialog) {
@@ -416,15 +416,33 @@ fun SettingsAndExportScreen(
             }
         }
 
-        // ── إعدادات الفحص والترتيب والتحديث التلقائي ──
+        // ── إعدادات الفحص التلقائي كل 3 ساعات ومعاملات الترتيب ──
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(tr("معاملات الفحص والترتيب والتحديث", "Scan, Ranking & Sync Parameters"), style = MaterialTheme.typography.titleMedium)
+                Text(tr("معاملات الفحص والترتيب والتحديث (كل 3 ساعات)", "Scan, Ranking & 3-Hour Sync Parameters"), style = MaterialTheme.typography.titleMedium)
+
+                SettingToggleRow(
+                    title = tr(
+                        "الفحص التلقائي لجودة السيرفرات (كل 3 ساعات)",
+                        "Automatic Server Quality Testing (Every 3h)",
+                    ),
+                    subtitle = tr(
+                        "يجلب أحدث حزمة كل 3 ساعات ويقيس الاستجابة والسرعة الفعلية (تقدير البيانات: ~9–18 MB لكل دورة عند خمول VPN والبطارية كافية). عند الإيقاف يتوقف فحص الخلفية مع الاحتفاظ بقائمة أفضل 100 المحفوظة.",
+                        "Refreshes the pool every 3 hours and measures latency & download speed (~9–18 MB per idle cycle when VPN/Hotspot are inactive and battery is sufficient). Turning off cancels background work while keeping saved Top 100.",
+                    ),
+                    checked = autoRef,
+                    onCheckedChange = {
+                        autoRef = it
+                        vm.setAutoServerQualityTesting(it)
+                    },
+                )
+                HorizontalDivider()
+
                 NumField(testTop, { testTop = it }, tr("عدد السيرفرات المفحوصة في الفحص الشامل", "Max servers tested in Full Scan"))
-                NumField(speedTop, { speedTop = it }, tr("عدد السيرفرات المقاسة سرعة تنزيلها عبر النفق", "Max servers speed-tested through tunnel"))
-                NumField(conc, { conc = it }, tr("التوازي أثناء الفحص (1–12)", "Pre-filter concurrency (1–12)"))
+                NumField(speedTop, { speedTop = it }, tr("عدد السيرفرات المقاسة سرعة تنزيلها (600 KB)", "Max servers speed-tested (600 KB)"))
+                NumField(conc, { conc = it }, tr("التوازي أثناء الفحص (1–32)", "Batch probe concurrency (1–32)"))
                 NumField(timeout, { timeout = it }, tr("مهلة اختبار كل سيرفر بالثواني", "Per-server probe timeout (seconds)"))
-                NumField(bestN, { bestN = it }, tr("عدد أفضل السيرفرات المحفوظة للتصدير", "Top verified servers saved for export"))
+                NumField(bestN, { bestN = it }, tr("عدد أفضل السيرفرات المحفوظة للتصدير (أفضل 100)", "Top verified servers saved for export (Top 100)"))
 
                 Text(tr("معيار الترتيب الافتراضي للقائمة", "Default Server List Sort Mode"), style = MaterialTheme.typography.labelSmall)
                 Row(
@@ -441,16 +459,6 @@ fun SettingsAndExportScreen(
                         )
                     }
                 }
-
-                SettingToggleRow(
-                    title = tr("تحديث قائمة السيرفرات تلقائيًا في الخلفية", "Background Server Pool Auto-Sync"),
-                    subtitle = tr(
-                        "يجلب أحدث سيرفرات bahrain-vpn دوريًا دون استهلاك بطارية",
-                        "Fetches updated bahrain-vpn candidate lists periodically with minimal battery impact",
-                    ),
-                    checked = autoRef,
-                    onCheckedChange = { autoRef = it },
-                )
 
                 HorizontalDivider()
                 Text(tr("نمط التغذية المفضّل", "Preferred Candidate Feed Profile"), style = MaterialTheme.typography.labelSmall)
@@ -486,11 +494,11 @@ fun SettingsAndExportScreen(
                     enableIpv6 = enableIpv6,
                     udpInTcp = udpInTcp,
                     autoFailover = autoFailover,
-                    testTop = testTop.toIntOrNull() ?: 400,
-                    speedTop = speedTop.toIntOrNull() ?: 80,
+                    testTop = testTop.toIntOrNull() ?: 500,
+                    speedTop = speedTop.toIntOrNull() ?: 30,
                     bestN = bestN.toIntOrNull() ?: 100,
-                    concurrency = conc.toIntOrNull() ?: 8,
-                    timeoutSec = timeout.toIntOrNull() ?: 5,
+                    concurrency = conc.toIntOrNull() ?: 24,
+                    timeoutSec = timeout.toIntOrNull() ?: 4,
                     defaultSortMode = defaultSort,
                     autoRefresh = autoRef,
                     killSwitch = killSwitch,

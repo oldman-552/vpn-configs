@@ -73,13 +73,34 @@ data class RankableServer(
 
 object ServerRanker {
 
-    const val WEIGHT_DOWNLOAD_SPEED = 0.50
-    const val WEIGHT_LATENCY = 0.20
-    const val WEIGHT_STABILITY = 0.20
+    const val WEIGHT_DOWNLOAD_SPEED = CentralScoringWeights.THROUGHPUT_WEIGHT // 45%
+    const val WEIGHT_LATENCY = CentralScoringWeights.PING_JITTER_WEIGHT        // 25%
+    const val WEIGHT_STABILITY = 0.20                                          // 20% + 10% = 30% Stability
     const val WEIGHT_CONNECTION_SUCCESS = 0.10
 
+    private const val STALE_3H_MS = CentralScoringWeights.FRESHNESS_TTL_MS
     private const val STALE_12H_MS = 12L * 3600L * 1000L
     private const val STALE_48H_MS = 48L * 3600L * 1000L
+
+    fun isHardSecurityExcluded(item: RankableServer): Boolean {
+        val riskUp = item.riskLevel.trim().uppercase()
+        val secUp = item.securityAssessment.trim().uppercase()
+        if (riskUp in setOf("CRITICAL", "QUARANTINED") || secUp == "QUARANTINED") return true
+        val low = item.cfg.substringBefore('#').lowercase()
+        return low.contains("allowinsecure=1") ||
+            low.contains("allowinsecure=true") ||
+            low.contains("insecure=1") ||
+            low.contains("insecure=true") ||
+            low.contains("skip-cert-verify=true")
+    }
+
+    fun filterAndRank(
+        items: List<RankableServer>,
+        mode: ServerSortMode = ServerSortMode.DEFAULT,
+        nowMs: Long = System.currentTimeMillis(),
+    ): List<RankableServer> =
+        items.filterNot { isHardSecurityExcluded(it) }
+            .sortedWith(comparatorFor(mode, nowMs))
 
     /**
      * يحوّل سرعة التنزيل الفعلية المقاسة عبر النفق (KB/s) إلى درجة [0..100].
@@ -148,24 +169,25 @@ object ServerRanker {
         return null
     }
 
-    /** معامل حداثة القياس للتعامل الشفاف مع القياسات القديمة دون حذفها أو تضخيمها. */
+    /** معامل حداثة القياس للتعامل الشفاف مع القياسات القديمة وفق دورة الـ 3 ساعات دون تضخيمها. */
     fun computeFreshnessFactor(lastTestedAtMs: Long, nowMs: Long): Double {
         if (lastTestedAtMs <= 0L || nowMs <= lastTestedAtMs) return 1.0
         val ageMs = nowMs - lastTestedAtMs
         return when {
             ageMs > STALE_48H_MS -> 0.70
             ageMs > STALE_12H_MS -> 0.85
+            ageMs > STALE_3H_MS -> 0.92
             else -> 1.0
         }
     }
 
     /**
-     * يحسب التقييم الإجمالي الموزون [0..100] بالأوزان المعتمدة:
-     *   50% سرعة التنزيل + 20% التأخير + 20% الاستقرار + 10% نجاح الاتصال.
-     * أي مكوّن غير مقاس يساهم بـ 0.0 (لا يتم اختلاق درجات).
+     * يحسب التقييم الإجمالي الموزون [0..100] بالأوزان الموحّدة المعتمدة:
+     *   45% سرعة التنزيل الفعلية + 30% ثبات ونجاح الاتصال + 25% البنق والتذبذب.
+     * أي مكوّن غير مقاس يساهم بـ 0.0 (لا يتم اختلاق درجات)، ويُستبعد allowInsecure=1 بـ 0.0.
      */
     fun computeOverallScore(item: RankableServer, nowMs: Long = System.currentTimeMillis()): Double {
-        if (item.localFailed) return 0.0
+        if (item.localFailed || isHardSecurityExcluded(item)) return 0.0
 
         val speedScore = computeSpeedComponent(item.speedKbps)
         val latencyScore = computeLatencyComponent(item.latencyMs, item.localFailed)
@@ -211,7 +233,7 @@ object ServerRanker {
         profileKey: String,
         nowMs: Long = System.currentTimeMillis(),
     ): Double {
-        if (item.localFailed) return 0.0
+        if (item.localFailed || isHardSecurityExcluded(item)) return 0.0
         val mode = ServerSortMode.fromKey(profileKey)
         val dl = computeSpeedComponent(item.speedKbps) ?: 0.0
         val ul = computeSpeedComponent(item.uploadKbps) ?: 0.0
@@ -270,9 +292,10 @@ object ServerRanker {
         return (raw * freshness).coerceIn(0.0, 100.0)
     }
 
-    /** مقارن معتمد لجميع أوضاع الترتيب الستة. */
+    /** مقارن معتمد لجميع أوضاع الترتيب الستة مع استبعاد أمني وترتيب حاسم لـ FASTEST_DOWNLOAD. */
     fun comparatorFor(mode: ServerSortMode, nowMs: Long = System.currentTimeMillis()): Comparator<RankableServer> {
         fun delayRank(ms: Long): Long = if (ms > 0L) ms else Long.MAX_VALUE
+        fun jitterRank(j: Double): Double = if (j > 0.0 && !j.isNaN()) j else 9999.0
         fun stabilityValue(s: RankableServer): Double =
             computeStabilityComponent(s.stabilityRuns, s.jitterMs, s.locallyTested, s.latencyMs, s.localFailed) ?: -1.0
 
@@ -280,14 +303,16 @@ object ServerRanker {
             ServerSortMode.FASTEST_DOWNLOAD ->
                 compareByDescending<RankableServer> { it.speedKbps > 0.0 }
                     .thenByDescending { it.speedKbps }
-                    .thenByDescending { it.locallyTested }
+                    .thenByDescending { stabilityValue(it) }
                     .thenBy { delayRank(it.latencyMs) }
-                    .thenByDescending { computeOverallScore(it, nowMs) }
+                    .thenBy { jitterRank(it.jitterMs) }
+                    .thenByDescending { it.locallyTested }
 
             ServerSortMode.LOWEST_LATENCY ->
                 compareByDescending<RankableServer> { it.latencyMs > 0L }
                     .thenByDescending { it.locallyTested }
                     .thenBy { delayRank(it.latencyMs) }
+                    .thenBy { jitterRank(it.jitterMs) }
                     .thenByDescending { it.speedKbps }
 
             ServerSortMode.MOST_STABLE ->
@@ -300,6 +325,7 @@ object ServerRanker {
             ServerSortMode.BEST_OVERALL ->
                 compareByDescending<RankableServer> { computeOverallScore(it, nowMs) }
                     .thenByDescending { it.speedKbps }
+                    .thenByDescending { stabilityValue(it) }
                     .thenBy { delayRank(it.latencyMs) }
 
             ServerSortMode.PRIVACY_AWARE ->
@@ -314,7 +340,8 @@ object ServerRanker {
                     .thenByDescending { computeOverallScore(it, nowMs) }
         }
 
-        return compareByDescending<RankableServer> { it.isFavorite }
+        return compareBy<RankableServer> { isHardSecurityExcluded(it) }
+            .thenByDescending { it.isFavorite }
             .thenBy { it.localFailed }
             .then(modeComp)
     }

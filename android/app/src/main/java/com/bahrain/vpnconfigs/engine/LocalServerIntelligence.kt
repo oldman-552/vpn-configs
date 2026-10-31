@@ -1,15 +1,13 @@
 // =====================================================================
-// LocalServerIntelligence.kt — محرك الذكاء المحلي المخصّص على أندرويد (v2):
-//   • السلطة الوحيدة والحصرية لاختيار أفضل 50 سيرفرًا مخصّصًا (Personalized Top 50)
+// LocalServerIntelligence.kt — محرك الذكاء المحلي المخصّص فائق السرعة على أندرويد (v2):
+//   • السلطة الوحيدة والحصرية لاختيار أفضل 100 سيرفر مخصّص (Personalized Top 100)
 //     ومجمّع الاحتياطي المؤهّل (Backup Pool) بناءً على الفحص الفعلي على شبكة المستخدم.
-//   • فصل صارم ومستقل تمامًا بين ترتيب وسجل شبكة Wi-Fi وبين بيانات الجوال (Mobile Data).
-//   • فحص أنفاق VPN الحقيقية بالتسلسل الصارم (واحد تلو الآخر — Mutex تسلسلي) احترامًا
-//     لقيود Android VpnService ومنعًا لفتح مئات الأنفاق المتزامنة.
-//   • وضعان ذكيان للفحص:
-//       1) Quick Scan: يختبر الناجحة مؤخرًا + الـ Top 50 الحالية + الاحتياطي عند الحاجة
-//          ويتوقف مبكرًا فور توفر عدد كافٍ من السيرفرات المؤهّلة توفيرًا للبطارية والبيانات.
-//       2) Full Scan : يقيّم كامل حزمة الـ Top 500 بالتسلسل لاكتشاف سيرفرات تتفوّق على
-//          الـ Top 50 الحالية وإعادة فحص القراءات المتقادمة وتحديث مجمّع الاحتياطي.
+//   • فصل صارم ومستقل تمامًا بين ترتيب وسجل شبكة Wi-Fi وبين بيانات الجوال (Mobile Data)
+//     مع صلاحية قياس (TTL) متوافقة مع دورة الـ 3 ساعات (3 HOURS).
+//   • المعادلة المركزية الموحّدة (45% سرعة تنزيل فعلية / 30% ثبات واستقرار / 25% بنق وتذبذب)
+//     مع صفر نقاط مجانية لغير المقاس واستبعاد أمني مسبق صارم لـ allowInsecure=1.
+//   • محرّك الفحص الدفعي المتوازي (Batch Multi-Port SingBox) على الجهاز الحقيقي:
+//     يختبر كامل حزمة الـ 500 كونفيق خلال ثوانٍ معدودة مع حارس ذكي ضد انقطاع إنترنت الهاتف.
 // =====================================================================
 package com.bahrain.vpnconfigs.engine
 
@@ -21,20 +19,26 @@ import com.bahrain.vpnconfigs.data.PersonalizedRankEntry
 import com.bahrain.vpnconfigs.data.ScanNetworkProfile
 import com.bahrain.vpnconfigs.util.tr
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.net.ServerSocket
 import kotlin.coroutines.coroutineContext
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 
 enum class LocalScanMode(val code: String, val labelAr: String, val labelEn: String) {
-    QUICK_SCAN("QUICK_SCAN", "فحص سريع (Top 50)", "Quick Scan (Top 50)"),
-    FULL_SCAN("FULL_SCAN", "فحص شامل (500)", "Full Scan (500)");
+    QUICK_SCAN("QUICK_SCAN", "فحص سريع (أفضل 100)", "Quick Scan (Top 100)"),
+    FULL_SCAN("FULL_SCAN", "فحص شامل سريع (500 → أفضل 100)", "Fast Scan (500 → Top 100)");
 
     val displayLabel: String
         get() = tr(labelAr, labelEn)
@@ -63,6 +67,10 @@ data class PersonalizedRankingBundle(
     val backupPool: List<PersonalizedRankEntry>,
     val entriesById: Map<String, PersonalizedRankEntry>,
 ) {
+    /** أفضل 100 سيرفر مخصّص للشبكة الحالية (مع الإبقاء على اسم الحقل top50 للتوافق الداخلي). */
+    val top100: List<PersonalizedRankEntry>
+        get() = top50
+
     val allQualifiedEntries: List<PersonalizedRankEntry>
         get() = top50 + backupPool
 }
@@ -77,13 +85,17 @@ data class ScanExecutionSummary(
     val rankingBundle: PersonalizedRankingBundle,
     val results: List<TestResult>,
     val failedCleanUris: Set<String>,
+    val offlineGuardTriggered: Boolean = false,
 )
 
+typealias PersonalizedTop100Ranker = PersonalizedTop50Ranker
+
 object PersonalizedTop50Ranker {
-    const val PERSONALIZED_TOP_LIMIT = 50
-    const val QUALIFIED_BACKUP_LIMIT = 30
-    const val STALE_WIFI_MS = 6L * 3_600_000L
-    const val STALE_MOBILE_MS = 3L * 3_600_000L
+    const val PERSONALIZED_TOP_LIMIT = 100
+    const val QUALIFIED_BACKUP_LIMIT = 100
+    const val STALE_WIFI_MS = CentralScoringWeights.FRESHNESS_TTL_MS   // 3 hours
+    const val STALE_MOBILE_MS = CentralScoringWeights.FRESHNESS_TTL_MS // 3 hours
+    const val OFFLINE_GUARD_MIN_TESTED = 15
 
     fun staleThresholdMs(profile: ScanNetworkProfile): Long =
         if (profile == ScanNetworkProfile.MOBILE_DATA) STALE_MOBILE_MS else STALE_WIFI_MS
@@ -104,8 +116,11 @@ object PersonalizedTop50Ranker {
     }
 
     /**
-     * يحسب الدرجة المخصّصة (0..100) حصريًا من القياسات الحقيقية على شبكة المستخدم (WIFI أو MOBILE_DATA).
-     * لا يستخدم ترتيب GitHub المركزي كبديل أبدًا، ولا يساوي السرعة العالية بالأمان أو الخصوصية.
+     * يحسب الدرجة المخصّصة (0..100) حصريًا من القياسات الحقيقية على شبكة المستخدم (WIFI أو MOBILE_DATA)
+     * وفق المعادلة الموحّدة الصارمة:
+     *   • سرعة التنزيل الفعلية (45%) — 0.0 إذا لم تُقس السرعة (صفر نقاط مجانية!).
+     *   • ثبات واستقرار الاتصال (30%) — الاستقرار وانعدام فقدان الحزم.
+     *   • البنق والتذبذب وزمن التأسيس (25%).
      */
     fun calculatePersonalizedScore(
         stats: NetworkServerProfileStats,
@@ -114,6 +129,26 @@ object PersonalizedTop50Ranker {
     ): Double {
         if (!stats.isQualifiedLocally) return 0.0
 
+        // 1) Real Download Throughput [0..100] -> 45% weight (strictly 0.0 when unmeasured!)
+        val effTpKbps = if (stats.latestThroughputKbps > 0.0) {
+            0.75 * stats.latestThroughputKbps + 0.25 * max(stats.bestThroughputKbps, stats.latestThroughputKbps)
+        } else if (stats.bestThroughputKbps > 0.0) {
+            stats.bestThroughputKbps * 0.70
+        } else {
+            0.0
+        }
+        val throughputNorm = if (effTpKbps <= 0.0) {
+            0.0
+        } else {
+            ((ln(1.0 + effTpKbps / 128.0) / ln(1.0 + 10_240.0 / 128.0)) * 100.0).coerceIn(5.0, 100.0)
+        }
+
+        // 2) Connection Stability [0..100] -> 30% weight
+        val stabilityNorm = stats.stabilityScore.coerceIn(0.0, 100.0)
+        val packetLossNorm = (100.0 - stats.ewmaPacketLossPct * 2.0).coerceIn(0.0, 100.0)
+        val stabilityComposite = (0.65 * stabilityNorm + 0.35 * packetLossNorm).coerceIn(0.0, 100.0)
+
+        // 3) Ping & Jitter [0..100] -> 25% weight
         val blendedLat = if (stats.ewmaLatencyMs > 0.0) {
             0.65 * stats.latestLatencyMs.toDouble() + 0.35 * stats.ewmaLatencyMs
         } else {
@@ -124,21 +159,6 @@ object PersonalizedTop50Ranker {
             blendedLat >= 1800.0 -> 0.0
             else -> ((1800.0 - blendedLat) / (1800.0 - 45.0)) * 100.0
         }
-
-        val effTpKbps = if (stats.latestThroughputKbps > 0.0) {
-            0.70 * stats.latestThroughputKbps + 0.30 * max(stats.bestThroughputKbps, stats.latestThroughputKbps)
-        } else {
-            stats.bestThroughputKbps * 0.65
-        }
-        // Conservative neutral credit when throughput was skipped to save mobile data — never 100!
-        val throughputNorm = when {
-            effTpKbps <= 0.0 -> 35.0
-            effTpKbps >= 8_000.0 -> 100.0
-            else -> (20.0 + (effTpKbps / 8_000.0) * 80.0).coerceIn(0.0, 100.0)
-        }
-
-        val stabilityNorm = stats.stabilityScore.coerceIn(0.0, 100.0)
-        val packetLossNorm = (100.0 - stats.ewmaPacketLossPct * 2.0).coerceIn(0.0, 100.0)
         val jitterNorm = when {
             stats.ewmaJitterMs <= 8.0 -> 100.0
             stats.ewmaJitterMs >= 250.0 -> 0.0
@@ -150,21 +170,19 @@ object PersonalizedTop50Ranker {
             stats.latestEstablishMs >= 4500L -> 0.0
             else -> ((4500.0 - stats.latestEstablishMs.toDouble()) / (4500.0 - 350.0)) * 100.0
         }
+        val pingJitterComposite = (0.65 * latencyNorm + 0.25 * jitterNorm + 0.10 * establishNorm).coerceIn(0.0, 100.0)
 
         var rawScore =
-            latencyNorm * 0.25 +
-                throughputNorm * 0.22 +
-                stabilityNorm * 0.20 +
-                packetLossNorm * 0.13 +
-                jitterNorm * 0.10 +
-                establishNorm * 0.10
+            CentralScoringWeights.THROUGHPUT_WEIGHT * throughputNorm +
+                CentralScoringWeights.STABILITY_WEIGHT * stabilityComposite +
+                CentralScoringWeights.PING_JITTER_WEIGHT * pingJitterComposite
 
-        // Gentle freshness decay if measurement is stale or fingerprint shifted
+        // 3-hour TTL freshness decay
         val ageMs = (nowMs - stats.lastScanAtMs).coerceAtLeast(0L)
         val staleWindow = staleThresholdMs(stats.networkProfile)
         if (ageMs > staleWindow) {
             val extraHours = ((ageMs - staleWindow) / 3_600_000.0).coerceAtMost(24.0)
-            rawScore *= (1.0 - (extraHours / 24.0) * 0.12)
+            rawScore *= (1.0 - (extraHours / 24.0) * 0.18)
         }
         if (currentFingerprint.isNotBlank() && stats.configFingerprint.isNotBlank() &&
             stats.configFingerprint != currentFingerprint
@@ -172,15 +190,15 @@ object PersonalizedTop50Ranker {
             rawScore *= 0.85
         }
         if (stats.consecutiveFailures > 0) {
-            rawScore -= stats.consecutiveFailures * 12.0
+            rawScore -= stats.consecutiveFailures * 14.0
         }
 
         return (kotlin.math.round(rawScore.coerceIn(0.0, 100.0) * 100.0) / 100.0)
     }
 
     /**
-     * يبني قائمة الـ Top 50 المخصّصة + مجمّع الاحتياطي المؤهّل لشبكة محددة (WIFI أو MOBILE_DATA).
-     * لا يدخل أي سيرفر لم ينجح فعليًا في الفحص المحلي على نفس نوع الشبكة.
+     * يبني قائمة أفضل 100 سيرفر مخصّصة + مجمّع الاحتياطي المؤهّل لشبكة محددة (WIFI أو MOBILE_DATA)
+     * مع استبعاد أمني صارم لـ allowInsecure=1 والعقد المحجورة قبل الترتيب.
      */
     fun computeRankings(
         candidateConfigs: List<String>,
@@ -193,8 +211,10 @@ object PersonalizedTop50Ranker {
             val serverId: String,
             val fingerprint: String,
             val score: Double,
+            val throughputKbps: Double,
             val stability: Double,
             val latencyMs: Long,
+            val jitterMs: Double,
         )
 
         val seen = HashSet<String>()
@@ -203,6 +223,8 @@ object PersonalizedTop50Ranker {
         for (rawCfg in candidateConfigs) {
             val clean = Converters.cleanUri(rawCfg)
             if (!clean.contains("://") || !Converters.isSupported(clean)) continue
+            // Hard Security Pre-Filter before Personalized Top 100 ranking
+            if (!Tester.passesHardSecurityPreFilter(clean)) continue
             val sid = Converters.stableServerId(clean)
             if (sid.isBlank() || !seen.add(sid)) continue
             val st = statsById[sid] ?: continue
@@ -210,25 +232,30 @@ object PersonalizedTop50Ranker {
             val fp = fingerprintsById[sid] ?: Converters.configFingerprint(clean)
             val pScore = calculatePersonalizedScore(st, fp, nowMs)
             if (pScore <= 0.0) continue
+            val effTp = if (st.latestThroughputKbps > 0.0) st.latestThroughputKbps else st.bestThroughputKbps
             qualified.add(
                 ScoredCandidate(
                     serverId = sid,
                     fingerprint = fp,
                     score = pScore,
+                    throughputKbps = effTp,
                     stability = st.stabilityScore,
                     latencyMs = st.latestLatencyMs,
+                    jitterMs = st.ewmaJitterMs,
                 )
             )
         }
 
         qualified.sortWith(
             compareByDescending<ScoredCandidate> { it.score }
+                .thenByDescending { it.throughputKbps }
                 .thenByDescending { it.stability }
                 .thenBy { if (it.latencyMs > 0L) it.latencyMs else Long.MAX_VALUE }
+                .thenBy { it.jitterMs }
                 .thenBy { it.serverId }
         )
 
-        val top50 = ArrayList<PersonalizedRankEntry>(min(PERSONALIZED_TOP_LIMIT, qualified.size))
+        val top100 = ArrayList<PersonalizedRankEntry>(min(PERSONALIZED_TOP_LIMIT, qualified.size))
         val backup = ArrayList<PersonalizedRankEntry>(QUALIFIED_BACKUP_LIMIT)
         val byId = LinkedHashMap<String, PersonalizedRankEntry>()
 
@@ -245,13 +272,13 @@ object PersonalizedTop50Ranker {
                 stabilityScore = item.stability,
                 updatedAtMs = nowMs,
             )
-            if (tier == LocalPoolTier.TOP_50) top50.add(entry) else backup.add(entry)
+            if (tier == LocalPoolTier.TOP_50) top100.add(entry) else backup.add(entry)
             byId[item.serverId] = entry
         }
 
         return PersonalizedRankingBundle(
             networkProfile = profile,
-            top50 = top50,
+            top50 = top100,
             backupPool = backup,
             entriesById = byId,
         )
@@ -259,26 +286,19 @@ object PersonalizedTop50Ranker {
 }
 
 object QuickScanPlanner {
-    /**
-     * يبني خطة الفحص السريع الذكي (القسم 3):
-     *   1) السيرفرات الناجحة مؤخرًا وذات القياسات الموثوقة الحديثة على نفس الشبكة.
-     *   2) أعضاء الـ Top 50 المحلية الحالية لهذه الشبكة.
-     *   3) سيرفرات الاحتياطي المؤهّل (Backup Pool) عند وجود نقص أو فشل في الـ Top 50.
-     *   4) شريحة تأسيسية محدودة من حزمة الـ 500 فقط عندما تكون الـ Top 50 المحلية غير مكتملة،
-     *      مع عدم فحص كامل الـ 500 بدون داعٍ أبدًا!
-     */
     fun buildOrderedPlan(
         allCandidateConfigs: List<String>,
         currentRankings: List<PersonalizedRankEntry>,
         statsById: Map<String, NetworkServerProfileStats>,
         profile: ScanNetworkProfile,
         isMetered: Boolean,
-        maxQuickCandidates: Int = if (profile == ScanNetworkProfile.MOBILE_DATA || isMetered) 40 else 65,
+        maxQuickCandidates: Int = if (profile == ScanNetworkProfile.MOBILE_DATA || isMetered) 65 else 115,
     ): List<String> {
         val cfgById = LinkedHashMap<String, String>()
         for (raw in allCandidateConfigs) {
             val clean = Converters.cleanUri(raw)
             if (!clean.contains("://") || !Converters.isSupported(clean)) continue
+            if (!Tester.passesHardSecurityPreFilter(clean)) continue
             val sid = Converters.stableServerId(clean)
             if (sid.isNotBlank() && !cfgById.containsKey(sid)) {
                 cfgById[sid] = clean
@@ -286,10 +306,9 @@ object QuickScanPlanner {
         }
         if (cfgById.isEmpty()) return emptyList()
 
-        val cap = min(maxQuickCandidates.coerceAtLeast(10), cfgById.size)
+        val cap = min(maxQuickCandidates.coerceAtLeast(15), cfgById.size)
         val orderedIds = LinkedHashSet<String>()
 
-        // 1. Current local Top 50 that recently succeeded reliably on this network (#1, #2, #3...)
         currentRankings
             .filter { r ->
                 val st = statsById[r.serverId]
@@ -305,7 +324,6 @@ object QuickScanPlanner {
                 if (orderedIds.size < cap) orderedIds.add(r.serverId)
             }
 
-        // 2. Other recently successful reliable servers on this network profile
         if (orderedIds.size < cap) {
             val recentSuccess = statsById.values
                 .filter {
@@ -324,7 +342,6 @@ object QuickScanPlanner {
             }
         }
 
-        // 3. Remaining current local Top 50 for this network profile
         if (orderedIds.size < cap) {
             currentRankings
                 .filter { it.poolTier == LocalPoolTier.TOP_50 && cfgById.containsKey(it.serverId) }
@@ -334,13 +351,12 @@ object QuickScanPlanner {
                 }
         }
 
-        // 3. Qualified Backup Pool when Top 50 needs reinforcement or replacement
-        val healthyTop50Count = currentRankings.count {
+        val healthyTopCount = currentRankings.count {
             it.poolTier == LocalPoolTier.TOP_50 &&
                 (statsById[it.serverId]?.consecutiveFailures ?: 0) == 0 &&
                 cfgById.containsKey(it.serverId)
         }
-        if (orderedIds.size < cap && healthyTop50Count < PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT) {
+        if (orderedIds.size < cap && healthyTopCount < PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT) {
             currentRankings
                 .filter { it.poolTier == LocalPoolTier.BACKUP_POOL && cfgById.containsKey(it.serverId) }
                 .sortedBy { it.rankPosition }
@@ -349,11 +365,9 @@ object QuickScanPlanner {
                 }
         }
 
-        // 4. Cold-start / under-filled Top-50 bootstrap from bounded Central Top-500 slice (never all 500!)
-        if (orderedIds.size < cap && healthyTop50Count < min(30, cfgById.size)) {
+        if (orderedIds.size < cap && healthyTopCount < min(60, cfgById.size)) {
             for (sid in cfgById.keys) {
                 val st = statsById[sid]
-                // Skip repeatedly failing nodes during Quick Scan to save battery & mobile data
                 if (st != null && st.consecutiveFailures >= 3) continue
                 orderedIds.add(sid)
                 if (orderedIds.size >= cap) break
@@ -365,17 +379,13 @@ object QuickScanPlanner {
 }
 
 object FullScanPlanner {
-    /**
-     * يبني خطة الفحص الشامل (القسم 4) لتقييم جميع الإعدادات المتاحة في حزمة الـ Top 500،
-     * مع إعطاء الأولوية أولًا للسيرفرات المتقادمة القياس والسيرفرات الجديدة غير المفحوصة بعد
-     * لاكتشاف البدائل الأسرع مبكرًا، ثم استكمال تقييم بقية الحزمة بالتسلسل.
-     */
     fun buildOrderedPlan(
         allCandidateConfigs: List<String>,
         fingerprintsById: Map<String, String>,
         statsById: Map<String, NetworkServerProfileStats>,
         profile: ScanNetworkProfile,
         nowMs: Long = System.currentTimeMillis(),
+        skipFreshWithinTtl: Boolean = false,
     ): List<String> {
         val staleKnown = ArrayList<String>()
         val undiscovered = ArrayList<String>()
@@ -385,6 +395,7 @@ object FullScanPlanner {
         for (raw in allCandidateConfigs) {
             val clean = Converters.cleanUri(raw)
             if (!clean.contains("://") || !Converters.isSupported(clean)) continue
+            if (!Tester.passesHardSecurityPreFilter(clean)) continue
             val sid = Converters.stableServerId(clean)
             if (sid.isBlank() || !seen.add(sid)) continue
 
@@ -393,7 +404,7 @@ object FullScanPlanner {
             when {
                 st == null || st.scanCount == 0 -> undiscovered.add(clean)
                 PersonalizedTop50Ranker.isMeasurementStale(st, fp, profile, nowMs) -> staleKnown.add(clean)
-                else -> freshKnown.add(clean)
+                else -> if (!skipFreshWithinTtl) freshKnown.add(clean)
             }
         }
         return staleKnown + undiscovered + freshKnown
@@ -406,8 +417,11 @@ class SequentialTunnelScanner(
     private val customProbeExecutor: TunnelProbeExecutor? = null,
 ) {
     companion object {
-        /** قفل تسلسلي صارم على مستوى العملية يضمن عدم تشغيل أكثر من نفق فحص واحد في آنٍ واحد أبدًا. */
         private val sequentialScanMutex = Mutex()
+        private const val BATCH_SIZE = 45
+        private const val STAGE1_PARALLELISM = 28
+        private const val STAGE2_PARALLELISM = 6
+        const val BACKGROUND_STAGE2_TOP_LIMIT = 15
 
         private fun pickSingleFreePort(basePort: Int = 22800): Int {
             val loopback = InetAddress.getByName("127.0.0.1")
@@ -442,10 +456,79 @@ class SequentialTunnelScanner(
         )
     }
 
+    private suspend fun probeBatchChunkWithFallback(
+        chunk: List<String>,
+        basePort: Int,
+        timeoutMs: Int,
+        dnsServer: String,
+        useDoh: Boolean,
+        onItemDone: suspend (TestResult) -> Unit,
+    ): List<TestResult> = coroutineScope {
+        if (chunk.isEmpty()) return@coroutineScope emptyList()
+        val ports = Tester.allocateFreePorts(chunk.size, basePort = basePort)
+        val paired = chunk.mapIndexed { idx, c -> c to ports[idx] }
+        val session = runInterruptible(Dispatchers.IO) {
+            singBox.startBatchDaemon(paired, dnsServer = dnsServer, useDoh = useDoh, waitMs = 2200L)
+        }
+        if (session == null) {
+            if (chunk.size > 1) {
+                val mid = (chunk.size + 1) / 2
+                val left = probeBatchChunkWithFallback(chunk.subList(0, mid), basePort, timeoutMs, dnsServer, useDoh, onItemDone)
+                val right = probeBatchChunkWithFallback(chunk.subList(mid, chunk.size), basePort + mid + 5, timeoutMs, dnsServer, useDoh, onItemDone)
+                return@coroutineScope left + right
+            }
+            val single = runInterruptible(Dispatchers.IO) {
+                singBox.testRealTunnelSequential(
+                    cfg = chunk.first(),
+                    port = ports.first(),
+                    timeoutSec = (timeoutMs / 1000).coerceAtLeast(2),
+                    probeSamples = 1,
+                    measureThroughput = false,
+                    throughputBudgetBytes = 0L,
+                    dnsServer = dnsServer,
+                    useDoh = useDoh,
+                )
+            }
+            onItemDone(single)
+            return@coroutineScope listOf(single)
+        }
+
+        val slotByClean = session.slots.associateBy { Converters.cleanUri(it.cfg) }
+        val sem = Semaphore(STAGE1_PARALLELISM)
+        try {
+            chunk.map { rawCfg ->
+                async(Dispatchers.IO) {
+                    ensureActive()
+                    val clean = Converters.cleanUri(rawCfg)
+                    val slot = slotByClean[clean]
+                    val res = if (slot == null) {
+                        TestResult(rawCfg, ok = false, error = "unsupported", packetLossPct = 100.0)
+                    } else {
+                        sem.withPermit {
+                            ensureActive()
+                            runInterruptible(Dispatchers.IO) {
+                                singBox.probeSlotOnRunningBatch(
+                                    slot = slot,
+                                    timeoutMs = timeoutMs,
+                                    measureThroughput = false,
+                                    throughputBudgetBytes = 0L,
+                                )
+                            }
+                        }
+                    }
+                    onItemDone(res)
+                    res
+                }
+            }.awaitAll()
+        } finally {
+            singBox.stopBatchDaemon(session)
+        }
+    }
+
     /**
-     * ينفّذ Quick Scan أو Full Scan بالتسلسل التام (توازي = 1 فقط)،
-     * يحفظ كل قياس في السجل التاريخي المحلي دون مسح القديم، ويعيد حساب
-     * أفضل 50 سيرفرًا مخصّصًا + الاحتياطي لشبكة المستخدم الحالية (WIFI أو MOBILE_DATA).
+     * على الجهاز الفعلي (`customProbeExecutor == null`): يشغّل الفحص الدفعي المتوازي فائق السرعة
+     * لكامل حزمة الـ 500 كونفيق خلال ثوانٍ معدودة (المرحلة 1 حياة واستجابة + المرحلة 2 تنزيل حقيقي 600 KB).
+     * وفي اختبارات الوحدة المحاكاة (`customProbeExecutor != null`): يحافظ على المنفّذ المخصّص.
      */
     suspend fun executeScan(
         scanMode: LocalScanMode,
@@ -453,10 +536,12 @@ class SequentialTunnelScanner(
         fingerprintsById: Map<String, String> = emptyMap(),
         networkProfile: ScanNetworkProfile,
         isMetered: Boolean = (networkProfile == ScanNetworkProfile.MOBILE_DATA),
-        timeoutSec: Int = 5,
+        timeoutSec: Int = 4,
         dnsServer: String = "1.1.1.1",
         useDoh: Boolean = false,
-        quickStopTargetQualified: Int = if (networkProfile == ScanNetworkProfile.MOBILE_DATA || isMetered) 25 else 50,
+        isBackgroundRun: Boolean = false,
+        skipFreshWithinTtl: Boolean = isBackgroundRun,
+        quickStopTargetQualified: Int = if (networkProfile == ScanNetworkProfile.MOBILE_DATA || isMetered) 50 else 100,
         activeNetworkSupplier: (() -> ScanNetworkProfile)? = null,
         onProgress: suspend (TestProgress) -> Unit = {},
         onRankingUpdated: suspend (
@@ -490,6 +575,15 @@ class SequentialTunnelScanner(
             val initialStats = clientDb.getNetworkStatsMap(networkProfile)
             val initialRanks = clientDb.getPersonalizedRankings(networkProfile)
 
+            // Collect insecure/quarantined URIs upfront so the caller can purge them immediately!
+            val securityRejectedClean = LinkedHashSet<String>()
+            for (raw in allCandidateConfigs) {
+                val clean = Converters.cleanUri(raw)
+                if (clean.contains("://") && Converters.isSupported(clean) && !Tester.passesHardSecurityPreFilter(clean)) {
+                    securityRejectedClean.add(clean)
+                }
+            }
+
             val plan = when (scanMode) {
                 LocalScanMode.QUICK_SCAN -> QuickScanPlanner.buildOrderedPlan(
                     allCandidateConfigs = allCandidateConfigs,
@@ -504,6 +598,7 @@ class SequentialTunnelScanner(
                     statsById = initialStats,
                     profile = networkProfile,
                     nowMs = nowStart,
+                    skipFreshWithinTtl = skipFreshWithinTtl,
                 )
             }
 
@@ -520,17 +615,239 @@ class SequentialTunnelScanner(
                     networkProfile = networkProfile,
                     plannedCount = 0,
                     testedCount = 0,
-                    qualifiedAliveCount = 0,
+                    qualifiedAliveCount = emptyBundle.top50.size,
                     stoppedEarly = false,
                     rankingBundle = emptyBundle,
                     results = emptyList(),
-                    failedCleanUris = emptySet(),
+                    failedCleanUris = securityRejectedClean,
                 )
             }
 
-            val executor = customProbeExecutor ?: defaultExecutor
+            // ── المسار أ: منفّذ الفحص الدفعي فائق السرعة على أندرويد الفعلي (customProbeExecutor == null) ──
+            if (customProbeExecutor == null) {
+                val stage1Label = tr(
+                    "فحص فائق السرعة (${networkProfile.labelAr})",
+                    "Ultra-Fast Tunnel Scan (${networkProfile.labelEn})",
+                )
+                onProgress(TestProgress(stage1Label, 0, plan.size, 0))
+
+                val stage1TimeoutMs = (timeoutSec.coerceIn(2, 5) * 600).coerceIn(1_800, 2_500)
+                var doneStage1 = 0
+                var aliveStage1 = 0
+                var stoppedEarly = false
+                val stage1All = ArrayList<TestResult>(plan.size)
+
+                val chunks = plan.chunked(BATCH_SIZE)
+                for ((cIdx, chunk) in chunks.withIndex()) {
+                    coroutineContext.ensureActive()
+                    if (activeNetworkSupplier != null && activeNetworkSupplier.invoke() != networkProfile) {
+                        stoppedEarly = true
+                        break
+                    }
+                    val chunkRes = probeBatchChunkWithFallback(
+                        chunk = chunk,
+                        basePort = 23200 + (cIdx % 6) * 60,
+                        timeoutMs = stage1TimeoutMs,
+                        dnsServer = dnsServer,
+                        useDoh = useDoh,
+                    ) { r ->
+                        var snap: TestProgress? = null
+                        synchronized(this@SequentialTunnelScanner) {
+                            doneStage1++
+                            if (r.ok && r.latencyMs > 0L) aliveStage1++
+                            if (doneStage1 % 8 == 0 || doneStage1 == plan.size) {
+                                snap = TestProgress(stage1Label, doneStage1, plan.size, aliveStage1)
+                            }
+                        }
+                        snap?.let { onProgress(it) }
+                    }
+                    stage1All.addAll(chunkRes)
+                    if (scanMode == LocalScanMode.QUICK_SCAN &&
+                        aliveStage1 >= quickStopTargetQualified &&
+                        doneStage1 < plan.size
+                    ) {
+                        stoppedEarly = true
+                        break
+                    }
+                }
+
+                // Offline Guard: if >= 15 configs were tested and 0 responded, device internet itself is down!
+                if (stage1All.size >= PersonalizedTop50Ranker.OFFLINE_GUARD_MIN_TESTED && aliveStage1 == 0) {
+                    val preservedBundle = PersonalizedTop50Ranker.computeRankings(
+                        allCandidateConfigs,
+                        fingerprintsById,
+                        initialStats,
+                        networkProfile,
+                        System.currentTimeMillis(),
+                    )
+                    return@withLock ScanExecutionSummary(
+                        scanMode = scanMode,
+                        networkProfile = networkProfile,
+                        plannedCount = plan.size,
+                        testedCount = stage1All.size,
+                        qualifiedAliveCount = preservedBundle.top50.size,
+                        stoppedEarly = stoppedEarly,
+                        rankingBundle = preservedBundle,
+                        results = emptyList(),
+                        failedCleanUris = emptySet(),
+                        offlineGuardTriggered = true,
+                    )
+                }
+
+                val responsiveSorted = stage1All
+                    .filter { it.ok && it.latencyMs > 0L }
+                    .sortedWith(compareBy<TestResult> { it.latencyMs }.thenBy { it.jitterMs })
+
+                // Stage 2: Real 600 KB HTTPS Download Benchmark on top responsive safe servers
+                val stage2Limit = when {
+                    isBackgroundRun -> BACKGROUND_STAGE2_TOP_LIMIT // Top 15 (~9 MB strict budget)
+                    networkProfile == ScanNetworkProfile.MOBILE_DATA || isMetered -> 18
+                    else -> 30
+                }
+                val speedCandidates = responsiveSorted.take(stage2Limit)
+                val speedByClean = HashMap<String, Double>(speedCandidates.size)
+
+                if (speedCandidates.isNotEmpty()) {
+                    val stage2Label = tr(
+                        "قياس سرعة التنزيل الحقيقية (${networkProfile.labelAr})",
+                        "Measuring Real Download Speed (${networkProfile.labelEn})",
+                    )
+                    onProgress(TestProgress(stage2Label, 0, speedCandidates.size, 0))
+                    var sDone = 0
+                    for ((sIdx, sChunk) in speedCandidates.map { it.cfg }.chunked(BATCH_SIZE).withIndex()) {
+                        coroutineContext.ensureActive()
+                        if (activeNetworkSupplier != null && activeNetworkSupplier.invoke() != networkProfile) {
+                            stoppedEarly = true
+                            break
+                        }
+                        val ports = Tester.allocateFreePorts(sChunk.size, basePort = 24400 + (sIdx % 3) * 60)
+                        val paired = sChunk.mapIndexed { idx, c -> c to ports[idx] }
+                        val session = runInterruptible(Dispatchers.IO) {
+                            singBox.startBatchDaemon(paired, dnsServer = dnsServer, useDoh = useDoh, waitMs = 2200L)
+                        }
+                        if (session != null) {
+                            val sem = Semaphore(STAGE2_PARALLELISM)
+                            try {
+                                coroutineScope {
+                                    session.slots.map { slot ->
+                                        async(Dispatchers.IO) {
+                                            ensureActive()
+                                            val kbps = sem.withPermit {
+                                                ensureActive()
+                                                runInterruptible(Dispatchers.IO) {
+                                                    SingBox.measureDownloadThroughputOnPort(
+                                                        port = slot.listenPort,
+                                                        timeoutMs = 6_500,
+                                                        budgetBytes = SingBox.SPEED_BYTES,
+                                                    )
+                                                }
+                                            }
+                                            var snap: TestProgress? = null
+                                            synchronized(this@SequentialTunnelScanner) {
+                                                if (kbps > 0.0) {
+                                                    speedByClean[Converters.cleanUri(slot.cfg)] = kbps
+                                                }
+                                                sDone++
+                                                if (sDone % 3 == 0 || sDone == speedCandidates.size) {
+                                                    snap = TestProgress(stage2Label, sDone, speedCandidates.size, speedByClean.size)
+                                                }
+                                            }
+                                            snap?.let { onProgress(it) }
+                                        }
+                                    }.awaitAll()
+                                }
+                            } finally {
+                                singBox.stopBatchDaemon(session)
+                            }
+                        }
+                    }
+                }
+
+                // Commit measurements to network-isolated SQLite tables on Dispatchers.IO
+                val liveAlive = ArrayList<TestResult>(responsiveSorted.size)
+                val liveFailed = LinkedHashSet<String>(securityRejectedClean)
+                val commitNowMs = System.currentTimeMillis()
+
+                for (rawRes in stage1All) {
+                    val clean = Converters.cleanUri(rawRes.cfg)
+                    val sid = Converters.stableServerId(clean)
+                    val fp = fingerprintsById[sid] ?: Converters.configFingerprint(clean)
+                    val measuredSpd = speedByClean[clean] ?: rawRes.speedKbps
+                    val finalRes = if (measuredSpd > 0.0) rawRes.copy(speedKbps = measuredSpd, testedAtMs = commitNowMs) else rawRes
+                    val probeOk = finalRes.ok && finalRes.latencyMs > 0L && finalRes.packetLossPct < 60.0
+
+                    if (probeOk) {
+                        liveAlive.add(finalRes)
+                        liveFailed.remove(clean)
+                    } else {
+                        liveFailed.add(clean)
+                    }
+
+                    clientDb.recordNetworkScanMeasurement(
+                        cfgOrServerId = clean,
+                        configFingerprint = fp,
+                        networkProfile = networkProfile,
+                        scanMode = scanMode.code,
+                        success = probeOk,
+                        establishMs = finalRes.establishMs,
+                        latencyMs = finalRes.latencyMs,
+                        jitterMs = finalRes.jitterMs,
+                        packetLossPct = if (probeOk) finalRes.packetLossPct else 100.0,
+                        throughputKbps = finalRes.speedKbps,
+                        stabilityScore = finalRes.stabilityScore,
+                        failureReason = if (probeOk) "" else finalRes.error.ifBlank { "TUNNEL_PROBE_FAILED" },
+                        nowMs = commitNowMs,
+                    )
+                    clientDb.recordServerProbeOrSessionOutcome(
+                        cfgOrServerId = clean,
+                        ok = probeOk,
+                        latencyMs = finalRes.latencyMs,
+                        establishMs = finalRes.establishMs,
+                        jitterMs = finalRes.jitterMs,
+                        packetLossPct = if (probeOk) finalRes.packetLossPct else 100.0,
+                        downloadKbps = finalRes.speedKbps,
+                        networkType = networkProfile.code,
+                        failureCategory = if (probeOk) "" else "BATCH_SCAN_FAIL",
+                        nowMs = commitNowMs,
+                    )
+                }
+
+                val finalStats = clientDb.getNetworkStatsMap(networkProfile)
+                val finalBundle = PersonalizedTop50Ranker.computeRankings(
+                    allCandidateConfigs,
+                    fingerprintsById,
+                    finalStats,
+                    networkProfile,
+                    commitNowMs,
+                )
+                clientDb.savePersonalizedNetworkRankings(
+                    profile = networkProfile,
+                    scanMode = scanMode.code,
+                    entries = finalBundle.allQualifiedEntries,
+                    recordHistorySnapshot = true,
+                    nowMs = commitNowMs,
+                )
+                onRankingUpdated(finalBundle, liveAlive.toList(), liveFailed.toSet())
+
+                return@withLock ScanExecutionSummary(
+                    scanMode = scanMode,
+                    networkProfile = networkProfile,
+                    plannedCount = plan.size,
+                    testedCount = stage1All.size,
+                    qualifiedAliveCount = finalBundle.top50.size,
+                    stoppedEarly = stoppedEarly,
+                    rankingBundle = finalBundle,
+                    results = liveAlive.toList(),
+                    failedCleanUris = liveFailed.toSet(),
+                    offlineGuardTriggered = false,
+                )
+            }
+
+            // ── المسار ب: المنفّذ المخصّص المحقون لاختبارات المحاكاة الحتمية (customProbeExecutor != null) ──
+            val executor = customProbeExecutor
             val liveAlive = ArrayList<TestResult>()
-            val liveFailed = LinkedHashSet<String>()
+            val liveFailed = LinkedHashSet<String>(securityRejectedClean)
+            val bufferedProbes = ArrayList<Pair<String, TestResult>>(plan.size)
             var tested = 0
             var stoppedEarly = false
             var throughputMeasuredCount = 0
@@ -540,22 +857,20 @@ class SequentialTunnelScanner(
 
             for (cfg in plan) {
                 coroutineContext.ensureActive()
-
-                // Never cross-contaminate WIFI vs MOBILE_DATA profiles if user's physical network switches mid-scan!
                 if (activeNetworkSupplier != null && activeNetworkSupplier.invoke() != networkProfile) {
                     stoppedEarly = true
                     break
                 }
 
-                // Bandwidth & battery smart budgeting per probe
                 val maxTpSamples = when {
-                    scanMode == LocalScanMode.QUICK_SCAN && (networkProfile == ScanNetworkProfile.MOBILE_DATA || isMetered) -> 12
-                    scanMode == LocalScanMode.QUICK_SCAN -> 30
-                    networkProfile == ScanNetworkProfile.MOBILE_DATA || isMetered -> 35
-                    else -> 80
+                    isBackgroundRun -> BACKGROUND_STAGE2_TOP_LIMIT
+                    scanMode == LocalScanMode.QUICK_SCAN && (networkProfile == ScanNetworkProfile.MOBILE_DATA || isMetered) -> 15
+                    scanMode == LocalScanMode.QUICK_SCAN -> 35
+                    networkProfile == ScanNetworkProfile.MOBILE_DATA || isMetered -> 45
+                    else -> 110
                 }
                 val shouldSampleTp = throughputMeasuredCount < maxTpSamples
-                val tpBytes = if (networkProfile == ScanNetworkProfile.MOBILE_DATA || isMetered) 180_000L else 600_000L
+                val tpBytes = SingBox.SPEED_BYTES
                 val pSamples = if (scanMode == LocalScanMode.QUICK_SCAN && (networkProfile == ScanNetworkProfile.MOBILE_DATA || isMetered)) 2 else 3
 
                 val req = TunnelProbeRequest(
@@ -577,10 +892,8 @@ class SequentialTunnelScanner(
 
                 tested++
                 val clean = Converters.cleanUri(cfg)
-                val sid = Converters.stableServerId(clean)
-                val fp = fingerprintsById[sid] ?: Converters.configFingerprint(clean)
                 val probeOk = res.ok && res.latencyMs > 0L && res.packetLossPct < 60.0
-                val nowProbeMs = System.currentTimeMillis()
+                bufferedProbes.add(clean to res)
 
                 if (probeOk) {
                     if (res.speedKbps > 0.0) throughputMeasuredCount++
@@ -590,8 +903,45 @@ class SequentialTunnelScanner(
                     liveFailed.add(clean)
                 }
 
-                // Append-only historical measurement + per-network stat update
-                val updatedStat = clientDb.recordNetworkScanMeasurement(
+                onProgress(TestProgress(stageLabel, tested, plan.size, liveAlive.size))
+
+                if (scanMode == LocalScanMode.QUICK_SCAN &&
+                    liveAlive.size >= quickStopTargetQualified &&
+                    tested < plan.size
+                ) {
+                    stoppedEarly = true
+                    break
+                }
+            }
+
+            if (tested >= PersonalizedTop50Ranker.OFFLINE_GUARD_MIN_TESTED && liveAlive.isEmpty()) {
+                val preservedBundle = PersonalizedTop50Ranker.computeRankings(
+                    allCandidateConfigs,
+                    fingerprintsById,
+                    initialStats,
+                    networkProfile,
+                    System.currentTimeMillis(),
+                )
+                return@withLock ScanExecutionSummary(
+                    scanMode = scanMode,
+                    networkProfile = networkProfile,
+                    plannedCount = plan.size,
+                    testedCount = tested,
+                    qualifiedAliveCount = preservedBundle.top50.size,
+                    stoppedEarly = stoppedEarly,
+                    rankingBundle = preservedBundle,
+                    results = emptyList(),
+                    failedCleanUris = emptySet(),
+                    offlineGuardTriggered = true,
+                )
+            }
+
+            val commitNow = System.currentTimeMillis()
+            for ((clean, res) in bufferedProbes) {
+                val sid = Converters.stableServerId(clean)
+                val fp = fingerprintsById[sid] ?: Converters.configFingerprint(clean)
+                val probeOk = res.ok && res.latencyMs > 0L && res.packetLossPct < 60.0
+                clientDb.recordNetworkScanMeasurement(
                     cfgOrServerId = clean,
                     configFingerprint = fp,
                     networkProfile = networkProfile,
@@ -604,10 +954,8 @@ class SequentialTunnelScanner(
                     throughputKbps = res.speedKbps,
                     stabilityScore = res.stabilityScore,
                     failureReason = if (probeOk) "" else res.error.ifBlank { "TUNNEL_PROBE_FAILED" },
-                    nowMs = nowProbeMs,
+                    nowMs = commitNow,
                 )
-
-                // Also keep legacy telemetry synchronized so Favorites & SmartServerSelector stay coherent
                 clientDb.recordServerProbeOrSessionOutcome(
                     cfgOrServerId = clean,
                     ok = probeOk,
@@ -618,72 +966,24 @@ class SequentialTunnelScanner(
                     downloadKbps = res.speedKbps,
                     networkType = networkProfile.code,
                     failureCategory = if (probeOk) "" else "SEQ_SCAN_FAIL",
-                    nowMs = nowProbeMs,
+                    nowMs = commitNow,
                 )
-
-                if (updatedStat != null && probeOk) {
-                    val pScore = PersonalizedTop50Ranker.calculatePersonalizedScore(updatedStat, fp, nowProbeMs)
-                    if (pScore > 0.0) {
-                        // Update live progressive ranking every 3 probes so user sees Top 50 form immediately
-                        if (tested % 3 == 0 || tested == plan.size) {
-                            val progStats = clientDb.getNetworkStatsMap(networkProfile)
-                            val progBundle = PersonalizedTop50Ranker.computeRankings(
-                                allCandidateConfigs,
-                                fingerprintsById,
-                                progStats,
-                                networkProfile,
-                                nowProbeMs,
-                            )
-                            clientDb.savePersonalizedNetworkRankings(
-                                profile = networkProfile,
-                                scanMode = scanMode.code,
-                                entries = progBundle.allQualifiedEntries,
-                                recordHistorySnapshot = false,
-                                nowMs = nowProbeMs,
-                            )
-                            onRankingUpdated(progBundle, liveAlive.toList(), liveFailed.toSet())
-                        }
-                    }
-                } else if (tested % 5 == 0) {
-                    val progStats = clientDb.getNetworkStatsMap(networkProfile)
-                    val progBundle = PersonalizedTop50Ranker.computeRankings(
-                        allCandidateConfigs,
-                        fingerprintsById,
-                        progStats,
-                        networkProfile,
-                        nowProbeMs,
-                    )
-                    onRankingUpdated(progBundle, liveAlive.toList(), liveFailed.toSet())
-                }
-
-                onProgress(TestProgress(stageLabel, tested, plan.size, liveAlive.size))
-
-                // Section 3: Quick Scan stops early once sufficient fresh qualified servers are verified!
-                if (scanMode == LocalScanMode.QUICK_SCAN &&
-                    liveAlive.size >= quickStopTargetQualified &&
-                    tested < plan.size
-                ) {
-                    stoppedEarly = true
-                    break
-                }
             }
 
-            // Final ranking recalculation + append-only local_ranking_history snapshot!
-            val finalNow = System.currentTimeMillis()
             val finalStats = clientDb.getNetworkStatsMap(networkProfile)
             val finalBundle = PersonalizedTop50Ranker.computeRankings(
                 allCandidateConfigs,
                 fingerprintsById,
                 finalStats,
                 networkProfile,
-                finalNow,
+                commitNow,
             )
             clientDb.savePersonalizedNetworkRankings(
                 profile = networkProfile,
                 scanMode = scanMode.code,
                 entries = finalBundle.allQualifiedEntries,
                 recordHistorySnapshot = true,
-                nowMs = finalNow,
+                nowMs = commitNow,
             )
             onRankingUpdated(finalBundle, liveAlive.toList(), liveFailed.toSet())
 
@@ -697,6 +997,7 @@ class SequentialTunnelScanner(
                 rankingBundle = finalBundle,
                 results = liveAlive.toList(),
                 failedCleanUris = liveFailed.toSet(),
+                offlineGuardTriggered = false,
             )
         }
     }

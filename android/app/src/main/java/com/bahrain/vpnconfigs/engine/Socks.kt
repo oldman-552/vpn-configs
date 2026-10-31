@@ -20,6 +20,8 @@ data class HttpProbe(
     val bytes: Long,
     val bodyText: String = "",
     val transferMs: Long = elapsedMs,
+    val establishMs: Long = 0L,
+    val jitterMs: Double = 0.0,
 )
 
 object Socks {
@@ -110,8 +112,10 @@ object Socks {
 
         var raw: Socket? = null
         var activeSock: Socket? = null
+        val connectStartNs = System.nanoTime()
         try {
             val pair = openTunnelSocket(proxyPort, host, port, isHttps, timeoutMs)
+            val estabMs = ((System.nanoTime() - connectStartNs) / 1_000_000L).coerceAtLeast(1L)
             raw = pair.first
             activeSock = pair.second
 
@@ -133,18 +137,19 @@ object Socks {
 
             val (status1, contentLen1, connClose1) = readResponseHeaders(input)
             if (status1 !in listOf(200, 204)) {
-                return HttpProbe(status1, 0L, 0L)
+                return HttpProbe(status1, 0L, 0L, establishMs = estabMs)
             }
             if (status1 != 204 && contentLen1 != null && contentLen1 > 0L) {
                 skipFully(input, minOf(contentLen1, 4096L).toInt())
             }
             val rtt1 = ((System.nanoTime() - t1) / 1_000_000L).coerceAtLeast(1L)
 
-            // النبضة 2 (Keep-Alive Warm Delay): قياس RTT النفق الصافي بدون أي عبء تأسيس
+            // النبضة 2 (Keep-Alive Warm Delay): قياس RTT النفق الصافي والتذبذب بدون أي عبء تأسيس إضافي
             var bestRtt = rtt1
+            var measuredJitter = 0.0
             if (!connClose1 && (status1 == 204 || contentLen1 != null)) {
                 runCatching {
-                    activeSock.soTimeout = minOf(timeoutMs, 2500)
+                    activeSock.soTimeout = minOf(timeoutMs, 2200)
                     val req2 = buildString {
                         append("GET ").append(path).append(" HTTP/1.1\r\n")
                         append("Host: ").append(host).append("\r\n")
@@ -159,11 +164,19 @@ object Socks {
                     if (status2 in listOf(200, 204)) {
                         val rtt2 = ((System.nanoTime() - t2) / 1_000_000L).coerceAtLeast(1L)
                         bestRtt = minOf(rtt1, rtt2)
+                        measuredJitter = kotlin.math.abs(rtt1 - rtt2).toDouble()
                     }
                 }
             }
 
-            return HttpProbe(status = status1, elapsedMs = bestRtt, bytes = 0L, transferMs = bestRtt)
+            return HttpProbe(
+                status = status1,
+                elapsedMs = bestRtt,
+                bytes = 0L,
+                transferMs = bestRtt,
+                establishMs = estabMs,
+                jitterMs = measuredJitter,
+            )
         } finally {
             runCatching { if (activeSock !== raw) activeSock?.close() }
             runCatching { raw?.close() }

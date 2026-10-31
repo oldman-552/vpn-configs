@@ -72,9 +72,13 @@ ENGINE_BY_SCHEME = {
     "hysteria2": "singbox",
     "hy2": "singbox",
     "tuic": "singbox",
+    "socks": "singbox",
+    "socks5": "singbox",
+    "http": "singbox",
+    "https": "singbox",
 }
 XRAY_SCHEMES = ("vless", "vmess", "trojan", "ss")
-SINGBOX_SCHEMES = ("hysteria2", "hy2", "tuic")
+SINGBOX_SCHEMES = ("hysteria2", "hy2", "tuic", "socks", "socks5", "http", "https")
 
 XRAY_ASSETS = {
     ("linux", "x86_64"): "Xray-linux-64.zip",
@@ -734,8 +738,62 @@ def _tuic(cfg: str) -> dict | None:
     }
 
 
+def _socks_sb(cfg: str) -> dict | None:
+    ident = parse_identity(cfg, reject_private_hosts=True)
+    if ident is None or ident.canonical_proto != "socks":
+        return None
+    u, _ = _query(cfg)
+    if not u.hostname or is_unsafe_config_host(u.hostname):
+        return None
+    port = int(u.port or 1080)
+    if not _valid_port(port):
+        return None
+    ob: dict = {
+        "type": "socks",
+        "server": u.hostname,
+        "server_port": port,
+        "version": "5",
+    }
+    if u.username:
+        ob["username"] = unquote(u.username)
+        ob["password"] = unquote(u.password or "")
+    return ob
+
+
+def _http_sb(cfg: str) -> dict | None:
+    ident = parse_identity(cfg, reject_private_hosts=True)
+    if ident is None or ident.canonical_proto != "http":
+        return None
+    u, q = _query(cfg)
+    if not u.hostname or is_unsafe_config_host(u.hostname):
+        return None
+    is_https = u.scheme.lower() == "https" or q.get("security", "").lower() == "tls"
+    port = int(u.port or (443 if is_https else 8080))
+    if not _valid_port(port):
+        return None
+    ob: dict = {
+        "type": "http",
+        "server": u.hostname,
+        "server_port": port,
+    }
+    if u.username:
+        ob["username"] = unquote(u.username)
+        ob["password"] = unquote(u.password or "")
+    if is_https:
+        ob["tls"] = _tls_block(q, u.hostname, "http/1.1")
+    return ob
+
+
 XRAY_CONVERTERS = {"vless": _vless, "vmess": _vmess, "trojan": _trojan, "ss": _ss}
-SINGBOX_CONVERTERS = {"hysteria2": _hysteria2, "hy2": _hysteria2, "tuic": _tuic}
+SINGBOX_CONVERTERS = {
+    "hysteria2": _hysteria2,
+    "hy2": _hysteria2,
+    "tuic": _tuic,
+    "socks": _socks_sb,
+    "socks5": _socks_sb,
+    "http": _http_sb,
+    "https": _http_sb,
+}
 
 
 def engine_for(cfg: str) -> str | None:

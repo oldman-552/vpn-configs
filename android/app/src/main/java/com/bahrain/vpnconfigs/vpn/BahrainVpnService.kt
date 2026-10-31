@@ -1391,6 +1391,9 @@ class BahrainVpnService : VpnService() {
         val hints = cached?.serverHints ?: emptyMap()
         val cachedAll = (cached?.configs ?: emptyList())
         val curProf = ScanNetworkProfile.fromTransportCode(netAwareness.snapshot.value.transport.code)
+        val purgedIds = repo.getActivePurgedDeadServerIds(curProf)
+        val favSet = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
+        val favIds = clientDb.favoriteServerIds()
         val personalRanks = clientDb.getPersonalizedRankings(curProf)
         val cfgById = HashMap<String, String>()
         cachedAll.forEach { raw ->
@@ -1406,6 +1409,9 @@ class BahrainVpnService : VpnService() {
         val built = merged.mapIndexedNotNull { idx, cfg ->
             val clean = Converters.cleanUri(cfg)
             val vip = vipByClean[clean]
+            val sid = Converters.stableServerId(clean)
+            val isProtected = vip != null || clean in favSet || sid in favIds
+            if (!isProtected && sid in purgedIds) return@mapIndexedNotNull null
             val hint = hints[clean]
             val sec = SecurityEvaluator.evaluate(
                 rawCfg = clean,
@@ -1414,7 +1420,7 @@ class BahrainVpnService : VpnService() {
                 hintPrivacy = hint?.privacyAssessment.orEmpty(),
                 hintRisk = hint?.riskLevel.orEmpty(),
             )
-            if (sec.quarantined) return@mapIndexedNotNull null
+            if (sec.quarantined || sec.allowInsecure) return@mapIndexedNotNull null
             val localRes = bestByClean[clean]
             ServerCandidate(
                 cfg = cfg,

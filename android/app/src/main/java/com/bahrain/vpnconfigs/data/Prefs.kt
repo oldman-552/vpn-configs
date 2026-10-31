@@ -46,11 +46,11 @@ class Prefs(ctx: Context) {
         }
 
     var testTop: Int
-        get() = sp.getInt("test_top", 400)
+        get() = sp.getInt("test_top", 500)
         set(v) = sp.edit { putInt("test_top", v.coerceAtLeast(10)) }
 
     var speedTop: Int
-        get() = sp.getInt("speed_top", 80)
+        get() = sp.getInt("speed_top", 30)
         set(v) = sp.edit { putInt("speed_top", v.coerceAtLeast(0)) }
 
     var bestN: Int
@@ -58,11 +58,11 @@ class Prefs(ctx: Context) {
         set(v) = sp.edit { putInt("best_n", v.coerceAtLeast(1)) }
 
     var concurrency: Int
-        get() = sp.getInt("concurrency", 8)
-        set(v) = sp.edit { putInt("concurrency", v.coerceIn(1, 12)) }
+        get() = sp.getInt("concurrency", 24)
+        set(v) = sp.edit { putInt("concurrency", v.coerceIn(1, 32)) }
 
     var timeoutSec: Int
-        get() = sp.getInt("timeout", 5)
+        get() = sp.getInt("timeout", 4)
         set(v) = sp.edit { putInt("timeout", v.coerceIn(2, 30)) }
 
     var rankBySpeed: Boolean
@@ -79,7 +79,18 @@ class Prefs(ctx: Context) {
 
     var autoRefresh: Boolean
         get() = sp.getBoolean("auto_refresh", true)
-        set(v) = sp.edit { putBoolean("auto_refresh", v) }
+        set(v) = sp.edit {
+            putBoolean("auto_refresh", v)
+            putBoolean("auto_server_quality_testing_3h", v)
+        }
+
+    /** الفحص التلقائي لجودة السيرفرات في الخلفية (كل 3 ساعات) — مفعّل افتراضياً وبدون نوافذ منبثقة مزعجة. */
+    var autoServerQualityTesting: Boolean
+        get() = sp.getBoolean("auto_server_quality_testing_3h", sp.getBoolean("auto_refresh", true))
+        set(v) = sp.edit {
+            putBoolean("auto_server_quality_testing_3h", v)
+            putBoolean("auto_refresh", v)
+        }
 
     // ─────────── إعدادات الـ VPN المدمج ───────────
     var selectedCfg: String

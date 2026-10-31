@@ -35,14 +35,73 @@ data class RunningDaemon(
     val port: Int,
 )
 
+data class BatchOutboundSlot(
+    val index: Int,
+    val cfg: String,
+    val listenPort: Int,
+)
+
+data class BatchDaemonSession(
+    val process: Process,
+    val configFile: File,
+    val slots: List<BatchOutboundSlot>,
+)
+
 class SingBox(private val ctx: Context) {
 
     companion object {
         const val TEST_URL = "https://www.gstatic.com/generate_204"
         const val SPEED_URL = "https://speed.cloudflare.com/__down?bytes=600000"
         const val VPN_SOCKS_PORT = 20808
-        private const val SPEED_BYTES = 600_000L
+        const val SPEED_BYTES = 600_000L
+        val DEFAULT_SPEED_ENDPOINTS: List<String> = listOf(
+            SPEED_URL,
+            "https://nbg1-speed.hetzner.com/1MB.bin",
+            "https://ash-speed.hetzner.com/1MB.bin",
+        )
         val IR_DOMAIN_SUFFIXES: List<String> = listOf(".ir", ".xn--mgba3a4f16a")
+
+        fun resolveSpeedEndpoints(
+            budgetBytes: Long = SPEED_BYTES,
+            customPrimaryUrl: String = "",
+        ): List<String> {
+            val out = ArrayList<String>(4)
+            val custom = customPrimaryUrl.trim()
+            if (custom.startsWith("https://", ignoreCase = true)) {
+                out.add(custom)
+            }
+            val cfUrl = if (budgetBytes in 16_384L until SPEED_BYTES) {
+                "https://speed.cloudflare.com/__down?bytes=$budgetBytes"
+            } else {
+                SPEED_URL
+            }
+            if (cfUrl !in out) out.add(cfUrl)
+            DEFAULT_SPEED_ENDPOINTS.drop(1).forEach { if (it !in out) out.add(it) }
+            return out
+        }
+
+        fun measureDownloadThroughputOnPort(
+            port: Int,
+            timeoutMs: Int,
+            budgetBytes: Long = SPEED_BYTES,
+            customPrimaryUrl: String = "",
+        ): Double {
+            if (budgetBytes < 8_192L) return 0.0
+            val endpoints = resolveSpeedEndpoints(budgetBytes, customPrimaryUrl)
+            val cappedTimeout = timeoutMs.coerceIn(2_500, 12_000)
+            for ((idx, url) in endpoints.withIndex()) {
+                if (Thread.currentThread().isInterrupted) return 0.0
+                val perTryTimeout = if (idx == 0) cappedTimeout else minOf(cappedTimeout, 4_500)
+                val sp = runCatching {
+                    Socks.get(port, url, perTryTimeout, budgetBytes)
+                }.getOrNull() ?: continue
+                val dtSec = maxOf(sp.transferMs / 1000.0, 0.005)
+                if (sp.status in listOf(200, 206) && sp.bytes >= 8_192L) {
+                    return (sp.bytes / 1024.0) / dtSec
+                }
+            }
+            return 0.0
+        }
     }
 
     /** مسار النواة داخل مجلد المكتبات الأصلية (قابل للتنفيذ). */
@@ -217,6 +276,197 @@ class SingBox(private val ctx: Context) {
     }
 
     /**
+     * بناء ملف إعداد دفعي متوافق 100% مع sing-box 1.14.4 يجمع حتى 50 كونفيق داخل عملية نظام واحدة فقط:
+     * يربط كل منفذ محلي `in-$i` (`127.0.0.1:port_i`) بالـ outbound المشفّر المقابل `proxy-$i`
+     * مما يقضي نهائيًا على بطء تشغيل 500 عملية منفصلة ويجعل فحص الـ 500 كونفيق يتم خلال ثوانٍ.
+     */
+    fun buildBatchConfig(
+        items: List<Pair<String, Int>>,
+        dnsServer: String = "1.1.1.1",
+        useDoh: Boolean = false,
+    ): Pair<String, List<BatchOutboundSlot>>? {
+        if (items.isEmpty()) return null
+        val safeDns = com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.sanitizeDnsServer(dnsServer)
+        val applyFrag = tlsFragmentEnabled()
+
+        val inboundsArr = JSONArray()
+        val outboundsArr = JSONArray()
+        val rulesArr = JSONArray()
+        val validSlots = ArrayList<BatchOutboundSlot>(items.size)
+        val usedPorts = HashSet<Int>(items.size)
+
+        items.forEachIndexed { rawIdx, (cfg, listenPort) ->
+            if (listenPort !in 1025..65534 || !usedPorts.add(listenPort)) return@forEachIndexed
+            if (WarpManager.isWarp(cfg)) return@forEachIndexed
+            val out = Converters.toOutbound(cfg) ?: return@forEachIndexed
+            val slotIdx = validSlots.size
+            val inTag = "in-$slotIdx"
+            val outTag = "proxy-$slotIdx"
+
+            if (applyFrag) TlsFragment.apply(out)
+            out.put("tag", outTag)
+            out.put("domain_resolver", "bootstrap")
+
+            inboundsArr.put(
+                JSONObject()
+                    .put("type", "mixed")
+                    .put("tag", inTag)
+                    .put("listen", "127.0.0.1")
+                    .put("listen_port", listenPort)
+            )
+            outboundsArr.put(out)
+            rulesArr.put(
+                JSONObject()
+                    .put("inbound", inTag)
+                    .put("action", "route")
+                    .put("outbound", outTag)
+            )
+            validSlots.add(BatchOutboundSlot(index = rawIdx, cfg = cfg, listenPort = listenPort))
+        }
+
+        if (validSlots.isEmpty()) return null
+
+        val dnsServers = JSONArray()
+        val bootstrapServerIp = if (isIpLiteral(safeDns)) safeDns else "1.1.1.1"
+        dnsServers.put(
+            JSONObject()
+                .put("type", if (useDoh && isIpLiteral(safeDns)) "https" else "udp")
+                .put("tag", "bootstrap")
+                .put("server", bootstrapServerIp)
+        )
+
+        outboundsArr.put(
+            JSONObject()
+                .put("type", "direct")
+                .put("tag", "direct")
+                .put("domain_resolver", "bootstrap")
+        )
+
+        val dnsObj = JSONObject()
+            .put("servers", dnsServers)
+            .put("final", "bootstrap")
+            .put("strategy", "ipv4_only")
+
+        val routeObj = JSONObject()
+            .put("rules", rulesArr)
+            .put("final", "direct")
+            .put("default_domain_resolver", "bootstrap")
+
+        val conf = JSONObject()
+            .put("log", JSONObject().put("level", "error").put("timestamp", false))
+            .put("dns", dnsObj)
+            .put("inbounds", inboundsArr)
+            .put("outbounds", outboundsArr)
+            .put("route", routeObj)
+
+        return conf.toString() to validSlots
+    }
+
+    fun startBatchDaemon(
+        items: List<Pair<String, Int>>,
+        dnsServer: String = "1.1.1.1",
+        useDoh: Boolean = false,
+        waitMs: Long = 2400L,
+    ): BatchDaemonSession? {
+        if (!isAvailable) return null
+        val built = buildBatchConfig(items, dnsServer, useDoh) ?: return null
+        val (json, slots) = built
+        val firstPort = slots.first().listenPort
+        val confFile = File(tmpDir, "cfg-batch-$firstPort-${System.nanoTime() and 0xFFFFF}.json")
+        confFile.writeText(json, Charsets.UTF_8)
+
+        val devNull = File("/dev/null")
+        var proc: Process? = null
+        return try {
+            val pb = ProcessBuilder(binaryPath, "run", "-c", confFile.absolutePath)
+            if (devNull.exists()) {
+                pb.redirectOutput(devNull)
+                pb.redirectError(devNull)
+            } else {
+                pb.redirectErrorStream(true)
+            }
+            proc = pb.start()
+
+            val deadline = System.currentTimeMillis() + waitMs
+            var up = false
+            while (System.currentTimeMillis() < deadline) {
+                if (Thread.currentThread().isInterrupted || !proc.isAlive) break
+                try {
+                    Socket().use { s ->
+                        s.connect(InetSocketAddress("127.0.0.1", firstPort), 50)
+                        up = true
+                    }
+                    if (up) break
+                } catch (_: Exception) {
+                    Thread.sleep(20)
+                }
+            }
+            if (!up) {
+                stopProcess(proc, confFile)
+                null
+            } else {
+                BatchDaemonSession(proc, confFile, slots)
+            }
+        } catch (_: Exception) {
+            stopProcess(proc, confFile)
+            null
+        }
+    }
+
+    fun stopBatchDaemon(session: BatchDaemonSession?) {
+        if (session == null) return
+        stopProcess(session.process, session.configFile)
+    }
+
+    fun probeSlotOnRunningBatch(
+        slot: BatchOutboundSlot,
+        timeoutMs: Int = 2400,
+        measureThroughput: Boolean = false,
+        throughputBudgetBytes: Long = SPEED_BYTES,
+        customSpeedUrl: String = "",
+    ): TestResult {
+        return try {
+            val probe = Socks.measureRealDelay(slot.listenPort, TEST_URL, timeoutMs.coerceIn(1_200, 10_000))
+            if (probe.status !in listOf(200, 204) || probe.elapsedMs <= 0L) {
+                return TestResult(slot.cfg, ok = false, error = "http-${probe.status}", packetLossPct = 100.0)
+            }
+            val establishMs = probe.establishMs.coerceAtLeast(probe.elapsedMs)
+            val jitter = probe.jitterMs.coerceAtLeast(0.0)
+            val speedKbps = if (measureThroughput && !Thread.currentThread().isInterrupted) {
+                measureDownloadThroughputOnPort(
+                    port = slot.listenPort,
+                    timeoutMs = maxOf(timeoutMs + 3_500, 6_500),
+                    budgetBytes = throughputBudgetBytes,
+                    customPrimaryUrl = customSpeedUrl,
+                )
+            } else {
+                0.0
+            }
+            val stabScore = (
+                55.0 +
+                    ((1.0 - (jitter / 200.0)).coerceIn(0.0, 1.0) * 25.0) +
+                    ((1.0 - (establishMs / 4500.0)).coerceIn(0.0, 1.0) * 20.0)
+                ).coerceIn(0.0, 100.0)
+            TestResult(
+                cfg = slot.cfg,
+                ok = true,
+                latencyMs = probe.elapsedMs,
+                speedKbps = speedKbps,
+                testedAtMs = System.currentTimeMillis(),
+                establishMs = establishMs,
+                jitterMs = jitter,
+                packetLossPct = 0.0,
+                stabilityScore = stabScore,
+            )
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            TestResult(slot.cfg, ok = false, error = "cancelled", packetLossPct = 100.0)
+        } catch (e: Exception) {
+            TestResult(slot.cfg, ok = false, error = e.javaClass.simpleName, packetLossPct = 100.0)
+        }
+    }
+
+    /**
      * تشغيل sing-box كعملية خلفية لنفق الـ VPN والانتظار حتى يفتح المنفذ المحلي.
      */
     fun startDaemon(
@@ -356,13 +606,16 @@ class SingBox(private val ctx: Context) {
 
             var speed = 0.0
             if (measureSpeed && !Thread.currentThread().isInterrupted) {
-                val sp = Socks.get(port, SPEED_URL, 8000, SPEED_BYTES)
-                val dtSec = maxOf(sp.transferMs / 1000.0, 0.005)
-                if (sp.status in listOf(200, 206) && sp.bytes >= 8192L) {
-                    speed = (sp.bytes / 1024.0) / dtSec
-                }
+                speed = measureDownloadThroughputOnPort(port, 8000, SPEED_BYTES)
             }
-            TestResult(cfg, ok = true, latencyMs = probe.elapsedMs, speedKbps = speed)
+            TestResult(
+                cfg,
+                ok = true,
+                latencyMs = probe.elapsedMs,
+                speedKbps = speed,
+                establishMs = probe.establishMs.coerceAtLeast(probe.elapsedMs),
+                jitterMs = probe.jitterMs,
+            )
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             TestResult(cfg, error = "cancelled")
@@ -414,11 +667,7 @@ class SingBox(private val ctx: Context) {
             }
             if (!up) return 0.0
 
-            val sp = Socks.get(port, SPEED_URL, maxOf(timeoutSec * 1000, 7500), SPEED_BYTES)
-            val dtSec = maxOf(sp.transferMs / 1000.0, 0.005)
-            if (sp.status in listOf(200, 206) && sp.bytes >= 8192L) {
-                (sp.bytes / 1024.0) / dtSec
-            } else 0.0
+            measureDownloadThroughputOnPort(port, maxOf(timeoutSec * 1000, 7500), SPEED_BYTES)
         } catch (_: Exception) {
             0.0
         } finally {
@@ -521,16 +770,11 @@ class SingBox(private val ctx: Context) {
 
             var speedKbps = 0.0
             if (measureThroughput && throughputBudgetBytes >= 16_384L && !Thread.currentThread().isInterrupted) {
-                val url = if (throughputBudgetBytes < SPEED_BYTES) {
-                    "https://speed.cloudflare.com/__down?bytes=$throughputBudgetBytes"
-                } else {
-                    SPEED_URL
-                }
-                val sp = Socks.get(port, url, maxOf(timeoutSec * 1000 + 2000, 7000), throughputBudgetBytes)
-                val dtSec = maxOf(sp.transferMs / 1000.0, 0.005)
-                if (sp.status in listOf(200, 206) && sp.bytes >= 8192L) {
-                    speedKbps = (sp.bytes / 1024.0) / dtSec
-                }
+                speedKbps = measureDownloadThroughputOnPort(
+                    port = port,
+                    timeoutMs = maxOf(timeoutSec * 1000 + 2000, 7000),
+                    budgetBytes = throughputBudgetBytes,
+                )
             }
 
             val stabScore = (

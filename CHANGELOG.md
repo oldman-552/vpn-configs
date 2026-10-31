@@ -1,8 +1,19 @@
 # Changelog
 
-## [v2.1] — 2026-10-31
+## [v2] — 2026-10-31 — Official `bahrain-vpn v2` Production Release (`2.0`)
 
-### Anti-censorship
+### Ultra-Fast 500 Batch Scanner, Personalized Top 100, Auto-Purge & Unified `45/30/25` Engine
+- **Ultra-Fast Multi-Port `sing-box` Batch Scanner (`SingBox.kt`, `Tester.kt`, `LocalServerIntelligence.kt`)**:
+  - Replaced single-URI process spawning during scans with chunked single-process `sing-box` batch daemons (`45` local SOCKS5h ports per daemon, `24` parallel probes + recursive bisect fallback on malformed URIs) followed by real `600 KB` HTTPS download throughput verification (`Top 30` on Wi-Fi, `Top 15` on Mobile Data / background runs).
+- **Personalized `🏆 Top 100` (`أفضل 100`) & Immediate Dead-Config Auto-Purge (`DeadConfigPurgePolicy`, `Repo.kt`, `AppViewModel.kt`)**:
+  - Upgraded the per-network personalized pool from `Top 50` to **`Top 100`** (`WIFI` vs `MOBILE_DATA` strictly isolated, `3h` freshness TTL).
+  - Non-working configs are immediately purged from UI state and local exports (`all.txt`, `best.txt`, `sub.txt`) while enforcing **Offline Guard** (never wiping Last Known Good when the device is offline or `>= 15` tested return `0` alive), protecting **`⭐ Favorites`** & **`VIP 💎`**, and keeping `top500.last_valid.json` immutable for SHA-256 delta sync.
+- **Unified `45%` Download Throughput / `30%` Stability / `25%` Ping+Jitter Formula**:
+  - Aligned `scoring.py`, `central_top500.py`, `community_ranking.py`, `tester.py` (`SPEED_TOP = 300`, `socks`/`socks5`/`http`/`https` `sing-box` converters), `SmartServerSelector.kt`, `LocalServerIntelligence.kt`, and `ServerRanker.kt` with `0.0` speed credit for `0 KB/s` and hard pre-filtering of `allowInsecure=1` / `QUARANTINED` configs.
+- **Unified 3-Hour Background Scheduler & Settings Transparency (`WorkScheduler.kt`, `RefreshWorker.kt`, `SettingsScreen.kt`)**:
+  - Consolidated background refresh onto a single 3-hour `UniquePeriodicWork` (`bahrain_vpn_quality_refresh_3h`), skipping when VPN or VPN Hotspot is active or battery `<25%`, syncing opt-in Zero-PII community telemetry without duplicate probing, and honoring instant opt-out from **Settings** (`الفحص التلقائي لجودة السيرفرات (كل 3 ساعات)` / `Automatic Server Quality Testing (Every 3h)`).
+
+### Anti-censorship & Platform Enhancements (`v2`)
 - **Block-type detection** (DNS / SNI / IP / UDP) on the current network; results bias server ranking per protocol.
 - **TLS fragmentation** (sing-box `tls.fragment`): Auto (on when SNI filtering is detected) / Always / Off.
 - **Free Cloudflare WARP** fallback: one-time registration, used automatically once when every server fails, or manually.
