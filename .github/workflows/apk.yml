@@ -44,6 +44,14 @@ jobs:
         with:
           gradle-version: "8.14.3"
 
+      - name: Cache Robolectric Android SDK runtime jars (~/.m2)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-m2-${{ hashFiles('android/app/build.gradle.kts', 'android/admin/build.gradle.kts') }}
+          restore-keys: |
+            robolectric-m2-
+
       - name: Cache native VPN engines (sing-box + hev-socks5-tunnel)
         id: cache-sbx
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -107,7 +115,22 @@ jobs:
           SINGBOX_CONFIG_EXPORT_DIR: ${{ runner.temp }}/singbox-configs
         run: |
           set -o pipefail
-          gradle --no-daemon :app:testReleaseUnitTest :admin:testReleaseUnitTest :app:assembleRelease :admin:assembleRelease 2>&1 | tee gradle.log || {
+          run_gradle_suite() {
+            # Run :app unit tests first so Robolectric downloads android-all-instrumented in a single JVM without racing :admin
+            gradle --no-daemon :app:testReleaseUnitTest 2>&1 | tee gradle.log &&
+            gradle --no-daemon :admin:testReleaseUnitTest :app:assembleRelease :admin:assembleRelease 2>&1 | tee -a gradle.log
+          }
+          if ! run_gradle_suite; then
+            if grep -q "Failed to fetch maven artifact org.robolectric" gradle.log; then
+              echo "::warning::Transient Maven Central glitch fetching Robolectric artifact; cleaning partial download and retrying once..."
+              find ~/.m2/repository/org/robolectric -name "*.part*" -delete 2>/dev/null || true
+              sleep 5
+              run_gradle_suite || exit_gradle_fail=1
+            else
+              exit_gradle_fail=1
+            fi
+          fi
+          if [ "${exit_gradle_fail:-0}" = "1" ]; then
             python3 - <<'PY' || true
           import glob, xml.etree.ElementTree as ET
           for p in glob.glob("**/build/test-results/testReleaseUnitTest/*.xml", recursive=True):
@@ -124,7 +147,7 @@ jobs:
             awk '/What went wrong:/{f=1;n=0;next} f&&/^\* (Try|Get more help)/{f=0} f&&NF&&n<25{print;n++}' gradle.log \
               | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error title=Gradle cause::$line"; done
             exit 1
-          }
+          fi
           python3 - <<'PY'
           import glob, xml.etree.ElementTree as ET
           total = fails = errs = 0
