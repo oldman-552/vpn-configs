@@ -1,6 +1,6 @@
 // =====================================================================
-// WorkScheduler.kt — المنظّم المركزي الموحّد للفحص والتحديث الخلفي (كل 3 ساعات):
-//   • يلغي تشتّت الجدولة كل ساعة ويجمعها في UniquePeriodicWork واحد فقط (3 HOURS).
+// WorkScheduler.kt — المنظّم المركزي الموحّد للفحص والتحديث الخلفي (كل 4 ساعات):
+//   • يلغي تشتّت الجدولة القديمة (1 ساعة و 3 ساعات) ويجمعها في UniquePeriodicWork واحد فقط (4 HOURS).
 //   • يشترط توفر اتصال بالشبكة (NetworkType.CONNECTED) وعدم انخفاض البطارية.
 //   • يحترم خيار المستخدم في الإعدادات (Automatic Server Quality Testing) فورًا:
 //     عند الإيقاف يُلغي العمل الدوري مع الاحتفاظ بكافة النتائج المحفوظة للاتصال اللحظي.
@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
@@ -23,9 +24,10 @@ import java.util.concurrent.TimeUnit
 
 object WorkScheduler {
 
-    const val UNIQUE_WORK_NAME = "bahrain_vpn_quality_refresh_3h"
+    const val UNIQUE_WORK_NAME = "bahrain_vpn_quality_refresh_4h"
     const val LEGACY_WORK_NAME = "refresh"
-    const val PERIOD_HOURS: Long = CentralScoringWeights.REFRESH_INTERVAL_HOURS // 3 HOURS
+    const val LEGACY_3H_WORK_NAME = "bahrain_vpn_quality_refresh_3h"
+    const val PERIOD_HOURS: Long = CentralScoringWeights.REFRESH_INTERVAL_HOURS // 4 HOURS
     const val MIN_BATTERY_PCT: Int = 25
 
     fun buildConstraints(): Constraints =
@@ -37,21 +39,23 @@ object WorkScheduler {
     fun buildPeriodicRequest(): PeriodicWorkRequest =
         PeriodicWorkRequestBuilder<RefreshWorker>(PERIOD_HOURS, TimeUnit.HOURS)
             .setConstraints(buildConstraints())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
             .addTag(UNIQUE_WORK_NAME)
             .build()
 
-    /** يزامن حالة العمل الدوري كل 3 ساعات وفق تفضيل المستخدم ويزيل أي عمل قديم مكرر كل ساعة. */
+    /** يزامن حالة العمل الدوري كل 4 ساعات وفق تفضيل المستخدم ويزيل أي أعمال قديمة مكررة (1 ساعة أو 3 ساعات). */
     fun syncSchedule(ctx: Context) {
         val appCtx = ctx.applicationContext
         val prefs = Prefs(appCtx)
         val wm = WorkManager.getInstance(appCtx)
-        // Always retire legacy 1-hour duplicate work name
+        // Always retire legacy 1-hour and 3-hour work names cleanly
         wm.cancelUniqueWork(LEGACY_WORK_NAME)
+        wm.cancelUniqueWork(LEGACY_3H_WORK_NAME)
 
         if (prefs.autoServerQualityTesting && prefs.autoRefresh) {
             wm.enqueueUniquePeriodicWork(
                 UNIQUE_WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 buildPeriodicRequest(),
             )
         } else {
@@ -63,6 +67,7 @@ object WorkScheduler {
     fun cancel(ctx: Context) {
         val wm = WorkManager.getInstance(ctx.applicationContext)
         wm.cancelUniqueWork(LEGACY_WORK_NAME)
+        wm.cancelUniqueWork(LEGACY_3H_WORK_NAME)
         wm.cancelUniqueWork(UNIQUE_WORK_NAME)
     }
 

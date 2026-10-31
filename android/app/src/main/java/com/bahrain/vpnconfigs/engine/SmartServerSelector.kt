@@ -10,7 +10,7 @@
 //   • استبعاد أمني مسبق صارم (Hard Security Pre-Filter) لأي سيرفر يحتوي allowInsecure=1
 //     أو مصنّف Failed / QUARANTINED / CRITICAL قبل الترتيب (لا عقوبة ناعمة 0.55 بعد الآن).
 //   • عدم منح أي نقاط سرعة مجانية للسيرفر غير المقاس (0 KB/s -> 0.0).
-//   • تلاشي الثقة والدرجة للقياسات الأقدم من دورة الـ 3 ساعات (3h Freshness TTL).
+//   • تلاشي الثقة والدرجة للقياسات الأقدم من دورة الـ 4 ساعات (4h Freshness TTL).
 // =====================================================================
 package com.bahrain.vpnconfigs.engine
 
@@ -27,7 +27,7 @@ object CentralScoringWeights {
     const val THROUGHPUT_WEIGHT: Double = 0.45
     const val STABILITY_WEIGHT: Double = 0.30
     const val PING_JITTER_WEIGHT: Double = 0.25
-    const val REFRESH_INTERVAL_HOURS: Long = 3L
+    const val REFRESH_INTERVAL_HOURS: Long = 4L
     const val FRESHNESS_TTL_MS: Long = REFRESH_INTERVAL_HOURS * 3_600_000L
 }
 
@@ -345,7 +345,7 @@ object SmartServerSelector {
 
         val finalScore = ((weighted.coerceIn(0.0, 100.0)) * 10.0).roundToInt() / 10.0
 
-        // Measurement Confidence [0..100%] with 3-hour TTL staleness decay
+        // Measurement Confidence [0..100%] with 4-hour TTL staleness decay
         var conf = 0
         if (cand.locallyTested || (tel?.attempts ?: 0) >= 1) conf += 45
         if ((tel?.attempts ?: 0) >= 3) conf += 15

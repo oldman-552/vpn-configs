@@ -28,10 +28,12 @@ import com.bahrain.vpnconfigs.data.ResultLine
 import com.bahrain.vpnconfigs.data.ScanNetworkProfile
 import com.bahrain.vpnconfigs.data.ServerHint
 import com.bahrain.vpnconfigs.data.ServerSessionRecord
+import com.bahrain.vpnconfigs.engine.CentralScoringWeights
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.LocalScanMode
 import com.bahrain.vpnconfigs.engine.PersonalizedTop50Ranker
 import com.bahrain.vpnconfigs.engine.RankableServer
+import com.bahrain.vpnconfigs.engine.ScanRuntimeCoordinator
 import com.bahrain.vpnconfigs.engine.SecurityEvaluator
 import com.bahrain.vpnconfigs.engine.SequentialTunnelScanner
 import com.bahrain.vpnconfigs.engine.ServerRanker
@@ -255,27 +257,167 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private var testJob: Job? = null
     private var lastObservedDropped: Set<String> = emptySet()
+    private var lastObservedPreviewSeq: Long = ScanRuntimeCoordinator.state.value.previewSeq
+    private var lastObservedCompletionSeq: Long = ScanRuntimeCoordinator.state.value.completionSeq
 
     init {
         AppDiag.init(app)
         AppHealthMonitor.install(app)
         syncEnterpriseBundle()
 
-        // مراقبة تغيّر نوع الشبكة الفعلي (Wi-Fi مقابل بيانات الجوال) وتبديل قائمة Top-100 المخصّصة فورًا
+        // ربط الواجهة بمنسّق الفحص المركزي المستمر في الخلفية بأقصى سرعة حتى عند الانتقال لتطبيقات أخرى أو إعادة فتح التطبيق
+        viewModelScope.launch {
+            ScanRuntimeCoordinator.state.collectLatest { scanSt ->
+                if (scanSt.testing) {
+                    val curProf = currentNetworkProfile()
+                    if (scanSt.previewSeq != lastObservedPreviewSeq && scanSt.previewAlive.isNotEmpty() && scanSt.networkProfile == curProf) {
+                        lastObservedPreviewSeq = scanSt.previewSeq
+                        scanSt.previewFailedUris.forEach { failedConfigs.add(it) }
+                        scanSt.previewAlive.forEach { failedConfigs.remove(Converters.cleanUri(it.cfg)) }
+                        val aliveCleanSet = scanSt.previewAlive.map { Converters.cleanUri(it.cfg) }.toHashSet()
+                        val untouched = state.results.filter { old ->
+                            val c = Converters.cleanUri(old.cfg)
+                            c !in aliveCleanSet && c !in scanSt.previewFailedUris
+                        }
+                        val liveMerged = scanSt.previewAlive + untouched
+                        val liveBuilt = withContext(Dispatchers.IO) {
+                            buildServerList(state.configs, liveMerged, state.sortMode, curProf)
+                        }
+                        val liveSel = if (!VpnStateManager.status.value.isActive && liveBuilt.any { it.localPoolTier == LocalPoolTier.TOP_50 }) {
+                            liveBuilt.first { it.localPoolTier == LocalPoolTier.TOP_50 }.also {
+                                prefs.selectedCfg = it.cfg
+                                prefs.selectedLabel = it.name
+                            }.cfg
+                        } else {
+                            resolveSelected(state.selectedCfg, liveBuilt)
+                        }
+                        state = state.copy(
+                            testing = true,
+                            activeScanMode = scanSt.activeScanMode,
+                            activeNetworkProfile = scanSt.networkProfile,
+                            progress = scanSt.progress,
+                            results = liveMerged,
+                            servers = liveBuilt,
+                            top50Count = liveBuilt.count { it.localPoolTier == LocalPoolTier.TOP_50 },
+                            backupPoolCount = liveBuilt.count { it.localPoolTier == LocalPoolTier.BACKUP_POOL },
+                            selectedCfg = liveSel,
+                        )
+                    } else if (!state.testing || state.progress != scanSt.progress || state.activeScanMode != scanSt.activeScanMode) {
+                        state = state.copy(
+                            testing = true,
+                            activeScanMode = scanSt.activeScanMode,
+                            activeNetworkProfile = scanSt.networkProfile,
+                            progress = scanSt.progress,
+                        )
+                    }
+                } else if (scanSt.completionSeq != lastObservedCompletionSeq) {
+                    lastObservedCompletionSeq = scanSt.completionSeq
+                    val curProf = currentNetworkProfile()
+                    val r = buildRepo()
+                    if (scanSt.offlineGuardTriggered) {
+                        val (rebuiltOffline, telOffline) = withContext(Dispatchers.IO) {
+                            val saved = r.loadSavedResultsForProfile(curProf).ifEmpty { state.results }
+                            buildServerList(state.configs, saved, state.sortMode, curProf) to
+                                clientDb.getAllServerTelemetryMap()
+                        }
+                        state = state.copy(
+                            testing = false,
+                            activeScanMode = null,
+                            servers = rebuiltOffline,
+                            telemetryById = telOffline,
+                            smartDecision = computeSmartDecisionFor(rebuiltOffline, telOffline),
+                            top50Count = rebuiltOffline.count { it.localPoolTier == LocalPoolTier.TOP_50 },
+                            backupPoolCount = rebuiltOffline.count { it.localPoolTier == LocalPoolTier.BACKUP_POOL },
+                            progress = null,
+                            info = null,
+                            error = scanSt.errorMessage,
+                        )
+                    } else {
+                        scanSt.failedCleanUris.forEach { failedConfigs.add(it) }
+                        scanSt.mergedResults.forEach { failedConfigs.remove(Converters.cleanUri(it.cfg)) }
+                        val nextConfigs = scanSt.remainingConfigs.ifEmpty { state.configs }
+                        val (profileResults, rebuilt, telMap) = withContext(Dispatchers.IO) {
+                            val resForCur = if (scanSt.completedProfile == curProf) {
+                                scanSt.mergedResults
+                            } else {
+                                r.loadSavedResultsForProfile(curProf)
+                            }
+                            val builtList = buildServerList(nextConfigs, resForCur, state.sortMode, curProf)
+                            Triple(resForCur, builtList, clientDb.getAllServerTelemetryMap())
+                        }
+                        val countries = computeCountryCounts(rebuilt)
+                        val autoPicked = if (!VpnStateManager.status.value.isActive && rebuilt.any { it.localPoolTier == LocalPoolTier.TOP_50 }) {
+                            rebuilt.first { it.localPoolTier == LocalPoolTier.TOP_50 }.also {
+                                prefs.selectedCfg = it.cfg
+                                prefs.selectedLabel = it.name
+                            }.cfg
+                        } else {
+                            resolveSelected(state.selectedCfg, rebuilt)
+                        }
+                        val top100Cnt = rebuilt.count { it.localPoolTier == LocalPoolTier.TOP_50 }
+                        val bakCnt = rebuilt.count { it.localPoolTier == LocalPoolTier.BACKUP_POOL }
+                        val topItem = rebuilt.firstOrNull { it.localPoolTier == LocalPoolTier.TOP_50 } ?: rebuilt.firstOrNull()
+                        val purgedCnt = scanSt.purgedCount
+                        val doneProfile = scanSt.completedProfile ?: curProf
+                        state = state.copy(
+                            testing = false,
+                            activeScanMode = null,
+                            configs = nextConfigs,
+                            results = profileResults,
+                            servers = rebuilt,
+                            telemetryById = telMap,
+                            availableCountries = countries,
+                            selectedCfg = autoPicked,
+                            smartDecision = computeSmartDecisionFor(rebuilt, telMap),
+                            top50Count = top100Cnt,
+                            backupPoolCount = bakCnt,
+                            progress = null,
+                            allFile = scanSt.allFile ?: state.allFile,
+                            bestFile = scanSt.bestFile ?: state.bestFile,
+                            subFile = scanSt.subFile ?: state.subFile,
+                            lastUpdatedLabel = UiMessages.formatLastUpdated(
+                                state.meta.generatedAt,
+                                maxOf(prefs.lastRefreshWallMs, prefs.getLastScanWallMs(curProf)),
+                            ),
+                            info = if (top100Cnt > 0 && topItem != null && scanSt.errorMessage == null) {
+                                val purgedTag = if (purgedCnt > 0) {
+                                    tr(" • تم حذف $purgedCnt متوقف", " • Purged $purgedCnt dead")
+                                } else ""
+                                tr(
+                                    "أفضل $top100Cnt سيرفر لـ ${doneProfile.labelAr}$purgedTag • المتصدر ${topItem.name} (${topItem.latencyMs} ms)",
+                                    "Top $top100Cnt for ${doneProfile.labelEn}$purgedTag • Best: ${topItem.name} (${topItem.latencyMs} ms)",
+                                )
+                            } else null,
+                            error = scanSt.errorMessage,
+                        )
+                    }
+                } else if (scanSt.cancelledByUser && state.testing) {
+                    state = state.copy(
+                        testing = false,
+                        activeScanMode = null,
+                        progress = null,
+                        info = tr("تم إيقاف الفحص", "Scan stopped"),
+                    )
+                }
+            }
+        }
+
+        // مراقبة تغيّر نوع الشبكة الفعلي (Wi-Fi مقابل بيانات الجوال) واسترجاع نتائج الفحص المحفوظة لتلك الشبكة فورًا
         viewModelScope.launch {
             netAwareness.snapshot.collectLatest { netSnap ->
                 val newProfile = ScanNetworkProfile.fromTransportCode(netSnap.transport.code)
                 if (newProfile != state.activeNetworkProfile && state.configs.isNotEmpty()) {
-                    val (rebuilt, telMap) = withContext(Dispatchers.IO) {
-                        buildServerList(state.configs, emptyList(), state.sortMode, newProfile) to
-                            clientDb.getAllServerTelemetryMap()
+                    val (savedForNewProfile, rebuilt, telMap) = withContext(Dispatchers.IO) {
+                        val saved = buildRepo().loadSavedResultsForProfile(newProfile)
+                        val built = buildServerList(state.configs, saved, state.sortMode, newProfile)
+                        Triple(saved, built, clientDb.getAllServerTelemetryMap())
                     }
                     val topCnt = rebuilt.count { it.localPoolTier == LocalPoolTier.TOP_50 }
                     val bakCnt = rebuilt.count { it.localPoolTier == LocalPoolTier.BACKUP_POOL }
                     val sel = resolveSelected(state.selectedCfg, rebuilt)
                     state = state.copy(
                         activeNetworkProfile = newProfile,
-                        results = emptyList(),
+                        results = savedForNewProfile,
                         servers = rebuilt,
                         telemetryById = telMap,
                         top50Count = topCnt,
@@ -284,7 +426,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         smartDecision = computeSmartDecisionFor(rebuilt, telMap),
                     )
                 } else if (newProfile != state.activeNetworkProfile) {
-                    state = state.copy(activeNetworkProfile = newProfile, results = emptyList())
+                    val savedForNewProfile = withContext(Dispatchers.IO) {
+                        buildRepo().loadSavedResultsForProfile(newProfile)
+                    }
+                    state = state.copy(activeNetworkProfile = newProfile, results = savedForNewProfile)
                 }
             }
         }
@@ -305,7 +450,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val curProfile = currentNetworkProfile()
                     val deviceOnline = netAwareness.snapshot.value.connected
                     if (newlyDropped.isNotEmpty() && deviceOnline) {
+                        val filteredResults = state.results.filterNot { Converters.cleanUri(it.cfg) in newlyDropped }
                         val (purgeDecision, telAfterDrop) = withContext(Dispatchers.IO) {
+                            val repo = buildRepo()
                             val vipClean = licenseGuard.getAuthorizedVipNodes().map { Converters.cleanUri(it.uri) }.toHashSet()
                             val favClean = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
                             val favIds = clientDb.favoriteServerIds()
@@ -325,19 +472,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                         Converters.cleanUri(it) in dec.purgeableCleanUris
                                     }
                                 }
-                                buildRepo().recordPurgedDeadAndCleanFiles(
+                                repo.recordPurgedDeadAndCleanFiles(
                                     profile = curProfile,
                                     purgeableCleanUris = dec.purgeableCleanUris,
                                     remainingPool = dec.remainingPool,
                                     bestLimit = minOf(prefs.bestN, PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT),
                                 )
+                            } else {
+                                repo.saveProfileResults(curProfile, filteredResults)
                             }
                             dec to clientDb.getAllServerTelemetryMap()
                         }
                         if (purgeDecision.shouldPurge) {
                             nextConfigs = purgeDecision.remainingPool
                         }
-                        val filteredResults = state.results.filterNot { Converters.cleanUri(it.cfg) in newlyDropped }
                         val rebuilt = withContext(Dispatchers.IO) {
                             buildServerList(nextConfigs, filteredResults, state.sortMode, curProfile)
                         }
@@ -386,8 +534,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val r = buildRepo()
             val profile = prefs.feedProfile
+            val curProf = currentNetworkProfile()
             val cached = withContext(Dispatchers.IO) { r.loadCached(profile) }
-            val savedResults = withContext(Dispatchers.IO) { r.loadSavedBest() }
+            val savedResults = withContext(Dispatchers.IO) { r.loadSavedResultsForProfile(curProf) }
             val allF = withContext(Dispatchers.IO) { r.existingAllFile() }
             val bestF = withContext(Dispatchers.IO) { r.existingBestFile() }
             val subF = withContext(Dispatchers.IO) { r.existingSubFile() }
@@ -396,15 +545,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             serverHints = cached?.serverHints ?: emptyMap()
             serverFingerprints = cached?.serverFingerprints ?: emptyMap()
             val cfgs = cached?.configs ?: emptyList()
-            val curProf = currentNetworkProfile()
             val (built, initTel) = withContext(Dispatchers.IO) {
                 buildServerList(cfgs, savedResults, prefs.sortMode, curProf) to clientDb.getAllServerTelemetryMap()
             }
             val countries = computeCountryCounts(built)
             val chosen = resolveSelected(prefs.selectedCfg, built)
             val metaObj = cached?.meta ?: RemoteMeta()
+            val scanLive = ScanRuntimeCoordinator.state.value
 
             state = state.copy(
+                testing = scanLive.testing,
+                activeScanMode = scanLive.activeScanMode,
+                progress = scanLive.progress,
                 configs = cfgs,
                 servers = built,
                 telemetryById = initTel,
@@ -412,7 +564,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 selectedCfg = chosen,
                 smartDecision = computeSmartDecisionFor(built, initTel),
                 meta = metaObj,
-                lastUpdatedLabel = UiMessages.formatLastUpdated(metaObj.generatedAt, prefs.lastRefreshWallMs),
+                lastUpdatedLabel = UiMessages.formatLastUpdated(
+                    metaObj.generatedAt,
+                    maxOf(prefs.lastRefreshWallMs, prefs.getLastScanWallMs(curProf)),
+                ),
                 results = savedResults,
                 allFile = allF,
                 bestFile = bestF,
@@ -1132,11 +1287,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             val netProfile = currentNetworkProfile()
+            val nowWallMs = System.currentTimeMillis()
+            val (existingPersonalTop100, savedProfileResults) = withContext(Dispatchers.IO) {
+                clientDb.getPersonalizedRankings(netProfile, LocalPoolTier.TOP_50) to
+                    r.loadSavedResultsForProfile(netProfile)
+            }
+            val effectiveResults = if (state.results.isNotEmpty()) state.results else savedProfileResults
+            val latestSavedScanMs = maxOf(
+                prefs.getLastScanWallMs(netProfile),
+                existingPersonalTop100.maxOfOrNull { it.updatedAtMs } ?: 0L,
+                effectiveResults.maxOfOrNull { it.testedAtMs } ?: 0L,
+            )
+            val hasSavedRankings = existingPersonalTop100.isNotEmpty() || effectiveResults.isNotEmpty()
+            val isSavedScanFreshWithin4h = hasSavedRankings &&
+                latestSavedScanMs > 0L &&
+                (nowWallMs - latestSavedScanMs) in 0 until CentralScoringWeights.FRESHNESS_TTL_MS
+
             val refreshSucceededLive = res.error == null && !res.fromCacheFallback && res.configs.isNotEmpty()
             if (refreshSucceededLive) {
-                prefs.lastRefreshWallMs = System.currentTimeMillis()
-                failedConfigs.clear()
-                withContext(Dispatchers.IO) { r.clearPurgedDeadForProfile(netProfile) }
+                prefs.lastRefreshWallMs = nowWallMs
+                // لا نمسح الكونفيقات الميتة المحذوفة خلال الإطلاق الصامت طالما نتائج الفحص المحفوظة ضمن نافذة الـ 4 ساعات
+                if (!silent || !isSavedScanFreshWithin4h) {
+                    failedConfigs.clear()
+                    withContext(Dispatchers.IO) { r.clearPurgedDeadForProfile(netProfile) }
+                }
             }
 
             val newConfigs = res.configs.ifEmpty { state.configs }
@@ -1146,15 +1320,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 state.allFile
             }
 
-            val existingPersonalTop100 = withContext(Dispatchers.IO) {
-                clientDb.getPersonalizedRankings(netProfile, LocalPoolTier.TOP_50)
-            }
             val vpnOrHotspotBusy = VpnStateManager.status.value.isActive ||
                 com.bahrain.vpnconfigs.hotspot.VpnHotspotManager.state.value.isSharingActive
             val shouldAutoScan = sequentialScanner.engineAvailable &&
                 newConfigs.isNotEmpty() &&
-                !(silent && vpnOrHotspotBusy) &&
-                (refreshSucceededLive || !silent || existingPersonalTop100.isEmpty())
+                !ScanRuntimeCoordinator.isScanning &&
+                if (!silent) {
+                    true
+                } else {
+                    !vpnOrHotspotBusy && (
+                        !hasSavedRankings ||
+                            (prefs.autoServerQualityTesting && !isSavedScanFreshWithin4h)
+                        )
+                }
 
             val targetSortMode = if (shouldAutoScan) {
                 prefs.sortMode = ServerSortMode.FASTEST_DOWNLOAD.key
@@ -1165,19 +1343,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             val (rebuilt, telMap) = withContext(Dispatchers.IO) {
-                buildServerList(newConfigs, state.results, targetSortMode, netProfile) to
+                buildServerList(newConfigs, effectiveResults, targetSortMode, netProfile) to
                     clientDb.getAllServerTelemetryMap()
             }
             val countries = computeCountryCounts(rebuilt)
             val sel = resolveSelected(state.selectedCfg, rebuilt)
             val metaObj = if (res.meta.generatedAt != "—") res.meta else state.meta
-            val updatedLbl = UiMessages.formatLastUpdated(metaObj.generatedAt, prefs.lastRefreshWallMs)
+            val updatedLbl = UiMessages.formatLastUpdated(
+                metaObj.generatedAt,
+                maxOf(prefs.lastRefreshWallMs, prefs.getLastScanWallMs(netProfile)),
+            )
             val dsVer = if (res.datasetVersion > 0L) res.datasetVersion else state.datasetVersion
 
             state = state.copy(
                 loading = false,
                 sortMode = targetSortMode,
                 configs = newConfigs,
+                results = effectiveResults,
                 servers = rebuilt,
                 telemetryById = telMap,
                 availableCountries = countries,
@@ -1210,7 +1392,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else state.info,
             )
 
-            // بعد تنزيل حزمة المرشّحين: تشغيل فحص الدفعات فائق السرعة على حزمة الـ 500 لبناء أفضل 100 وحذف الميت فورًا
+            // تشغيل الفحص فائق السرعة عند طلب التحديث اليدوي، أو عند أول تشغيل بدون نتائج، أو عند انقضاء 4 ساعات
             if (shouldAutoScan) {
                 runSequentialScanInternal(scanMode = LocalScanMode.FULL_SCAN, autoAfterRefresh = true)
             }
@@ -1245,7 +1427,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         testJob?.cancel()
         val netSnap = netAwareness.refreshNow()
         val scanProfile = ScanNetworkProfile.fromTransportCode(netSnap.transport.code)
-        val isMetered = netSnap.isMetered || scanProfile == ScanNetworkProfile.MOBILE_DATA
 
         state = state.copy(
             testing = true,
@@ -1253,250 +1434,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             activeNetworkProfile = scanProfile,
             error = if (autoAfterRefresh) state.error else null,
             info = if (autoAfterRefresh && state.info != null) state.info else tr(
-                "جارٍ فحص حزمة الـ ${pool.size} فائق السرعة لبناء أفضل 100 على ${scanProfile.labelAr}…",
-                "Ultra-fast scanning ${pool.size} configs to build Top 100 on ${scanProfile.labelEn}…",
+                "جارٍ فحص حزمة الـ ${pool.size} فائق السرعة لبناء أفضل 100 على ${scanProfile.labelAr} (يستمر بالخلفية بأقصى سرعة)…",
+                "Ultra-fast scanning ${pool.size} configs for Top 100 on ${scanProfile.labelEn} (runs at full speed in background)…",
             ),
-            progress = null,
+            progress = TestProgress(
+                tr("فحص أفضل السيرفرات (${scanProfile.labelAr})", "Scanning Best Servers (${scanProfile.labelEn})"),
+                0,
+                pool.size,
+                0,
+            ),
         )
 
-        testJob = viewModelScope.launch {
-            try {
-                val basePrevResults = state.results
-                var lastUiProgressAtMs = 0L
-                val summary = sequentialScanner.executeScan(
-                    scanMode = scanMode,
-                    allCandidateConfigs = pool,
-                    fingerprintsById = serverFingerprints,
-                    networkProfile = scanProfile,
-                    isMetered = isMetered,
-                    timeoutSec = prefs.timeoutSec,
-                    dnsServer = prefs.dnsServer,
-                    useDoh = prefs.dnsDoh,
-                    isBackgroundRun = false,
-                    skipFreshWithinTtl = false,
-                    activeNetworkSupplier = { currentNetworkProfile() },
-                    onProgress = { p ->
-                        val nowUi = android.os.SystemClock.elapsedRealtime()
-                        if (p.done == 0 || p.done >= p.total || nowUi - lastUiProgressAtMs >= 65L) {
-                            lastUiProgressAtMs = nowUi
-                            withContext(Dispatchers.Main.immediate) {
-                                state = state.copy(progress = p)
-                            }
-                        }
-                    },
-                    onRankingUpdated = { _, aliveSoFar, failedSoFar ->
-                        val aliveCleanSet = aliveSoFar.map { Converters.cleanUri(it.cfg) }.toHashSet()
-                        val untouched = basePrevResults.filter { old ->
-                            val c = Converters.cleanUri(old.cfg)
-                            c !in aliveCleanSet && c !in failedSoFar
-                        }
-                        val liveMerged = aliveSoFar + untouched
-                        withContext(Dispatchers.Main.immediate) {
-                            failedSoFar.forEach { failedConfigs.add(it) }
-                            aliveSoFar.forEach { failedConfigs.remove(Converters.cleanUri(it.cfg)) }
-                        }
-                        val liveBuilt = withContext(Dispatchers.IO) {
-                            buildServerList(state.configs, liveMerged, state.sortMode, scanProfile)
-                        }
-                        withContext(Dispatchers.Main.immediate) {
-                            val liveSel = if (!VpnStateManager.status.value.isActive && liveBuilt.any { it.localPoolTier == LocalPoolTier.TOP_50 }) {
-                                liveBuilt.first { it.localPoolTier == LocalPoolTier.TOP_50 }.also {
-                                    prefs.selectedCfg = it.cfg
-                                    prefs.selectedLabel = it.name
-                                }.cfg
-                            } else {
-                                resolveSelected(state.selectedCfg, liveBuilt)
-                            }
-                            state = state.copy(
-                                results = liveMerged,
-                                servers = liveBuilt,
-                                top50Count = liveBuilt.count { it.localPoolTier == LocalPoolTier.TOP_50 },
-                                backupPoolCount = liveBuilt.count { it.localPoolTier == LocalPoolTier.BACKUP_POOL },
-                                selectedCfg = liveSel,
-                            )
-                        }
-                    },
-                )
-
-                val postNetSnap = netAwareness.refreshNow()
-                val vipProtectedSet = licenseGuard.getAuthorizedVipNodes()
-                    .map { Converters.cleanUri(it.uri) }
-                    .toHashSet()
-                val r = buildRepo()
-
-                if (summary.offlineGuardTriggered || !postNetSnap.connected) {
-                    // Offline Guard: لا نحذف أي سيرفر محفوظ عند انقطاع الإنترنت الفعلي على الجهاز
-                    val (rebuiltOffline, telOffline) = withContext(Dispatchers.IO) {
-                        buildServerList(state.configs, basePrevResults, state.sortMode, scanProfile) to
-                            clientDb.getAllServerTelemetryMap()
-                    }
-                    state = state.copy(
-                        testing = false,
-                        activeScanMode = null,
-                        servers = rebuiltOffline,
-                        telemetryById = telOffline,
-                        smartDecision = computeSmartDecisionFor(rebuiltOffline, telOffline),
-                        top50Count = rebuiltOffline.count { it.localPoolTier == LocalPoolTier.TOP_50 },
-                        backupPoolCount = rebuiltOffline.count { it.localPoolTier == LocalPoolTier.BACKUP_POOL },
-                        progress = null,
-                        info = null,
-                        error = tr(
-                            "الشبكة غير متصلة حاليًا — تم الاحتفاظ بآخر السيرفرات الشغّالة دون حذف",
-                            "Device network offline — preserved last working servers without deletion",
-                        ),
-                    )
-                    return@launch
-                }
-
-                // الحذف التلقائي الفوري للسيرفرات التي لا تعمل (مع استثناء المفضلة ⭐ و VIP والسيرفر المتصل حاليًا)
-                val activeConnectedClean = VpnStateManager.status.value.activeCfg
-                    ?.takeIf { VpnStateManager.status.value.isActive && it.isNotBlank() }
-                    ?.let { setOf(Converters.cleanUri(it)) }
-                    ?: emptySet()
-
-                val purgeDecision = withContext(Dispatchers.IO) {
-                    val favClean = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
-                    val favIds = clientDb.favoriteServerIds()
-                    val dec = DeadConfigPurgePolicy.evaluate(
-                        currentPool = state.configs,
-                        failedUris = summary.failedCleanUris,
-                        testedCount = summary.testedCount,
-                        aliveCount = summary.aliveCount,
-                        deviceOnline = true,
-                        favoriteCleanUris = favClean + activeConnectedClean,
-                        favoriteServerIds = favIds,
-                        vipCleanUris = vipProtectedSet,
-                    )
-                    if (dec.shouldPurge) {
-                        if (prefs.customConfigs.isNotEmpty()) {
-                            prefs.customConfigs = prefs.customConfigs.filterNot {
-                                Converters.cleanUri(it) in dec.purgeableCleanUris
-                            }
-                        }
-                        r.recordPurgedDeadAndCleanFiles(
-                            profile = scanProfile,
-                            purgeableCleanUris = dec.purgeableCleanUris,
-                            remainingPool = dec.remainingPool,
-                            bestLimit = minOf(prefs.bestN, PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT),
-                        )
-                    }
-                    dec
-                }
-
-                summary.failedCleanUris.forEach { deadCfg ->
-                    failedConfigs.add(deadCfg)
-                    VpnStateManager.markServerDropped(deadCfg)
-                }
-                summary.results.forEach { okRes ->
-                    val clean = Converters.cleanUri(okRes.cfg)
-                    failedConfigs.remove(clean)
-                    VpnStateManager.markServerHealthy(clean)
-                }
-
-                val nextConfigs = if (purgeDecision.shouldPurge) purgeDecision.remainingPool else state.configs
-                val freshAliveSet = summary.results.map { Converters.cleanUri(it.cfg) }.toHashSet()
-                val untouchedPrev = basePrevResults.filter { old ->
-                    val c = Converters.cleanUri(old.cfg)
-                    c !in freshAliveSet && c !in summary.failedCleanUris
-                }
-                val mergedResults = summary.results + untouchedPrev
-
-                val exportPool = (prefs.customConfigs + nextConfigs)
-                    .distinct()
-                    .filterNot { Converters.cleanUri(it) in vipProtectedSet }
-                val exportTop100Ids = summary.rankingBundle.top100.map { it.serverId }.toHashSet()
-                val exportMerged = mergedResults.filter {
-                    val clean = Converters.cleanUri(it.cfg)
-                    clean !in vipProtectedSet && (exportTop100Ids.isEmpty() || Converters.stableServerId(clean) in exportTop100Ids)
-                }
-
-                val allFile = withContext(Dispatchers.IO) {
-                    runCatching { r.writeAll(exportPool) }.getOrNull()
-                }
-                val bestPair = if (exportMerged.isNotEmpty()) {
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            r.writeBest(
-                                exportMerged.map { ResultLine(it.cfg, it.latencyMs, it.speedKbps, it.testedAtMs) },
-                                minOf(prefs.bestN, PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT),
-                            )
-                        }.getOrNull()
-                    }
-                } else null
-
-                // مزامنة الاختبار المجتمعي بدون أي نوافذ مزعجة إذا كان مفعّلًا من المستخدم
-                withContext(Dispatchers.IO) {
-                    runCatching {
-                        com.bahrain.vpnconfigs.community.CommunityTestingManager
-                            .syncFromUnifiedQualityScanIfOptedIn(
-                                ctx = getApplication(),
-                                aliveResults = summary.results,
-                            )
-                    }
-                }
-
-                val (rebuilt, telMap) = withContext(Dispatchers.IO) {
-                    buildServerList(nextConfigs, mergedResults, state.sortMode, scanProfile) to
-                        clientDb.getAllServerTelemetryMap()
-                }
-                val countries = computeCountryCounts(rebuilt)
-                val autoPicked = if (!VpnStateManager.status.value.isActive && rebuilt.any { it.localPoolTier == LocalPoolTier.TOP_50 }) {
-                    rebuilt.first { it.localPoolTier == LocalPoolTier.TOP_50 }.also {
-                        prefs.selectedCfg = it.cfg
-                        prefs.selectedLabel = it.name
-                    }.cfg
-                } else {
-                    resolveSelected(state.selectedCfg, rebuilt)
-                }
-
-                val top100Cnt = rebuilt.count { it.localPoolTier == LocalPoolTier.TOP_50 }
-                val bakCnt = rebuilt.count { it.localPoolTier == LocalPoolTier.BACKUP_POOL }
-                val topItem = rebuilt.firstOrNull { it.localPoolTier == LocalPoolTier.TOP_50 } ?: rebuilt.firstOrNull()
-                val purgedCnt = purgeDecision.purgeableCleanUris.size
-                state = state.copy(
-                    testing = false,
-                    activeScanMode = null,
-                    configs = nextConfigs,
-                    results = mergedResults,
-                    servers = rebuilt,
-                    telemetryById = telMap,
-                    availableCountries = countries,
-                    selectedCfg = autoPicked,
-                    smartDecision = computeSmartDecisionFor(rebuilt, telMap),
-                    top50Count = top100Cnt,
-                    backupPoolCount = bakCnt,
-                    progress = null,
-                    allFile = allFile ?: state.allFile,
-                    bestFile = bestPair?.first ?: state.bestFile,
-                    subFile = bestPair?.second ?: state.subFile,
-                    info = if (top100Cnt > 0 && topItem != null) {
-                        val purgedTag = if (purgedCnt > 0) {
-                            tr(" • تم حذف $purgedCnt متوقف", " • Purged $purgedCnt dead")
-                        } else ""
-                        tr(
-                            "أفضل $top100Cnt سيرفر لـ ${scanProfile.labelAr}$purgedTag • المتصدر ${topItem.name} (${topItem.latencyMs} ms)",
-                            "Top $top100Cnt for ${scanProfile.labelEn}$purgedTag • Best: ${topItem.name} (${topItem.latencyMs} ms)",
-                        )
-                    } else null,
-                    error = if (summary.results.isEmpty() && top100Cnt == 0) {
-                        tr(
-                            "لم يتأهل أي سيرفر على ${scanProfile.labelAr} حاليًا — حاول التحديث أو المحاولة لاحقًا",
-                            "No server qualified on ${scanProfile.labelEn} right now — try Refresh or retry shortly",
-                        )
-                    } else null,
-                )
-            } catch (_: CancellationException) {
-                state = state.copy(testing = false, activeScanMode = null, progress = null, info = tr("تم إيقاف الفحص", "Scan stopped"))
-            } catch (e: Exception) {
-                AppDiag.w("AppViewModel", "sequential scan failed", e)
-                state = state.copy(
-                    testing = false,
-                    activeScanMode = null,
-                    progress = null,
-                    error = UiMessages.msgTestFailed(),
-                )
-            }
-        }
+        ScanRuntimeCoordinator.startInteractiveScan(
+            ctx = getApplication(),
+            scanMode = scanMode,
+            baseConfigs = state.configs,
+            fingerprintsById = serverFingerprints,
+            basePrevResults = state.results,
+        )
     }
 
     fun pingSingleServer(item: ServerItem) {
@@ -1546,6 +1501,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     state.results.forEach { if (Converters.cleanUri(it.cfg) != cleanedCfg) add(it) }
                 }
                 val rebuilt = withContext(Dispatchers.IO) {
+                    buildRepo().saveProfileResults(netProfile, updatedResults)
                     buildServerList(state.configs, updatedResults, state.sortMode, netProfile)
                 }
                 val sel = resolveSelected(state.selectedCfg, rebuilt)
@@ -1571,8 +1527,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val deviceOnline = netAwareness.refreshNow().connected
                 var nextConfigs = state.configs
                 var wasPurged = false
+                val updatedResults = state.results.filterNot { Converters.cleanUri(it.cfg) == cleanedCfg }
                 if (deviceOnline) {
                     val purgeDec = withContext(Dispatchers.IO) {
+                        val repo = buildRepo()
                         val vipClean = licenseGuard.getAuthorizedVipNodes().map { Converters.cleanUri(it.uri) }.toHashSet()
                         val favClean = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
                         val favIds = clientDb.favoriteServerIds()
@@ -1592,12 +1550,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                     Converters.cleanUri(it) in dec.purgeableCleanUris
                                 }
                             }
-                            buildRepo().recordPurgedDeadAndCleanFiles(
+                            repo.recordPurgedDeadAndCleanFiles(
                                 profile = netProfile,
                                 purgeableCleanUris = dec.purgeableCleanUris,
                                 remainingPool = dec.remainingPool,
                                 bestLimit = minOf(prefs.bestN, PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT),
                             )
+                        } else {
+                            repo.saveProfileResults(netProfile, updatedResults)
                         }
                         dec
                     }
@@ -1606,7 +1566,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         wasPurged = true
                     }
                 }
-                val updatedResults = state.results.filterNot { Converters.cleanUri(it.cfg) == cleanedCfg }
                 val (rebuilt, telMap) = withContext(Dispatchers.IO) {
                     buildServerList(nextConfigs, updatedResults, state.sortMode, netProfile) to
                         clientDb.getAllServerTelemetryMap()
@@ -1637,6 +1596,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cancelTest() {
         testJob?.cancel()
+        ScanRuntimeCoordinator.cancelActiveScan(getApplication())
         state = state.copy(testing = false, activeScanMode = null, progress = null, info = tr("تم إيقاف الفحص", "Scan stopped"))
     }
 
@@ -1701,7 +1661,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** تفعيل أو إيقاف الفحص التلقائي لجودة السيرفرات كل 3 ساعات في الخلفية مع احترام إيقاف المستخدم فورًا. */
+    /** تفعيل أو إيقاف الفحص التلقائي لجودة السيرفرات كل 4 ساعات في الخلفية وحفظها في القوائم مع احترام إيقاف المستخدم فورًا. */
     fun setAutoServerQualityTesting(enabled: Boolean) {
         prefs.autoServerQualityTesting = enabled
         WorkScheduler.syncSchedule(getApplication())
@@ -1710,12 +1670,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             error = null,
             info = if (enabled) {
                 tr(
-                    "تم تفعيل الفحص التلقائي لجودة السيرفرات كل 3 ساعات في الخلفية",
-                    "Enabled automatic server quality testing every 3 hours",
+                    "تم تفعيل الفحص التلقائي المنتظم كل 4 ساعات وحفظ النتائج في القوائم",
+                    "Enabled automatic server quality scan every 4 hours (saved to lists)",
                 )
             } else {
                 tr(
-                    "تم إيقاف الفحص التلقائي في الخلفية مع الاحتفاظ بنتائج أفضل 100 الحالية",
+                    "تم إيقاف الفحص التلقائي في الخلفية مع الاحتفاظ بنتائج أفضل 100 المحفوظة",
                     "Disabled background server quality testing (kept saved Top 100 rankings)",
                 )
             },

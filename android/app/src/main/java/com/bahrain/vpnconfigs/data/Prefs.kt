@@ -77,6 +77,13 @@ class Prefs(ctx: Context) {
         get() = sp.getLong("last_refresh_ms", 0L)
         set(v) = sp.edit { putLong("last_refresh_ms", v.coerceAtLeast(0L)) }
 
+    fun getLastScanWallMs(profile: ScanNetworkProfile): Long =
+        sp.getLong("last_scan_wall_ms_${profile.code}", 0L)
+
+    fun setLastScanWallMs(profile: ScanNetworkProfile, wallMs: Long) {
+        sp.edit { putLong("last_scan_wall_ms_${profile.code}", wallMs.coerceAtLeast(0L)) }
+    }
+
     var autoRefresh: Boolean
         get() = sp.getBoolean("auto_refresh", true)
         set(v) = sp.edit {
@@ -84,7 +91,7 @@ class Prefs(ctx: Context) {
             putBoolean("auto_server_quality_testing_3h", v)
         }
 
-    /** الفحص التلقائي لجودة السيرفرات في الخلفية (كل 3 ساعات) — مفعّل افتراضياً وبدون نوافذ منبثقة مزعجة. */
+    /** الفحص التلقائي لجودة السيرفرات في الخلفية (كل 4 ساعات) — مفعّل افتراضياً وبدون نوافذ منبثقة مزعجة. */
     var autoServerQualityTesting: Boolean
         get() = sp.getBoolean("auto_server_quality_testing_3h", sp.getBoolean("auto_refresh", true))
         set(v) = sp.edit {

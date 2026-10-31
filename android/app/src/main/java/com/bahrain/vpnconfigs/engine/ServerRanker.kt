@@ -169,7 +169,7 @@ object ServerRanker {
         return null
     }
 
-    /** معامل حداثة القياس للتعامل الشفاف مع القياسات القديمة وفق دورة الـ 3 ساعات دون تضخيمها. */
+    /** معامل حداثة القياس للتعامل الشفاف مع القياسات القديمة وفق دورة الـ 4 ساعات دون تضخيمها. */
     fun computeFreshnessFactor(lastTestedAtMs: Long, nowMs: Long): Double {
         if (lastTestedAtMs <= 0L || nowMs <= lastTestedAtMs) return 1.0
         val ageMs = nowMs - lastTestedAtMs

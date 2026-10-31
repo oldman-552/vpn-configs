@@ -16,6 +16,7 @@ import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.LocalScanMode
 import com.bahrain.vpnconfigs.engine.PersonalizedTop50Ranker
 import com.bahrain.vpnconfigs.engine.RankableServer
+import com.bahrain.vpnconfigs.engine.ScanRuntimeCoordinator
 import com.bahrain.vpnconfigs.engine.SequentialTunnelScanner
 import com.bahrain.vpnconfigs.engine.ServerRanker
 import com.bahrain.vpnconfigs.engine.ServerSortMode
@@ -705,12 +706,15 @@ class Top500AndPersonalizedTop50Test {
     }
 
     @Test
-    fun workSchedulerConfiguresThreeHourIntervalAndPrefsHonorsOptOut() {
+    fun workSchedulerConfiguresFourHourIntervalAndPrefsHonorsOptOut() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val prefs = Prefs(ctx)
 
-        assertEquals(3L, WorkScheduler.PERIOD_HOURS)
-        assertEquals("bahrain_vpn_quality_refresh_3h", WorkScheduler.UNIQUE_WORK_NAME)
+        assertEquals(4L, WorkScheduler.PERIOD_HOURS)
+        assertEquals("bahrain_vpn_quality_refresh_4h", WorkScheduler.UNIQUE_WORK_NAME)
+        assertEquals(4L, CentralScoringWeights.REFRESH_INTERVAL_HOURS)
+        assertEquals(4L * 3_600_000L, CentralScoringWeights.FRESHNESS_TTL_MS)
+        assertEquals(4L * 3_600_000L, DeadConfigPurgePolicy.PURGE_TTL_MS)
 
         // Default is enabled (true) and synced with autoRefresh
         prefs.autoServerQualityTesting = true
@@ -722,6 +726,119 @@ class Top500AndPersonalizedTop50Test {
         assertFalse(prefs.autoServerQualityTesting)
         assertFalse(prefs.autoRefresh)
         prefs.autoServerQualityTesting = true
+    }
+
+    @Test
+    fun persistentProfileResultsAndFourHourScheduledScanSaveToAllLists() = runBlocking {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val repo = Repo(ctx)
+        val prefs = Prefs(ctx)
+        val db = ClientDatabase.getInstance(ctx)
+
+        val wifiUri1 = Converters.cleanUri(buildSampleUri(901))
+        val wifiUri2 = Converters.cleanUri(buildSampleUri(902))
+        val cellUri1 = Converters.cleanUri(buildSampleUri(951))
+        val nowMs = 1_793_600_000_000L
+
+        repo.saveProfileResults(
+            ScanNetworkProfile.WIFI,
+            listOf(
+                TestResult(
+                    cfg = wifiUri1,
+                    ok = true,
+                    latencyMs = 42L,
+                    speedKbps = 9_400.0,
+                    testedAtMs = nowMs,
+                    establishMs = 80L,
+                    jitterMs = 2.4,
+                    packetLossPct = 0.0,
+                    stabilityScore = 93.5,
+                ),
+                TestResult(
+                    cfg = wifiUri2,
+                    ok = true,
+                    latencyMs = 68L,
+                    speedKbps = 5_100.0,
+                    testedAtMs = nowMs,
+                    establishMs = 110L,
+                    jitterMs = 4.1,
+                    packetLossPct = 0.0,
+                    stabilityScore = 88.0,
+                ),
+            ),
+        )
+        repo.saveProfileResults(
+            ScanNetworkProfile.MOBILE_DATA,
+            listOf(
+                TestResult(
+                    cfg = cellUri1,
+                    ok = true,
+                    latencyMs = 74L,
+                    speedKbps = 6_800.0,
+                    testedAtMs = nowMs,
+                    establishMs = 120L,
+                    jitterMs = 5.0,
+                    packetLossPct = 0.0,
+                    stabilityScore = 89.0,
+                ),
+            ),
+        )
+        prefs.setLastScanWallMs(ScanNetworkProfile.WIFI, nowMs)
+        prefs.setLastScanWallMs(ScanNetworkProfile.MOBILE_DATA, nowMs - 60_000L)
+
+        // Simulate full app close & reopen with a brand-new Repo + Prefs instance
+        val reloadedRepo = Repo(ctx)
+        val reloadedPrefs = Prefs(ctx)
+        val loadedWifi = reloadedRepo.loadSavedResultsForProfile(ScanNetworkProfile.WIFI)
+        val loadedCell = reloadedRepo.loadSavedResultsForProfile(ScanNetworkProfile.MOBILE_DATA)
+
+        assertEquals(2, loadedWifi.size)
+        assertEquals(wifiUri1, loadedWifi[0].cfg)
+        assertEquals(9_400.0, loadedWifi[0].speedKbps, 0.01)
+        assertEquals(93.5, loadedWifi[0].stabilityScore, 0.01)
+        assertEquals(2.4, loadedWifi[0].jitterMs, 0.01)
+        assertEquals(1, loadedCell.size)
+        assertEquals(cellUri1, loadedCell[0].cfg)
+        assertEquals(nowMs, reloadedPrefs.getLastScanWallMs(ScanNetworkProfile.WIFI))
+
+        // Verify 4-hour scheduled scan saves results across SQLite, local_results_WIFI.json, bestFile, subFile, and selectedCfg
+        val pool = (1..40).map { buildSampleUri(1000 + it) }
+        val mockBatch = TunnelBatchProbeExecutor { req ->
+            req.cfgs.mapIndexed { idx, raw ->
+                val clean = Converters.cleanUri(raw)
+                val alive = idx < 28
+                TestResult(
+                    cfg = clean,
+                    ok = alive,
+                    latencyMs = if (alive) 38L + idx else 0L,
+                    speedKbps = if (alive && req.measureSpeed) 12_000.0 - idx * 150.0 else 0.0,
+                    establishMs = if (alive) 85L else 0L,
+                    jitterMs = if (alive) 2.5 else 0.0,
+                    packetLossPct = if (alive) 0.0 else 100.0,
+                    stabilityScore = if (alive) 92.0 else 0.0,
+                )
+            }
+        }
+        val mockScanner = SequentialTunnelScanner(ctx = ctx, clientDb = db, batchExecutor = mockBatch)
+        val ok = ScanRuntimeCoordinator.executeScheduledFourHourScan(
+            ctx = ctx,
+            baseConfigs = pool,
+            fingerprintsById = emptyMap(),
+            scanProfile = ScanNetworkProfile.WIFI,
+            isMetered = false,
+            customScanner = mockScanner,
+            activeNetworkSupplier = { ScanNetworkProfile.WIFI },
+        )
+        assertTrue(ok)
+
+        val persistedAfter4h = Repo(ctx).loadSavedResultsForProfile(ScanNetworkProfile.WIFI)
+        assertTrue("Expected 4h scan results persisted for relaunch", persistedAfter4h.size >= 28)
+        assertTrue(Prefs(ctx).getLastScanWallMs(ScanNetworkProfile.WIFI) > 0L)
+        assertNotNull(Repo(ctx).existingBestFile())
+        assertNotNull(Repo(ctx).existingSubFile())
+        assertEquals(28, db.getPersonalizedRankings(ScanNetworkProfile.WIFI, LocalPoolTier.TOP_50).size)
+        // Mobile Data saved results remain completely untouched by a Wi-Fi 4h scan
+        assertEquals(1, Repo(ctx).loadSavedResultsForProfile(ScanNetworkProfile.MOBILE_DATA).size)
     }
 
     @Test

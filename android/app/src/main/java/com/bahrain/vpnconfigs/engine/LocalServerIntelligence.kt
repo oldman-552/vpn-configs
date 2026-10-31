@@ -3,7 +3,7 @@
 //   • السلطة الوحيدة والحصرية لاختيار أفضل 100 سيرفر مخصّص (Personalized Top 100)
 //     ومجمّع الاحتياطي المؤهّل (Backup Pool) بناءً على الفحص الفعلي على شبكة المستخدم.
 //   • فصل صارم ومستقل تمامًا بين ترتيب وسجل شبكة Wi-Fi وبين بيانات الجوال (Mobile Data)
-//     مع صلاحية قياس (TTL) متوافقة مع دورة الـ 3 ساعات (3 HOURS).
+//     مع صلاحية قياس (TTL) متوافقة مع دورة الـ 4 ساعات (4 HOURS).
 //   • المعادلة المركزية الموحّدة (45% سرعة تنزيل فعلية / 30% ثبات واستقرار / 25% بنق وتذبذب)
 //     مع صفر نقاط مجانية لغير المقاس واستبعاد أمني مسبق صارم لـ allowInsecure=1.
 //   • محرّك الفحص الدفعي المتوازي (Batch Multi-Port SingBox) على الجهاز الحقيقي:
@@ -110,8 +110,8 @@ typealias PersonalizedTop100Ranker = PersonalizedTop50Ranker
 object PersonalizedTop50Ranker {
     const val PERSONALIZED_TOP_LIMIT = 100
     const val QUALIFIED_BACKUP_LIMIT = 100
-    const val STALE_WIFI_MS = CentralScoringWeights.FRESHNESS_TTL_MS   // 3 hours
-    const val STALE_MOBILE_MS = CentralScoringWeights.FRESHNESS_TTL_MS // 3 hours
+    const val STALE_WIFI_MS = CentralScoringWeights.FRESHNESS_TTL_MS   // 4 hours
+    const val STALE_MOBILE_MS = CentralScoringWeights.FRESHNESS_TTL_MS // 4 hours
     const val OFFLINE_GUARD_MIN_TESTED = 15
 
     fun staleThresholdMs(profile: ScanNetworkProfile): Long =
@@ -194,7 +194,7 @@ object PersonalizedTop50Ranker {
                 CentralScoringWeights.STABILITY_WEIGHT * stabilityComposite +
                 CentralScoringWeights.PING_JITTER_WEIGHT * pingJitterComposite
 
-        // 3-hour TTL freshness decay
+        // 4-hour TTL freshness decay
         val ageMs = (nowMs - stats.lastScanAtMs).coerceAtLeast(0L)
         val staleWindow = staleThresholdMs(stats.networkProfile)
         if (ageMs > staleWindow) {
@@ -439,7 +439,7 @@ class SequentialTunnelScanner(
         private const val BATCH_SIZE = 180
         private const val STAGE1_PARALLELISM = 120
         private const val STAGE2_PARALLELISM = 15
-        const val BACKGROUND_STAGE2_TOP_LIMIT = 15
+        const val BACKGROUND_STAGE2_TOP_LIMIT = 25
 
         private fun pickSingleFreePort(basePort: Int = 22800): Int {
             val loopback = InetAddress.getByName("127.0.0.1")

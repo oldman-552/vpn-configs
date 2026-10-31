@@ -416,19 +416,19 @@ fun SettingsAndExportScreen(
             }
         }
 
-        // ── إعدادات الفحص التلقائي كل 3 ساعات ومعاملات الترتيب ──
+        // ── إعدادات الفحص التلقائي كل 4 ساعات ومعاملات الترتيب ──
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(tr("معاملات الفحص والترتيب والتحديث (كل 3 ساعات)", "Scan, Ranking & 3-Hour Sync Parameters"), style = MaterialTheme.typography.titleMedium)
+                Text(tr("معاملات الفحص والترتيب والتحديث (كل 4 ساعات)", "Scan, Ranking & 4-Hour Sync Parameters"), style = MaterialTheme.typography.titleMedium)
 
                 SettingToggleRow(
                     title = tr(
-                        "الفحص التلقائي لجودة السيرفرات (كل 3 ساعات)",
-                        "Automatic Server Quality Testing (Every 3h)",
+                        "الفحص التلقائي المنتظم لجودة السيرفرات (كل 4 ساعات)",
+                        "Automatic Server Quality Testing (Every 4h)",
                     ),
                     subtitle = tr(
-                        "يجلب أحدث حزمة كل 3 ساعات ويقيس الاستجابة والسرعة الفعلية (تقدير البيانات: ~9–18 MB لكل دورة عند خمول VPN والبطارية كافية). عند الإيقاف يتوقف فحص الخلفية مع الاحتفاظ بقائمة أفضل 100 المحفوظة.",
-                        "Refreshes the pool every 3 hours and measures latency & download speed (~9–18 MB per idle cycle when VPN/Hotspot are inactive and battery is sufficient). Turning off cancels background work while keeping saved Top 100.",
+                        "يجلب أحدث حزمة كل 4 ساعات ويفحص الاستجابة والسرعة الفعلية ويحفظ النتائج في قوائم التطبيق (تقدير البيانات: ~15–22 MB لكل دورة عند خمول VPN والبطارية كافية). عند الإيقاف يتوقف فحص الخلفية مع الاحتفاظ بقائمة أفضل 100 المحفوظة.",
+                        "Refreshes the pool every 4 hours, measures latency & download speed, and saves results to app lists (~15–22 MB per idle cycle when VPN/Hotspot are inactive and battery is sufficient). Turning off cancels background work while keeping saved Top 100.",
                     ),
                     checked = autoRef,
                     onCheckedChange = {
