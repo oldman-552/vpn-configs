@@ -1,5 +1,5 @@
 requests>=2.34.2
-beautifulsoup4>=4.12
+beautifulsoup4>=4.15.0
 jdatetime>=6.1.1
 PySocks>=1.7.1
 cryptography>=50.0.2
