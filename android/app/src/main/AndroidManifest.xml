@@ -47,6 +47,18 @@
                 android:value="vpn" />
         </service>
 
+        <!-- ودجت الشاشة الرئيسية: زر اتصال سريع مع الحالة -->
+        <receiver
+            android:name=".vpn.VpnWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_vpn_info" />
+        </receiver>
+
         <!-- زر التشغيل السريع في شريط الإشعارات العلوي (Quick Settings Tile) -->
         <service
             android:name=".vpn.QuickTileService"

@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">bahrain-vpn</string>
     <string name="tile_label">bahrain-vpn • Quick VPN</string>
+    <string name="widget_description">Quick connect button with VPN status</string>
 </resources>
