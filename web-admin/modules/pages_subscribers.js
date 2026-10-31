@@ -54,7 +54,7 @@ const SubscribersViews = {
               <input id="newUDailyMb" type="number" placeholder="${t("الحصة اليومية MB (0=مفتوح)", "Daily Quota MB (0=unlimited)")}" />
             </div>
             <div style="margin-top:12px">
-              <button class="btn" onclick="handleCreateUser()">${t("إنشاء الحساب وتوقيع الترخيص", "Create & Sign License")}</button>
+              <button class="btn" data-on="click:handleCreateUser">${t("إنشاء الحساب وتوقيع الترخيص", "Create & Sign License")}</button>
             </div>
           </div>
           <div class="card">
@@ -68,8 +68,8 @@ const SubscribersViews = {
                   <td>${esc(u.subscription_type)}</td>
                   <td>${esc(u.subscription_expiration || "LIFETIME")}</td>
                   <td>
-                    <button class="btn btn-outline" onclick="toggleUserBlock('${u.id}')">${u.account_status === "BLOCKED" ? t("فك الحظر", "Unblock") : t("حظر فوري", "Block")}</button>
-                    <button class="btn btn-danger" onclick="deleteUser('${u.id}')">${t("حذف", "Delete")}</button>
+                    <button class="btn btn-outline" data-on="click:toggleUserBlock" data-args='["${u.id}"]'>${u.account_status === "BLOCKED" ? t("فك الحظر", "Unblock") : t("حظر فوري", "Block")}</button>
+                    <button class="btn btn-danger" data-on="click:deleteUser" data-args='["${u.id}"]'>${t("حذف", "Delete")}</button>
                   </td>
                 </tr>`).join("")}
               </tbody>
@@ -90,8 +90,8 @@ const SubscribersViews = {
                   <td>${esc(u.subscription_start || "—")}</td>
                   <td>${esc(u.subscription_expiration || "LIFETIME")}</td>
                   <td>
-                    <button class="btn btn-outline" onclick="extendUserHours('${u.id}', 48)">+48h</button>
-                    <button class="btn btn-success" onclick="convertUserPaid('${u.id}', 'MONTHLY')">${t("ترقية لشهري", "Convert Monthly")}</button>
+                    <button class="btn btn-outline" data-on="click:extendUserHours" data-args='["${u.id}",48]'>+48h</button>
+                    <button class="btn btn-success" data-on="click:convertUserPaid" data-args='["${u.id}","MONTHLY"]'>${t("ترقية لشهري", "Convert Monthly")}</button>
                   </td>
                 </tr>`).join("")}
               </tbody>
@@ -108,7 +108,7 @@ const SubscribersViews = {
               <input id="bindModel" placeholder="${t("طراز الهاتف", "Device Model")}" />
               <input id="bindPassReSign" type="password" placeholder="${t("كلمة مرور المشترك لإعادة ختم الشهادة", "Subscriber Password to Re-seal Envelope")}" />
             </div>
-            <div style="margin-top:12px"><button class="btn" onclick="bindDeviceToUser()">${t("اعتماد الجهاز وتحديث الشهادة", "Authorize & Re-Sign")}</button></div>
+            <div style="margin-top:12px"><button class="btn" data-on="click:bindDeviceToUser">${t("اعتماد الجهاز وتحديث الشهادة", "Authorize & Re-Sign")}</button></div>
           </div>
           <div class="card">
             <h3>${t("الأجهزة المسجّلة", "Registered Devices")} (${db.user_devices.length})</h3>
@@ -122,7 +122,7 @@ const SubscribersViews = {
                     <td><code>${esc(d.device_install_id)}</code></td>
                     <td>${esc(d.model || d.device_name || "Android")}</td>
                     <td><span class="badge ${d.device_status === "AUTHORIZED" ? "b-ok" : "b-err"}">${esc(d.device_status)}</span></td>
-                    <td><button class="btn btn-danger" onclick="revokeDevice('${d.id}')">${t("سحب التفويض", "Revoke")}</button></td>
+                    <td><button class="btn btn-danger" data-on="click:revokeDevice" data-args='["${d.id}"]'>${t("سحب التفويض", "Revoke")}</button></td>
                   </tr>`;
                 }).join("")}
               </tbody>
@@ -141,7 +141,7 @@ const SubscribersViews = {
                   <td>${esc(u.username)}</td>
                   <td>${esc(u.account_status)}</td>
                   <td>${esc(u.session_revoked_at || "—")}</td>
-                  <td><button class="btn btn-danger" onclick="forceRevokeUserSessions('${u.id}')">${t("قطع جميع الجلسات فورًا", "Force Disconnect")}</button></td>
+                  <td><button class="btn btn-danger" data-on="click:forceRevokeUserSessions" data-args='["${u.id}"]'>${t("قطع جميع الجلسات فورًا", "Force Disconnect")}</button></td>
                 </tr>`).join("")}
               </tbody>
             </table>

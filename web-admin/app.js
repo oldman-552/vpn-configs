@@ -8,7 +8,7 @@ function renderSidebar() {
   const nav = document.getElementById("sidebarNav");
   nav.innerHTML = PAGES.map(
     (p) => `<button class="nav-btn ${AppState.activePage === p.id ? "active" : ""}"
-              onclick="switchPage('${p.id}')">${esc(t(p.ar, p.en))}</button>`
+              data-on="click:switchPage" data-args='["${p.id}"]'>${esc(t(p.ar, p.en))}</button>`
   ).join("");
 }
 

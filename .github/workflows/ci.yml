@@ -40,6 +40,16 @@ jobs:
       - name: Run unit, security & pipeline test suite
         run: pytest -v
 
+      - name: Web admin — syntax, CSP and event dispatcher
+        run: |
+          for jsf in web-admin/*.js web-admin/modules/*.js community-worker/worker.js; do node --check "$jsf"; done
+          if grep -rnE '\son(click|change|input|submit|load|error|key[a-z]+|mouse[a-z]+)=' web-admin; then
+            echo "Inline event handlers are blocked by CSP; use data-on (see web-admin/events.js)"; exit 1
+          fi
+          grep -q "script-src 'self';" web-admin/index.html
+          grep -q "script-src 'self';" web-admin/monitor.html
+          node tests/web/events_dispatch_test.js
+
       - name: Validate GitHub Actions workflow schemas & SHA pinning
         run: |
           python - <<'PY'

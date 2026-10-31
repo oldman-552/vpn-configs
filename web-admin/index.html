@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.github.com https://cdn.jsdelivr.net https://raw.githubusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.github.com https://cdn.jsdelivr.net https://raw.githubusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <meta name="referrer" content="no-referrer" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ULTIMATE VPN ENTERPRISE — لوحة الإدارة الشاملة</title>
@@ -40,7 +40,7 @@
         </div>
       </div>
 
-      <button class="btn" style="padding:12px;margin-top:6px" onclick="handleAdminUnlock()">
+      <button class="btn" style="padding:12px;margin-top:6px" data-on="click:handleAdminUnlock">
         فك تشفير الخزنة والدخول للوحة التحكم / Unlock Console
       </button>
       <a class="btn btn-outline" href="monitor.html" style="padding:10px;text-align:center;text-decoration:none;margin-top:4px">
@@ -64,22 +64,23 @@
     <main class="main-area">
       <header class="topbar">
         <div style="flex:1;min-width:220px">
-          <input placeholder="بحث فوري في المستخدمين، الأجهزة، الخوادم… / Quick Search…" oninput="onGlobalSearch(this.value)" />
+          <input placeholder="بحث فوري في المستخدمين، الأجهزة، الخوادم… / Quick Search…" data-on="input:onGlobalSearch" data-args='["$value"]' />
         </div>
         <div class="toolbar-actions">
           <a class="btn btn-outline" href="monitor.html" style="text-decoration:none">📡 Live Monitor</a>
-          <button class="btn btn-outline" onclick="syncFromGitHub()">↻ GitHub Sync</button>
-          <button class="btn btn-success" onclick="saveAndPublishToGitHub('Manual admin publish')">☁ Publish Signed Bundle</button>
-          <button class="btn btn-outline" onclick="exportExcel()">⇩ CSV/Excel</button>
-          <button class="btn btn-outline" onclick="exportPdf()">⇩ PDF</button>
-          <button class="btn btn-outline" onclick="toggleLanguage()">AR / EN</button>
-          <button class="btn btn-outline" onclick="toggleTheme()">☾ / ☀</button>
+          <button class="btn btn-outline" data-on="click:syncFromGitHub">↻ GitHub Sync</button>
+          <button class="btn btn-success" data-on="click:saveAndPublishToGitHub" data-args='["Manual admin publish"]'>☁ Publish Signed Bundle</button>
+          <button class="btn btn-outline" data-on="click:exportExcel">⇩ CSV/Excel</button>
+          <button class="btn btn-outline" data-on="click:exportPdf">⇩ PDF</button>
+          <button class="btn btn-outline" data-on="click:toggleLanguage">AR / EN</button>
+          <button class="btn btn-outline" data-on="click:toggleTheme">☾ / ☀</button>
         </div>
       </header>
 
       <section id="pageContainer"></section>
     </main>
   </div>
+  <script src="events.js"></script>
 
   <script src="crypto_github.js"></script>
   <script src="modules/state_and_sync.js"></script>

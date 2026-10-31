@@ -25,7 +25,7 @@ const InfrastructureViews = {
               <input id="vipUri" placeholder="vless://... | hysteria2://... | trojan://..." />
             </div>
             <div style="margin-top:10px">
-              <button class="btn" onclick="handleAddVipServer()">💎 ${t("إضافة وتشفير ونشر عقدة VIP", "Encrypt & Publish VIP Node")}</button>
+              <button class="btn" data-on="click:handleAddVipServer">💎 ${t("إضافة وتشفير ونشر عقدة VIP", "Encrypt & Publish VIP Node")}</button>
             </div>
             ${vipRows.length > 0 ? `
             <table style="margin-top:12px">
@@ -38,8 +38,8 @@ const InfrastructureViews = {
                   <td>${v.priority || 100}</td>
                   <td><span class="badge ${v.enabled !== false ? "b-ok" : "b-warn"}">${v.enabled !== false ? "ACTIVE" : "PAUSED"}</span></td>
                   <td>
-                    <button class="btn btn-outline" onclick="toggleVipServer('${v.id}')">${v.enabled !== false ? t("إيقاف", "Pause") : t("تفعيل", "Enable")}</button>
-                    <button class="btn btn-danger" onclick="deleteVipServer('${v.id}')">${t("حذف", "Delete")}</button>
+                    <button class="btn btn-outline" data-on="click:toggleVipServer" data-args='["${v.id}"]'>${v.enabled !== false ? t("إيقاف", "Pause") : t("تفعيل", "Enable")}</button>
+                    <button class="btn btn-danger" data-on="click:deleteVipServer" data-args='["${v.id}"]'>${t("حذف", "Delete")}</button>
                   </td>
                 </tr>`).join("")}
               </tbody>
@@ -51,7 +51,7 @@ const InfrastructureViews = {
               <h3>${t("الخوادم العامة الحيّة والتصنيف الذكي (@data)", "Live Public Server Pool & Smart Classification")} (${AppState.liveServers.length})</h3>
               <div style="display:flex;gap:8px;flex-wrap:wrap" class="no-print">
                 <a class="btn btn-outline" href="monitor.html" target="_blank" style="text-decoration:none">📊 ${t("فتح منصة الذكاء التاريخي (24h/7d/30d/90d)", "Open Historical Intelligence Dashboard")}</a>
-                <button class="btn" onclick="triggerPipelineSweep()">${t("تشغيل جامع وفاحص السيرفرات الآن (GitHub Actions)", "Trigger Collector & Tester Sweep")}</button>
+                <button class="btn" data-on="click:triggerPipelineSweep">${t("تشغيل جامع وفاحص السيرفرات الآن (GitHub Actions)", "Trigger Collector & Tester Sweep")}</button>
               </div>
             </div>
             <table>
@@ -123,7 +123,7 @@ const InfrastructureViews = {
             <p style="color:var(--muted);margin-top:6px">${t("يستورد المشرف هنا تقارير التشخيص المعمّاة التي يشاركها المستخدم طوعًا من التطبيق (بدون أي مراقبة خفية للتصفح).", "Displays opt-in redacted diagnostic reports shared by users (zero hidden browsing surveillance).")}</p>
             <div class="no-print" style="margin-top:12px;display:flex;gap:8px">
               <textarea id="diagImportJson" rows="3" placeholder='${t("الصق JSON تقرير التشخيص المصدّر من هاتف المستخدم...", "Paste exported diagnostic JSON from user app...")}'></textarea>
-              <button class="btn" onclick="importDiagnosticJson()">${t("استيراد", "Import")}</button>
+              <button class="btn" data-on="click:importDiagnosticJson">${t("استيراد", "Import")}</button>
             </div>
             <table>
               <thead><tr><th>${t("التاريخ", "Timestamp")}</th><th>Install ID</th><th>↓ Mbps</th><th>↑ Mbps</th><th>Ping</th></tr></thead>

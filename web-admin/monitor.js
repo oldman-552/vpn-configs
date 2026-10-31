@@ -390,7 +390,7 @@ window.renderServerExplorer = function () {
         ${filtered.slice(0, 80).map((s) => {
           const stCls = s.is_active ? "pill-ok" : s.suppressed ? "pill-err" : "pill-warn";
           const upTxt = s.uptime_24h_pct !== null ? `${s.uptime_24h_pct.toFixed(1)}% (${s.uptime_24h_basis.slice(0, 3)})` : tr("غير متاح", "UNKNOWN");
-          return `<tr class="srv-row" onclick="openServerModal('${escHtml(s.server_id)}')">
+          return `<tr class="srv-row" data-on="click:openServerModal" data-args='["${escHtml(s.server_id)}"]'>
             <td><code>${escHtml(s.server_id.slice(0, 10))}</code></td>
             <td><span class="pill ${stCls}">${escHtml(s.status)}</span></td>
             <td><strong>${escHtml(s.country)}</strong></td>
@@ -443,7 +443,7 @@ window.openServerModal = function (serverId) {
   content.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <h3 style="margin:0">${tr("التفاصيل التاريخية للسيرفر", "Historical Server Intelligence")} — <code>${escHtml(s.server_id.slice(0, 12))}</code></h3>
-      <button class="btn btn-outline" onclick="closeServerModal()">✕</button>
+      <button class="btn btn-outline" data-on="click:closeServerModal">✕</button>
     </div>
     <div class="kpi-grid" style="margin-bottom:14px">
       <div class="kpi-card"><div class="kpi-label">${tr("أول رصد", "First Seen")}</div><div style="font-size:0.84rem;font-weight:700">${escHtml(s.first_seen_at)}</div></div>
