@@ -36,7 +36,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import android.content.Intent
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -296,6 +299,25 @@ fun AppHealthAndFailoverCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(tr("نسخ تقرير التشخيص التقني الآمن", "Copy Redacted Technical Report"))
+                }
+                val ctx = LocalContext.current
+                FilledTonalButton(
+                    onClick = {
+                        runCatching {
+                            val file = vm.writeRedactedDiagnosticReportFile()
+                            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/json"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                putExtra(Intent.EXTRA_SUBJECT, file.name)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            ctx.startActivity(Intent.createChooser(send, tr("مشاركة تقرير التشخيص", "Share diagnostic report")))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(tr("مشاركة التقرير كملف (للإبلاغ عن مشكلة)", "Share report as file (to report a problem)"))
                 }
             }
         }
