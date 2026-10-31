@@ -174,3 +174,34 @@ def test_top500_checksums_monotonic_versions_and_incremental_delta_sync(tmp_path
     reconstructed = [client_map[sid] for sid in delta_doc["ordered_server_ids"] if sid in client_map]
     assert len(reconstructed) == m2["qualified_count"]
     assert compute_configs_set_sha256(reconstructed) == m2["checksums"]["configs_sha256"]
+
+
+def test_manifest_signature_roundtrip_and_tamper_detection(tmp_path):
+    import base64
+
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from central_top500 import sign_manifest_file
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    key_b64 = base64.b64encode(key.private_bytes(
+        serialization.Encoding.DER, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+    )).decode()
+    manifest = tmp_path / "top500.manifest.json"
+    body = b'{"dataset_version": 7}\n'
+    manifest.write_bytes(body)
+
+    sig_b64 = sign_manifest_file(manifest, body, key_b64=key_b64)
+    sig = base64.b64decode((tmp_path / "top500.manifest.json.sig").read_text().strip())
+    assert sig == base64.b64decode(sig_b64)
+    key.public_key().verify(sig, body, ec.ECDSA(hashes.SHA256()))
+    try:
+        key.public_key().verify(sig, body.replace(b"7", b"8"), ec.ECDSA(hashes.SHA256()))
+        raise AssertionError("tampered manifest must not verify")
+    except Exception as exc:  # InvalidSignature
+        assert exc.__class__.__name__ == "InvalidSignature"
+
+    # Unsigned (transition) mode removes stale signature files
+    assert sign_manifest_file(manifest, body, key_b64="") is None
+    assert not (tmp_path / "top500.manifest.json.sig").exists()

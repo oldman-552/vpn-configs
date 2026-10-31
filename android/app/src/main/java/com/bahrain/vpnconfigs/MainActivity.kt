@@ -59,6 +59,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.bahrain.vpnconfigs.data.Prefs
+import com.bahrain.vpnconfigs.ui.PublicServerNotice
 import com.bahrain.vpnconfigs.ui.AppTheme
 import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.AppsSplitScreen
@@ -97,6 +98,7 @@ class MainActivity : ComponentActivity() {
             AppTheme {
                 CompositionLocalProvider(LocalLayoutDirection provides activeLang.layoutDirection) {
                     AppRoot()
+                    PublicServerNotice()
                 }
             }
         }
