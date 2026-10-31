@@ -325,15 +325,47 @@ class CommunityAndHotspotTest {
         try {
             val hsPort = hotspotProxy.start()
 
-            // A) PAC script works for automatic OS setup
+            // A) PAC script puts PROXY first (so Android PacProxySelector never returns NO_PROXY/DIRECT!)
+            //    and NEVER calls dnsResolve(host) (zero DNS leak & zero 10.x DNS poisoning bypass!)
             Socket("127.0.0.1", hsPort).use { c ->
                 c.soTimeout = 3000
                 c.getOutputStream().write("GET /proxy.pac HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".toByteArray())
                 c.getOutputStream().flush()
                 val txt = c.getInputStream().bufferedReader().readText()
                 assertTrue(txt.contains("FindProxyForURL"))
-                assertTrue(txt.contains("SOCKS5 127.0.0.1:$hsPort"))
+                assertTrue(
+                    "PAC must list PROXY before SOCKS5 for Android PacProxySelector compatibility",
+                    txt.contains("return \"PROXY 127.0.0.1:$hsPort; SOCKS5 127.0.0.1:$hsPort; SOCKS 127.0.0.1:$hsPort\""),
+                )
+                assertFalse("PAC must NEVER call dnsResolve(host)", txt.contains("dnsResolve("))
             }
+
+            // A2) Local reachability /status page works directly even before auth
+            Socket("127.0.0.1", hsPort).use { c ->
+                c.soTimeout = 3000
+                c.getOutputStream().write("GET /status HTTP/1.1\r\nHost: 127.0.0.1:$hsPort\r\n\r\n".toByteArray())
+                c.getOutputStream().flush()
+                val html = c.getInputStream().bufferedReader().readText()
+                assertTrue(html.contains("200 OK"))
+                assertTrue(html.contains("$hsPort"))
+            }
+            hotspotProxy.resetCounters()
+
+            // A3) Verify TUN LAN route exclusion keeps public IPs + MapDNS inside tun0 while excluding Hotspot/LAN subnets
+            val tunRoutes = com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.computeIpv4RoutesExcludingLocalLan(
+                extraActiveLanIps = listOf("10.42.0.1"),
+            )
+            assertTrue(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("1.1.1.1", tunRoutes))
+            assertTrue(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("8.8.8.8", tunRoutes))
+            assertTrue(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("198.18.0.2", tunRoutes))
+            assertTrue(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("240.0.0.15", tunRoutes))
+            assertTrue(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("10.10.34.35", tunRoutes))
+            assertFalse(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("192.168.43.50", tunRoutes))
+            assertFalse(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("192.168.174.93", tunRoutes))
+            assertFalse(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("172.20.10.2", tunRoutes))
+            assertFalse(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("169.254.10.1", tunRoutes))
+            assertFalse(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("127.0.0.1", tunRoutes))
+            assertFalse(com.bahrain.vpnconfigs.vpn.LeakProtectionEngine.isIpv4CoveredByRoutes("10.42.0.99", tunRoutes))
 
             // B) Unauthenticated HTTP proxy request rejected with 407 when auth is enabled
             Socket("127.0.0.1", hsPort).use { c ->

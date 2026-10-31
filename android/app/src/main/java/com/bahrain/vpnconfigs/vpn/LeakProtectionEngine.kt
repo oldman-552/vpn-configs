@@ -14,6 +14,11 @@ package com.bahrain.vpnconfigs.vpn
 
 import com.bahrain.vpnconfigs.util.tr
 
+data class Ipv4CidrRoute(
+    val address: String,
+    val prefixLength: Int,
+)
+
 data class TunLeakProtectionPlan(
     val captureIpv4Route: Boolean = true,
     val captureIpv6Route: Boolean = true,
@@ -114,6 +119,95 @@ object LeakProtectionEngine {
             sanitizedDnsServer = safeDns,
             useDoh = useDoh,
         )
+    }
+
+    /**
+     * يحسب مسارات IPv4 الدقيقة لواجهة `tun0` بحيث تشمل كامل الإنترنت العام وعناوين `MapDNS`
+     * (`198.18.0.2` و`240.0.0.0/4`) مع استثناء شبكات الهوتسبوت والشبكة المحلية الخاصة فقط
+     * (`192.168.0.0/16`، `172.16.0.0/12`، `169.254.0.0/16`، `127.0.0.0/8`، `224.0.0.0/4`،
+     * وأي شبكة فرعية نشطة `10.x.y.0/24` لواجهة الهوتسبوت/USB) حتى لا يبتلع `tun0` ردود الهوتسبوت المحلية.
+     */
+    fun computeIpv4RoutesExcludingLocalLan(
+        extraActiveLanIps: Collection<String> = emptyList(),
+    ): List<Ipv4CidrRoute> {
+        val excludedSpecs = mutableListOf(
+            "127.0.0.0" to 8,
+            "169.254.0.0" to 16,
+            "172.16.0.0" to 12,
+            "192.168.0.0" to 16,
+            "224.0.0.0" to 4,
+        )
+        for (rawIp in extraActiveLanIps) {
+            val parts = rawIp.trim().split('.')
+            if (parts.size == 4) {
+                val nums = parts.mapNotNull { it.toIntOrNull() }
+                if (nums.size == 4 && nums.all { it in 0..255 } && nums[0] == 10) {
+                    excludedSpecs.add("10.${nums[1]}.${nums[2]}.0" to 24)
+                }
+            }
+        }
+
+        val excludedRanges: List<Pair<Long, Long>> = excludedSpecs.mapNotNull { (ip, pfx) ->
+            val base = ipv4ToLongOrNull(ip) ?: return@mapNotNull null
+            if (pfx !in 1..32) return@mapNotNull null
+            val size = 1L shl (32 - pfx)
+            val mask = (0xFFFFFFFFL shl (32 - pfx)) and 0xFFFFFFFFL
+            val start = base and mask
+            val end = start + size - 1L
+            start to end
+        }
+
+        val out = ArrayList<Ipv4CidrRoute>(32)
+        fun walk(base: Long, prefixLen: Int) {
+            val size = if (prefixLen == 0) (1L shl 32) else (1L shl (32 - prefixLen))
+            val nodeStart = base
+            val nodeEnd = base + size - 1L
+            if (excludedRanges.any { (es, ee) -> es <= nodeStart && ee >= nodeEnd }) {
+                return
+            }
+            if (excludedRanges.none { (es, ee) -> es <= nodeEnd && ee >= nodeStart }) {
+                out.add(Ipv4CidrRoute(longToIpv4(base), prefixLen))
+                return
+            }
+            if (prefixLen < 32) {
+                val half = 1L shl (31 - prefixLen)
+                walk(base, prefixLen + 1)
+                walk(base + half, prefixLen + 1)
+            }
+        }
+        walk(0L, 0)
+        return out
+    }
+
+    fun isIpv4CoveredByRoutes(ip: String, routes: List<Ipv4CidrRoute>): Boolean {
+        val target = ipv4ToLongOrNull(ip) ?: return false
+        return routes.any { r ->
+            val base = ipv4ToLongOrNull(r.address) ?: return@any false
+            if (r.prefixLength == 0) return@any true
+            val size = 1L shl (32 - r.prefixLength)
+            val mask = (0xFFFFFFFFL shl (32 - r.prefixLength)) and 0xFFFFFFFFL
+            val start = base and mask
+            target in start..(start + size - 1L)
+        }
+    }
+
+    private fun ipv4ToLongOrNull(ip: String): Long? {
+        val parts = ip.trim().split('.')
+        if (parts.size != 4) return null
+        val nums = parts.map { it.toIntOrNull() ?: return null }
+        if (nums.any { it !in 0..255 }) return null
+        return ((nums[0].toLong() shl 24) or
+            (nums[1].toLong() shl 16) or
+            (nums[2].toLong() shl 8) or
+            nums[3].toLong()) and 0xFFFFFFFFL
+    }
+
+    private fun longToIpv4(v: Long): String {
+        val a = (v ushr 24) and 0xFFL
+        val b = (v ushr 16) and 0xFFL
+        val c = (v ushr 8) and 0xFFL
+        val d = v and 0xFFL
+        return "$a.$b.$c.$d"
     }
 
     /**

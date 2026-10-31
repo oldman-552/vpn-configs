@@ -46,6 +46,7 @@ import java.io.PushbackInputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
@@ -122,6 +123,9 @@ data class VpnHotspotState(
     val bindAddress: String = "",
     val bindPort: Int = 20880,
     val pacUrl: String = "",
+    val statusTestUrl: String = "",
+    val secondaryEndpoints: List<String> = emptyList(),
+    val localBridgeVerified: Boolean = false,
     val requireAuth: Boolean = false,
     val authUsername: String = "vpnshare",
     val authPassword: String = "",
@@ -248,6 +252,13 @@ class VpnHotspotProxyServer(
         activeUdpRelays.clear()
     }
 
+    fun resetCounters() {
+        clients.clear()
+        totalBytesDown.set(0L)
+        totalBytesUp.set(0L)
+        failClosedRejections.set(0L)
+    }
+
     fun stop() {
         running.set(false)
         runCatching { serverSocket?.close() }
@@ -324,19 +335,80 @@ class VpnHotspotProxyServer(
 
     private fun buildPacScript(): String {
         val hp = "$bindHost:$boundPort"
+        // ملاحظة هندسية حاسمة:
+        // 1) لا نستدعي dnsResolve(host) إطلاقًا داخل PAC؛ لأن استدعاءها يسرّب طلبات DNS خارج النفق،
+        //    كما أن تسميم DNS (مثل إرجاع 10.10.34.35 في إيران) يجعل isInNet(..., "10.0.0.0") يعيد DIRECT!
+        // 2) يجب وضع "PROXY host:port" أولًا لأن PacProxySelector في أندرويد لا يتعرف على كلمة "SOCKS5"
+        //    ويُرجع Proxy.NO_PROXY (اتصال عادي بدون VPN!) إذا جاءت "SOCKS5" في البداية!
         return """
             function FindProxyForURL(url, host) {
-              if (isPlainHostName(host) ||
-                  shExpMatch(host, "*.local") ||
-                  isInNet(dnsResolve(host), "10.0.0.0", "255.0.0.0") ||
-                  isInNet(dnsResolve(host), "172.16.0.0", "255.240.0.0") ||
-                  isInNet(dnsResolve(host), "192.168.0.0", "255.255.0.0") ||
-                  isInNet(dnsResolve(host), "127.0.0.0", "255.0.0.0")) {
+              if (!host || isPlainHostName(host) || host === "localhost" || shExpMatch(host, "*.local")) {
                 return "DIRECT";
               }
-              return "SOCKS5 $hp; PROXY $hp";
+              if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) {
+                if (isInNet(host, "10.0.0.0", "255.0.0.0") ||
+                    isInNet(host, "172.16.0.0", "255.240.0.0") ||
+                    isInNet(host, "192.168.0.0", "255.255.0.0") ||
+                    isInNet(host, "127.0.0.0", "255.0.0.0") ||
+                    isInNet(host, "169.254.0.0", "255.255.0.0")) {
+                  return "DIRECT";
+                }
+              }
+              return "PROXY $hp; SOCKS5 $hp; SOCKS $hp";
             }
         """.trimIndent() + "\n"
+    }
+
+    private fun buildLocalStatusHtml(): String {
+        val tunnelOk = isUpstreamTunnelVerified()
+        val stateBadge = if (tunnelOk) {
+            "✅ نفق الـ VPN متّصل ومشفّر — الجهاز جاهز للمشاركة"
+        } else {
+            "⚠️ نفق الـ VPN معلّق مؤقتًا (حماية منع التسرب نشطة)"
+        }
+        return """
+            <!doctype html>
+            <html lang="ar" dir="rtl">
+            <head>
+              <meta charset="utf-8"/>
+              <meta name="viewport" content="width=device-width,initial-scale=1"/>
+              <title>bahrain-vpn Hotspot</title>
+              <style>
+                body{font-family:sans-serif;background:#0d1117;color:#e6edf3;padding:20px;line-height:1.7}
+                .card{max-width:520px;margin:0 auto;background:#161b22;border:1px solid #30363d;border-radius:14px;padding:18px}
+                code{background:#21262d;padding:3px 8px;border-radius:6px;direction:ltr;display:inline-block;font-weight:bold;color:#58a6ff}
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <h3>🌐 بوابة نقطة اتصال bahrain-vpn</h3>
+                <p><b>$stateBadge</b></p>
+                <p>وصول هذه الصفحة يثبت أن جهازك متصل بنجاح بهاتف البث عبر الشبكة المحلية!</p>
+                <hr style="border-color:#30363d"/>
+                <p>لتمرير الإنترنت بالكامل عبر الـ VPN في إعدادات Wi‑Fi لهذا الجهاز اختر <b>البروكسي: يدوي (Manual)</b> وأدخل:</p>
+                <ul>
+                  <li>اسم المضيف / الخادم (Host / Server): <code>$bindHost</code></li>
+                  <li>المنفذ (Port): <code>$boundPort</code></li>
+                  <li>أو رابط PAC التلقائي: <code>http://$bindHost:$boundPort/proxy.pac</code></li>
+                </ul>
+              </div>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
+    private fun encodeSocks5Target(rawHost: String): Pair<Int, ByteArray> {
+        val clean = rawHost.trim().removeSurrounding("[", "]")
+        val ipv4Re = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
+        if (ipv4Re.matches(clean)) {
+            val ip4 = runCatching { InetAddress.getByName(clean) as? Inet4Address }.getOrNull()
+            if (ip4 != null) return 0x01 to ip4.address
+        }
+        if (clean.contains(':')) {
+            val ip6 = runCatching { InetAddress.getByName(clean) as? Inet6Address }.getOrNull()
+            if (ip6 != null) return 0x04 to ip6.address
+        }
+        return 0x03 to clean.toByteArray(Charsets.US_ASCII)
     }
 
     private fun handleClientSocket(client: Socket, counter: ClientCounter) {
@@ -629,6 +701,32 @@ class VpnHotspotProxyServer(
             out.write(resp)
             out.write(pacBytes)
             out.flush()
+            counter.bytesDown.addAndGet(pacBytes.size.toLong())
+            totalBytesDown.addAndGet(pacBytes.size.toLong())
+            return
+        }
+
+        // Serve instant local LAN reachability diagnostic page when opened directly on http://<bindHost>:<boundPort>/status
+        val cleanHostHdr = hostHeader.substringBefore(":").trim().removeSurrounding("[", "]")
+        val isDirectOriginCheck = !rawTarget.startsWith("http://", ignoreCase = true) &&
+            !rawTarget.startsWith("https://", ignoreCase = true) &&
+            (rawTarget == "/status" || rawTarget.startsWith("/status?") ||
+                ((rawTarget == "/" || rawTarget == "/health") &&
+                    (cleanHostHdr.isEmpty() || cleanHostHdr == bindHost || cleanHostHdr == "127.0.0.1")))
+        if (method == "GET" && isDirectOriginCheck) {
+            val htmlBytes = buildLocalStatusHtml().toByteArray(Charsets.UTF_8)
+            val resp = buildString {
+                append("HTTP/1.1 200 OK\r\n")
+                append("Content-Type: text/html; charset=utf-8\r\n")
+                append("Cache-Control: no-store\r\n")
+                append("Content-Length: ${htmlBytes.size}\r\n")
+                append("Connection: close\r\n\r\n")
+            }.toByteArray(Charsets.US_ASCII)
+            out.write(resp)
+            out.write(htmlBytes)
+            out.flush()
+            counter.bytesDown.addAndGet(htmlBytes.size.toLong())
+            totalBytesDown.addAndGet(htmlBytes.size.toLong())
             return
         }
 
@@ -692,10 +790,10 @@ class VpnHotspotProxyServer(
                 return
             }
 
-            val domBytes = host.toByteArray(Charsets.US_ASCII)
+            val (atyp, addrBytes) = encodeSocks5Target(host)
             val portBytes = byteArrayOf((port shr 8).toByte(), (port and 0xFF).toByte())
             val upstream = try {
-                connectUpstreamSocks5(0x03, domBytes, portBytes)
+                connectUpstreamSocks5(atyp, addrBytes, portBytes)
             } catch (_: Exception) {
                 out.write("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray(Charsets.US_ASCII))
                 out.flush()
@@ -727,10 +825,10 @@ class VpnHotspotProxyServer(
                 rawTarget.ifBlank { "/" }
             }
 
-            val domBytes = host.toByteArray(Charsets.US_ASCII)
+            val (atyp, addrBytes) = encodeSocks5Target(host)
             val portBytes = byteArrayOf((port shr 8).toByte(), (port and 0xFF).toByte())
             val upstream = try {
-                connectUpstreamSocks5(0x03, domBytes, portBytes)
+                connectUpstreamSocks5(atyp, addrBytes, portBytes)
             } catch (_: Exception) {
                 out.write("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray(Charsets.US_ASCII))
                 out.flush()
@@ -831,6 +929,9 @@ class VpnHotspotProxyServer(
         upstreamSock: Socket,
         counter: ClientCounter,
     ) {
+        // رفع مهلة القراءة بعد نجاح المصافحة حتى لا تنقطع جلسات HTTP/2 و YouTube والتنزيلات الطويلة
+        runCatching { clientSock.soTimeout = 300_000 }
+        runCatching { upstreamSock.soTimeout = 300_000 }
         val upIn = upstreamSock.getInputStream()
         val upOut = upstreamSock.getOutputStream()
 
@@ -854,6 +955,7 @@ class VpnHotspotProxyServer(
                 // Stream closed
             } finally {
                 runCatching { clientSock.shutdownOutput() }
+                runCatching { clientSock.soTimeout = 2_000 }
             }
         }
 
@@ -876,7 +978,7 @@ class VpnHotspotProxyServer(
             // Stream closed
         } finally {
             runCatching { upstreamSock.shutdownOutput() }
-            runCatching { upstreamToClient.get(1500, java.util.concurrent.TimeUnit.MILLISECONDS) }
+            runCatching { upstreamToClient.get(120_000, java.util.concurrent.TimeUnit.MILLISECONDS) }
             upstreamToClient.cancel(true)
         }
     }
@@ -912,6 +1014,8 @@ object VpnHotspotManager {
     @Volatile
     private var activeServer: VpnHotspotProxyServer? = null
 
+    private val secondaryServers = ConcurrentHashMap<String, VpnHotspotProxyServer>()
+
     @Volatile
     private var monitorJob: Job? = null
 
@@ -919,7 +1023,8 @@ object VpnHotspotManager {
     private var vpnWatcherStarted: Boolean = false
 
     private val DEDICATED_TETHER_PREFIXES = listOf(
-        "ap", "swlan", "wlan1", "wlan2", "softap", "rndis", "ncm", "usb", "bt-pan", "p2p-",
+        "ap", "swlan", "wlan1", "wlan2", "wlan3", "softap", "rndis", "ncm", "usb",
+        "bt-pan", "p2p-", "bridge", "br0", "br-", "tether", "wifi-ap", "uap",
     )
 
     private val BLOCKED_WAN_OR_TUN_PREFIXES = listOf(
@@ -938,22 +1043,22 @@ object VpnHotspotManager {
             p0 == 10 -> true
             p0 == 172 && p1 in 16..31 -> true
             p0 == 192 && p1 == 168 -> true
-            // Android Wi-Fi Hotspot on modern Pixel/AOSP/Samsung often uses 192.168.43.x, 192.168.137.x, or 10.x
             else -> false
         }
     }
 
     /**
-     * يفحص واجهات الشبكة الحية على الهاتف بدون روت لاكتشاف واجهة الهوتسبوت (Wi-Fi AP / USB / Wi-Fi Direct)
-     * أو الشبكة المحلية الخاصة، مع رفض أي عنوان عام أو واجهة خلوية أو نفق TUN.
+     * يكتشف جميع واجهات الشبكة الخاصة النشطة (Hotspot Wi-Fi / USB / Bluetooth / LAN)
+     * مرتّبة حسب أولوية نقطة الاتصال المخصّصة، مع رفض أي عنوان عام أو واجهة خلوية أو نفق TUN.
      */
-    fun detectBestSharingInterface(): DetectedHotspotInterface? {
+    fun detectAllSharingInterfaces(): List<DetectedHotspotInterface> {
         val candidates = ArrayList<DetectedHotspotInterface>()
+        val underlyingMobile = VpnStateManager.status.value.underlyingNetwork.equals("MOBILE", ignoreCase = true)
         runCatching {
-            val ifaces = NetworkInterface.getNetworkInterfaces() ?: return null
+            val ifaces = NetworkInterface.getNetworkInterfaces() ?: return emptyList()
             while (ifaces.hasMoreElements()) {
                 val nif = ifaces.nextElement() ?: continue
-                if (!nif.isUp || nif.isLoopback || nif.isVirtual) continue
+                if (!nif.isUp || nif.isLoopback) continue
                 val name = nif.name?.lowercase(Locale.US).orEmpty()
                 if (name.isEmpty() || BLOCKED_WAN_OR_TUN_PREFIXES.any { name.startsWith(it) }) continue
 
@@ -964,9 +1069,14 @@ object VpnHotspotManager {
                     val hostIp = addr.hostAddress.orEmpty()
                     if (!isSafePrivateLanIpv4(hostIp)) continue
 
+                    // على الهواتف أحادية الشريحة اللاسلكية عندما يعمل الإنترنت عبر بيانات الجوال (MOBILE)
+                    // وتكون wlan0 نشطة بعنوان خاص 192.168.x.x أو 10.x.x.x فهي تعمل فعليًا كنقطة اتصال SoftAP!
+                    val wlan0AsSoftAp = (name == "wlan0" || name.startsWith("wlan0:")) && underlyingMobile
                     val isDedicatedAp = DEDICATED_TETHER_PREFIXES.any { name.startsWith(it) } ||
+                        wlan0AsSoftAp ||
                         hostIp.startsWith("192.168.43.") ||
                         hostIp.startsWith("192.168.42.") ||
+                        hostIp.startsWith("192.168.137.") ||
                         hostIp.startsWith("192.168.232.")
 
                     val (arLbl, enLbl) = when {
@@ -993,12 +1103,17 @@ object VpnHotspotManager {
                 }
             }
         }
-        return candidates.sortedWith(
-            compareByDescending<DetectedHotspotInterface> { it.isDedicatedTetherAp }
-                .thenByDescending { it.ipv4Address.startsWith("192.168.43.") }
-                .thenBy { it.interfaceName }
-        ).firstOrNull()
+        return candidates
+            .distinctBy { it.ipv4Address }
+            .sortedWith(
+                compareByDescending<DetectedHotspotInterface> { it.isDedicatedTetherAp }
+                    .thenByDescending { it.ipv4Address.startsWith("192.168.43.") }
+                    .thenBy { it.interfaceName }
+            )
     }
+
+    fun detectBestSharingInterface(): DetectedHotspotInterface? =
+        detectAllSharingInterfaces().firstOrNull()
 
     /**
      * يتحقق بصدق مما إذا كان نظام الهاتف نفسه يوجّه حزم الهوتسبوت داخل جدول توجيه الـ VPN تلقائيًا.
@@ -1060,6 +1175,7 @@ object VpnHotspotManager {
                 if (!vpnSt.isTunnelVerified) {
                     // Fail-Closed: immediately sever all active client proxy streams so nothing leaks!
                     srv.terminateActiveClientStreams()
+                    secondaryServers.values.forEach { runCatching { it.terminateActiveClientStreams() } }
                     if (vpnSt.phase == VpnPhase.DISCONNECTED || vpnSt.phase == VpnPhase.CONNECTION_FAILED) {
                         stopHotspotSharing(
                             reasonAr = "توقفت مشاركة الهوتسبوت تلقائيًا لحمايتك بعد انقطاع الـ VPN (منع التسرب)",
@@ -1167,7 +1283,12 @@ object VpnHotspotManager {
             return Result.failure(IllegalStateException(errAr))
         }
 
-        val iface = interfaceOverrideForTest ?: detectBestSharingInterface()
+        val allIfaces = if (interfaceOverrideForTest != null) {
+            listOf(interfaceOverrideForTest)
+        } else {
+            detectAllSharingInterfaces()
+        }
+        val iface = allIfaces.firstOrNull()
         if (iface == null) {
             val errAr = "لم يتم رصد نقطة اتصال (Wi-Fi Hotspot أو تقييد USB) نشطة — شغّل نقطة الاتصال من إعدادات هاتفك أولًا"
             val errEn = "No active Wi-Fi Hotspot / USB Tethering interface detected — turn on Hotspot in system settings first"
@@ -1181,6 +1302,11 @@ object VpnHotspotManager {
                 )
             }
             return Result.failure(IllegalStateException(errAr))
+        }
+
+        // إذا كانت واجهة الهوتسبوت في نطاق 10.x.y.z، نحدّث استثناءات مسار TUN تلقائيًا لعدم حجبها محليًا
+        if (!isTestHarness && allIfaces.any { it.ipv4Address.startsWith("10.") }) {
+            com.bahrain.vpnconfigs.vpn.BahrainVpnService.reloadTunIfActive()
         }
 
         stopServerOnly()
@@ -1222,6 +1348,33 @@ object VpnHotspotManager {
             }
             if (activeServer == null) activeServer = server
 
+            // ربط أي واجهات شبكة محلية/هوتسبوت إضافية نشطة على نفس المنفذ لضمان استجابة فورية على جميع هواتف الأندرويد
+            val extraEndpoints = ArrayList<String>()
+            if (!isTestHarness && allIfaces.size > 1) {
+                for (extra in allIfaces.drop(1)) {
+                    runCatching {
+                        val secSrv = VpnHotspotProxyServer(
+                            bindHost = extra.ipv4Address,
+                            requestedPort = actualPort,
+                            upstreamSocksHost = "127.0.0.1",
+                            upstreamSocksPort = upstreamPortOverrideForTest,
+                            requireAuth = reqAuth,
+                            authUser = user,
+                            authPass = pass,
+                            isUpstreamTunnelVerified = checkUpstream,
+                        )
+                        val secPort = secSrv.start()
+                        secondaryServers[extra.ipv4Address] = secSrv
+                        extraEndpoints.add("${extra.ipv4Address}:$secPort")
+                    }
+                }
+            }
+
+            // فحص ذاتي فوري للمستمع المحلي للتأكد من جاهزية استقبال الطلبات وتصفير عداد الفحص
+            val primarySrv = activeServer!!
+            val selfProbeOk = verifyLocalListenerSelfProbe(iface.ipv4Address, actualPort)
+            primarySrv.resetCounters()
+
             val fullSystemRouting = !isTestHarness &&
                 iface.isDedicatedTetherAp &&
                 isSystemLevelFullVpnTetheringVerified(iface.interfaceName)
@@ -1231,6 +1384,7 @@ object VpnHotspotManager {
                 HotspotSharingMode.MODE_B_PROXY_SHARING
             }
             val pac = "http://${iface.ipv4Address}:$actualPort/proxy.pac"
+            val statusUrl = "http://${iface.ipv4Address}:$actualPort/status"
 
             val newState = VpnHotspotState(
                 runPhase = HotspotRunPhase.ACTIVE,
@@ -1239,6 +1393,9 @@ object VpnHotspotManager {
                 bindAddress = iface.ipv4Address,
                 bindPort = actualPort,
                 pacUrl = pac,
+                statusTestUrl = statusUrl,
+                secondaryEndpoints = extraEndpoints,
+                localBridgeVerified = selfProbeOk,
                 requireAuth = reqAuth,
                 authUsername = user,
                 authPassword = pass,
@@ -1259,19 +1416,27 @@ object VpnHotspotManager {
                 statusDetailAr = if (mode == HotspotSharingMode.MODE_A_FULL_VPN_HOTSPOT) {
                     "نظام جهازك يمرّر حزم الهوتسبوت عبر الـ VPN مباشرة، كما يتوفر البروكسي المحلي للأجهزة الإضافية."
                 } else {
-                    "أدخل العنوان ${iface.ipv4Address} والمنفذ $actualPort (أو رابط الإعداد التلقائي PAC) في إعدادات Wi-Fi للجهاز المتصل."
+                    "في إعدادات Wi-Fi للجهاز المتصل اختر البروكسي: يدوي (Manual) وأدخل الخادم ${iface.ipv4Address} والمنفذ $actualPort (أو استخدم رابط PAC التلقائي)."
                 },
                 statusDetailEn = if (mode == HotspotSharingMode.MODE_A_FULL_VPN_HOTSPOT) {
                     "System VPN tethering routing is verified active, with local proxy also available."
                 } else {
-                    "Enter proxy ${iface.ipv4Address}:$actualPort (or PAC URL) in the connected device's Wi-Fi proxy settings."
+                    "In the connected device's Wi-Fi settings, choose Manual Proxy: Host ${iface.ipv4Address} & Port $actualPort (or paste the PAC URL)."
                 },
                 errorAr = null,
                 errorEn = null,
             )
             _state.value = newState
             if (!isTestHarness) {
-                startTelemetryMonitorLoop(iface)
+                startTelemetryMonitorLoop(
+                    initialIface = iface,
+                    port = actualPort,
+                    reqAuth = reqAuth,
+                    user = user,
+                    pass = pass,
+                    upstreamPort = upstreamPortOverrideForTest,
+                    checkUpstream = checkUpstream,
+                )
             }
             Result.success(newState)
         } catch (e: Exception) {
@@ -1290,9 +1455,32 @@ object VpnHotspotManager {
         }
     }
 
-    private fun startTelemetryMonitorLoop(iface: DetectedHotspotInterface) {
+    private fun verifyLocalListenerSelfProbe(host: String, port: Int): Boolean {
+        return runCatching {
+            Socket().use { s ->
+                s.soTimeout = 1500
+                s.connect(InetSocketAddress(host, port), 1500)
+                val req = "GET /proxy.pac HTTP/1.1\r\nHost: $host:$port\r\nConnection: close\r\n\r\n"
+                s.getOutputStream().write(req.toByteArray(Charsets.US_ASCII))
+                s.getOutputStream().flush()
+                val line = s.getInputStream().bufferedReader(Charsets.UTF_8).readLine().orEmpty()
+                line.contains("200")
+            }
+        }.getOrDefault(false)
+    }
+
+    private fun startTelemetryMonitorLoop(
+        initialIface: DetectedHotspotInterface,
+        port: Int,
+        reqAuth: Boolean,
+        user: String,
+        pass: String,
+        upstreamPort: Int,
+        checkUpstream: () -> Boolean,
+    ) {
         monitorJob?.cancel()
         monitorJob = scope.launch {
+            var currentPrimaryIface = initialIface
             var prevDown = 0L
             var prevUp = 0L
             while (isActive) {
@@ -1300,17 +1488,64 @@ object VpnHotspotManager {
                 val srv = activeServer ?: break
                 if (!srv.isRunning) break
 
-                val curDown = srv.totalBytesDown.get()
-                val curUp = srv.totalBytesUp.get()
+                // رصد تلقائي إذا شغّل المستخدم نقطة اتصال الهاتف أو تغيّر عنوان IP العشوائي في Android 11+
+                val liveIfaces = detectAllSharingInterfaces()
+                for (cand in liveIfaces) {
+                    if (cand.ipv4Address != srv.bindHost && !secondaryServers.containsKey(cand.ipv4Address)) {
+                        runCatching {
+                            val dynSrv = VpnHotspotProxyServer(
+                                bindHost = cand.ipv4Address,
+                                requestedPort = port,
+                                upstreamSocksHost = "127.0.0.1",
+                                upstreamSocksPort = upstreamPort,
+                                requireAuth = reqAuth,
+                                authUser = user,
+                                authPass = pass,
+                                isUpstreamTunnelVerified = checkUpstream,
+                            )
+                            dynSrv.start()
+                            secondaryServers[cand.ipv4Address] = dynSrv
+                            if (cand.ipv4Address.startsWith("10.")) {
+                                com.bahrain.vpnconfigs.vpn.BahrainVpnService.reloadTunIfActive()
+                            }
+                        }
+                    }
+                }
+                val bestNow = liveIfaces.firstOrNull()
+                if (bestNow != null && bestNow.isDedicatedTetherAp && bestNow.ipv4Address != currentPrimaryIface.ipv4Address) {
+                    currentPrimaryIface = bestNow
+                }
+
+                val allRunningServers = listOf(srv) + secondaryServers.values.filter { it.isRunning }
+                val curDown = allRunningServers.sumOf { it.totalBytesDown.get() }
+                val curUp = allRunningServers.sumOf { it.totalBytesUp.get() }
+                val curBlocked = allRunningServers.sumOf { it.failClosedRejections.get() }
                 val dSpd = (curDown - prevDown).coerceAtLeast(0L)
                 val uSpd = (curUp - prevUp).coerceAtLeast(0L)
                 prevDown = curDown
                 prevUp = curUp
 
-                val proxyClients = srv.snapshotClients()
+                val proxyClients = allRunningServers
+                    .flatMap { it.snapshotClients() }
+                    .filterNot { it.clientIp == srv.bindHost || secondaryServers.containsKey(it.clientIp) || it.clientIp == "127.0.0.1" }
+                    .groupBy { it.clientIp }
+                    .map { (ip, entries) ->
+                        ConnectedHotspotClient(
+                            clientIp = ip,
+                            activeStreams = entries.sumOf { it.activeStreams },
+                            bytesDown = entries.sumOf { it.bytesDown },
+                            bytesUp = entries.sumOf { it.bytesUp },
+                            firstSeenMs = entries.minOf { it.firstSeenMs },
+                            lastActiveMs = entries.maxOf { it.lastActiveMs },
+                            source = "PROXY_SESSION",
+                        )
+                    }
                 val seenIps = proxyClients.map { it.clientIp }.toHashSet()
-                val arpPeers = readArpNeighborsBestEffort(iface.interfaceName)
-                    .filterNot { it in seenIps || it == iface.ipv4Address }
+                val localHostIps = (listOf(srv.bindHost) + secondaryServers.keys).toHashSet()
+                val arpPeers = liveIfaces
+                    .flatMap { readArpNeighborsBestEffort(it.interfaceName) }
+                    .distinct()
+                    .filterNot { it in seenIps || it in localHostIps }
                     .map { ip ->
                         ConnectedHotspotClient(
                             clientIp = ip,
@@ -1323,14 +1558,25 @@ object VpnHotspotManager {
                         )
                     }
 
+                val displayHost = currentPrimaryIface.ipv4Address
+                val extras = allRunningServers
+                    .map { "${it.bindHost}:${it.boundPort}" }
+                    .filterNot { it.startsWith("$displayHost:") }
+
                 _state.update { prev ->
                     prev.copy(
+                        interfaceInfo = currentPrimaryIface,
+                        bindAddress = displayHost,
+                        pacUrl = "http://$displayHost:$port/proxy.pac",
+                        statusTestUrl = "http://$displayHost:$port/status",
+                        secondaryEndpoints = extras,
+                        systemHotspotActive = currentPrimaryIface.isDedicatedTetherAp,
                         connectedClients = proxyClients + arpPeers,
                         totalBytesDown = curDown,
                         totalBytesUp = curUp,
                         liveDownBps = dSpd,
                         liveUpBps = uSpd,
-                        failClosedBlockedCount = srv.failClosedRejections.get(),
+                        failClosedBlockedCount = curBlocked,
                     )
                 }
             }
@@ -1342,6 +1588,10 @@ object VpnHotspotManager {
         monitorJob = null
         activeServer?.let { runCatching { it.stop() } }
         activeServer = null
+        for ((_, sec) in secondaryServers) {
+            runCatching { sec.stop() }
+        }
+        secondaryServers.clear()
     }
 
     fun stopHotspotSharing(
@@ -1357,6 +1607,9 @@ object VpnHotspotManager {
                 interfaceInfo = iface,
                 bindAddress = iface?.ipv4Address.orEmpty(),
                 pacUrl = "",
+                statusTestUrl = "",
+                secondaryEndpoints = emptyList(),
+                localBridgeVerified = false,
                 connectedClients = emptyList(),
                 liveDownBps = 0L,
                 liveUpBps = 0L,

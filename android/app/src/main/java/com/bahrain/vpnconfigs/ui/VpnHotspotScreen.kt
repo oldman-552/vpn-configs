@@ -266,26 +266,44 @@ fun VpnHotspotScreen(
                     )
                     Text(
                         tr(
-                            "يعمل نفس المنفذ كبروكسي HTTP/HTTPS وبروكسي SOCKS5 (TCP/UDP) داخل الشبكة الخاصة فقط ولا يمكن الوصول إليه من الإنترنت العام.",
-                            "The same LAN-isolated port serves HTTP/HTTPS CONNECT, SOCKS5 (TCP/UDP), and PAC auto-configuration.",
+                            "مهم جدًا: بدون روت، أي جهاز يتصل بالواي فاي فقط يخرج بإنترنت عادي بدون VPN؛ لتمريره داخل الـ VPN ادخل إعدادات Wi‑Fi في الجهاز الثاني ← البروكسي: يدوي (Manual) وانسخ الخانتين التاليتين كل واحدة على حدة:",
+                            "Important: Without root, tethered Wi-Fi devices use normal internet unless Wi-Fi Proxy is configured. In the connected device's Wi-Fi settings -> Proxy: Manual, copy Host and Port separately below:",
                         ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary,
                     )
 
+                    if (hsState.isSharingActive && hsState.localBridgeVerified) {
+                        HotspotInfoRow(
+                            label = tr("فحص جاهزية المنفذ المحلي", "Local Proxy Port Self-Test"),
+                            value = tr("● جاهز ويستقبل الطلبات بنجاح", "● Verified & Ready"),
+                            valueColor = VpnConnectedGreen,
+                        )
+                    }
+
                     CopyableEndpointRow(
-                        label = tr("عنوان البروكسي (HTTP / SOCKS5)", "Proxy Host : Port"),
-                        value = "${hsState.bindAddress}:${hsState.bindPort}",
+                        label = tr("1) اسم مضيف البروكسي / الخادم فقط (Hostname / Server)", "1) Proxy Hostname / Server IP Only"),
+                        value = hsState.bindAddress,
                         onCopy = {
                             onCopy(
-                                "${hsState.bindAddress}:${hsState.bindPort}",
-                                tr("تم نسخ عنوان ومنفذ البروكسي", "Copied proxy host:port"),
+                                hsState.bindAddress,
+                                tr("تم نسخ عنوان الخادم فقط (${hsState.bindAddress})", "Copied Host IP (${hsState.bindAddress})"),
+                            )
+                        },
+                    )
+                    CopyableEndpointRow(
+                        label = tr("2) منفذ البروكسي فقط (Proxy Port)", "2) Proxy Port Only"),
+                        value = "${hsState.bindPort}",
+                        onCopy = {
+                            onCopy(
+                                "${hsState.bindPort}",
+                                tr("تم نسخ رقم المنفذ فقط (${hsState.bindPort})", "Copied Port (${hsState.bindPort})"),
                             )
                         },
                     )
                     if (hsState.pacUrl.isNotBlank()) {
                         CopyableEndpointRow(
-                            label = tr("رابط الإعداد التلقائي (PAC URL)", "Auto Proxy Config (PAC URL)"),
+                            label = tr("أو رابط الإعداد التلقائي (PAC URL)", "Or Auto Proxy Config (PAC URL)"),
                             value = hsState.pacUrl,
                             onCopy = {
                                 onCopy(
@@ -293,6 +311,28 @@ fun VpnHotspotScreen(
                                     tr("تم نسخ رابط الإعداد التلقائي PAC", "Copied PAC auto-config URL"),
                                 )
                             },
+                        )
+                    }
+                    if (hsState.statusTestUrl.isNotBlank()) {
+                        CopyableEndpointRow(
+                            label = tr("رابط فحص الوصول من متصفح الجهاز الثاني", "Browser Reachability Test URL"),
+                            value = hsState.statusTestUrl,
+                            onCopy = {
+                                onCopy(
+                                    hsState.statusTestUrl,
+                                    tr("تم نسخ رابط فحص الوصول المحلي", "Copied local test URL"),
+                                )
+                            },
+                        )
+                    }
+                    if (hsState.secondaryEndpoints.isNotEmpty()) {
+                        Text(
+                            tr(
+                                "عناوين شبكات محلية إضافية نشطة ومفعّلة أيضًا: ${hsState.secondaryEndpoints.joinToString(" ، ")}",
+                                "Additional active LAN listeners also bound: ${hsState.secondaryEndpoints.joinToString(", ")}",
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
@@ -345,8 +385,8 @@ fun VpnHotspotScreen(
                 if (hsState.connectedClients.isEmpty()) {
                     Text(
                         tr(
-                            "لا توجد جلسات أجهزة نشطة حاليًا — ستظهر الأجهزة فور اتصالها عبر نقطة الاتصال.",
-                            "No active client sessions yet — connected devices appear here automatically.",
+                            "لا توجد جلسات أجهزة نشطة حاليًا — ستظهر الأجهزة فور اتصالها وإعداد البروكسي في إعدادات Wi‑Fi للجهاز المتصل.",
+                            "No active client sessions yet — connected devices appear here once connected and configured.",
                         ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary,
@@ -359,7 +399,7 @@ fun VpnHotspotScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                                 Text(
                                     cl.clientIp,
                                     fontFamily = FontFamily.Monospace,
@@ -367,12 +407,15 @@ fun VpnHotspotScreen(
                                 )
                                 Text(
                                     if (cl.source == "PROXY_SESSION") {
-                                        tr("${cl.activeStreams} قناة مشفّرة نشطة", "${cl.activeStreams} active tunnel stream(s)")
+                                        tr("✅ يمر عبر الـ VPN (${cl.activeStreams} قناة مشفّرة نشطة)", "✅ Routing via VPN (${cl.activeStreams} active stream(s))")
                                     } else {
-                                        tr("متصل بالشبكة المحلية (بانتظار ضبط البروكسي)", "Connected to AP (awaiting proxy config)")
+                                        tr(
+                                            "⚠️ متّصل بالواي فاي بدون VPN بعد — أدخل الخادم ${hsState.bindAddress} والمنفذ ${hsState.bindPort} في إعدادات بروكسي Wi‑Fi لهذا الجهاز",
+                                            "⚠️ Connected without VPN — set Manual Proxy ${hsState.bindAddress} port ${hsState.bindPort} in this device's Wi-Fi settings",
+                                        )
                                     },
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary,
+                                    color = if (cl.source == "PROXY_SESSION") VpnConnectedGreen else VpnConnectingAmber,
                                 )
                             }
                             Text(
@@ -487,11 +530,11 @@ fun VpnHotspotScreen(
                 Text(
                     tr(
                         "1️⃣ شغّل اتصال الـ VPN في هذا الهاتف، ثم شغّل «نقطة اتصال Wi‑Fi» من إعدادات هاتفك واضغط «تشغيل مشاركة VPN» أعلاه.\n" +
-                            "2️⃣ وصّل الجهاز الآخر (هاتف أندرويد / آيفون / لابتوب Windows أو Mac) بشبكة الـ Wi‑Fi الخاصة بهاتفك.\n" +
-                            "3️⃣ في إعدادات الـ Wi‑Fi للجهاز المتصل، اختر «البروكسي: تلقائي (PAC)» والصق رابط PAC أعلاه — أو اختر «يدوي» وأدخل العنوان والمنفذ.",
+                            "2️⃣ وصّل الجهاز الآخر بشبكة الـ Wi‑Fi الخاصة بهاتفك (ملاحظة: بدون الخطوة 3 سيتصل الجهاز بإنترنت عادي بدون VPN).\n" +
+                            "3️⃣ في إعدادات الـ Wi‑Fi للجهاز المتصل، اضغط الترس ⚙️ أو (i) بجانب الشبكة ← اختر «البروكسي: يدوي (Manual)» وضع «اسم المضيف» في الخانة الأولى و«المنفذ» في الخانة الثانية منفصلَين (أو اختر تلقائي PAC والصق رابط PAC) ثم احفظ وأعِد تشغيل Wi‑Fi في الجهاز الثاني.",
                         "1️⃣ Connect VPN on this phone, turn on your system Wi-Fi Hotspot, and tap START VPN HOTSPOT above.\n" +
-                            "2️⃣ Connect your second phone, iPhone, Windows PC, or Mac to this phone's Wi-Fi hotspot.\n" +
-                            "3️⃣ In the connected device's Wi-Fi settings, choose Proxy -> Auto (PAC) and paste the PAC URL above — or choose Manual and enter Host & Port.",
+                            "2️⃣ Connect your second device to this phone's Wi-Fi hotspot (without step 3, Android routes hotspot traffic directly without VPN).\n" +
+                            "3️⃣ In the connected device's Wi-Fi settings, choose Proxy -> Manual and paste Hostname and Port in their separate fields (or choose Auto PAC and paste the PAC URL), save, and toggle Wi-Fi off/on once.",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
