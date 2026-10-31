@@ -304,6 +304,10 @@ class BahrainVpnService : VpnService() {
     fun requestDisconnect() {
         prefs.wasVpnDesiredActive = false
         reconnectManager.cancelByUser()
+        com.bahrain.vpnconfigs.hotspot.VpnHotspotManager.stopHotspotSharing(
+            reasonAr = "توقفت مشاركة الهوتسبوت تلقائيًا فور إيقاف الـ VPN (حماية منع التسرب)",
+            reasonEn = "VPN Hotspot stopped immediately upon VPN disconnect (Fail-Closed guard)",
+        )
         serviceScope.launch {
             opLock.withLock {
                 finalizeActiveSessionRow()
@@ -1422,6 +1426,10 @@ class BahrainVpnService : VpnService() {
 
     override fun onDestroy() {
         if (activeInstance === this) activeInstance = null
+        com.bahrain.vpnconfigs.hotspot.VpnHotspotManager.stopHotspotSharing(
+            reasonAr = "توقفت مشاركة الهوتسبوت تلقائيًا عند إنهاء خدمة الـ VPN",
+            reasonEn = "VPN Hotspot stopped automatically on VPN service teardown",
+        )
         unregisterPhysicalNetworkWatcher()
         teardownInternal(null, null, userInitiated = true)
         serviceScope.cancel()

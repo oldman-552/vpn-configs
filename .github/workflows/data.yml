@@ -16,6 +16,7 @@ on:
       - "security_intelligence.py"
       - "historical_db.py"
       - "central_top500.py"
+      - "community_ranking.py"
       - "migrations/**"
       - "public_api.py"
       - "channels.txt"
@@ -85,6 +86,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLIC_BASE: https://cdn.jsdelivr.net/gh/${{ github.repository }}@data
           PREV_DIST: prev_dist
+          COMMUNITY_WORKER_URL: ${{ secrets.COMMUNITY_WORKER_URL }}
+          COMMUNITY_EXPORT_TOKEN: ${{ secrets.COMMUNITY_EXPORT_TOKEN }}
         run: |
           python server/build_data.py --prev-dir prev_dist
           mkdir -p dist/enterprise
@@ -117,6 +120,9 @@ jobs:
           for req in (
               "alive.txt", "best100.txt", "sub.txt", "alive.json",
               "top500.json", "top500.txt", "top500.manifest.json",
+              "iran-top500.json", "iran-top500.txt", "iran-results.json",
+              "germany-top500.json", "france-top500.json",
+              "turkey-top500.json", "russia-top500.json",
               "meta.json", "source_health.json", "quarantined.json",
               "servers-current.json", "servers-history.json",
               "servers-performance.json", "servers-statistics.json",
@@ -181,6 +187,9 @@ jobs:
           | \`top500.json\` | حزمة المرشّحات المركزية المؤهّلة (حتى 500 سيرفر بدون حشو — اختيار Top 50 محلي على أندرويد فقط) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.json |
           | \`top500.delta.json\` | التحديث التفاضلي الموقّع بـ SHA-256 بين آخر إصدارين لحزمة Top 500 | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.delta.json |
           | \`top500.txt\` | الروابط الخام المطبّعة لحزمة المرشّحات المركزية Top 500 | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/top500.txt |
+          | \`iran-top500.json\` | قائمة السيرفرات الموثّقة مجتمعيًا من داخل شبكات إيران المباشرة (\`IR\` — تقييم متعدد الأجهزة بدون حشو) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/iran-top500.json |
+          | \`iran-top500.txt\` | الروابط الخام المطبّعة لقائمة سيرفرات إيران الموثّقة مجتمعيًا (\`IR\`) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/iran-top500.txt |
+          | \`iran-results.json\` | السجل التحليلي الكامل لقياسات الفحص المجتمعي الموثّق من داخل إيران (\`IR\`) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/iran-results.json |
           | \`sub.txt\` | اشتراك Base64 الشامل لجميع العُقد الحيّة بوسم \`bahrain-vpn\` | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/sub.txt |
           | \`best100.txt\` | أفضل 100 عقدة متنوّعة المضيفين والشبكات الفرعية (/24) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/best100.txt |
           | \`privacy_aware.txt\` | الأعلى أمانًا في طبقة النقل (Verified TLS/Reality فقط بدون allowInsecure) | https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/privacy_aware.txt |
@@ -216,7 +225,7 @@ jobs:
       - name: Purge jsDelivr cache
         if: success() && (github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         run: |
-          for f in top500.manifest.json top500.delta.json top500.json top500.txt alive.txt alive.json sub.txt best100.txt reliable.txt reliable_sub.txt low_latency.txt high_throughput.txt countries.json source_health.json meta.json enterprise/bundle.json; do
+          for f in top500.manifest.json top500.delta.json top500.json top500.txt iran-top500.json iran-top500.txt iran-results.json alive.txt alive.json sub.txt best100.txt reliable.txt reliable_sub.txt low_latency.txt high_throughput.txt countries.json source_health.json meta.json enterprise/bundle.json; do
             curl -s -m 20 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@data/$f" > /dev/null || true
           done
           echo "تم إرسال طلبات تحديث الكاش."

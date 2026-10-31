@@ -31,6 +31,10 @@ com.bahrain.vpnconfigs
 │   ├── LeakProtectionEngine.kt     # Dual-stack ::/0 capture + MapDNS 198.18.0.2 + DoH sanitization
 │   ├── ConnectionSecurityClassifier.kt # 9-state honest security & DNS/IPv6 leak classifier
 │   └── ResourceAndBatteryMonitor.kt    # Real CPU/Heap/PSS telemetry & foreground/background adaptive polling
+├── hotspot/
+│   └── VpnHotspotManager.kt        # Rootless LAN-only VPN Hotspot (Mode A/B/C, HTTP/SOCKS5/PAC, Fail-Closed guard)
+├── community/
+│   └── CommunityTestingManager.kt  # Opt-in non-proxy sequential tester, direct IP origin verifier & secret-free uploader
 ├── enterprise/                     # ECDSA P-256 license verification, AES-256-GCM VIP nodes, diagnostics, ABI updater
 └── ui/
     ├── AppViewModel.kt             # State holder bridging Repo, Tester, ClientDatabase, and SmartServerSelector

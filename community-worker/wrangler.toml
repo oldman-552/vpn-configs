@@ -1,0 +1,17 @@
+name = "bahrain-vpn-community-ingest"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+# Free-Tier Cloudflare D1 binding (5 GB storage, 5M reads/day, 100k writes/day free):
+# 1. npx wrangler d1 create bahrain-vpn-community
+# 2. Paste database_id below and apply schema:
+#    npx wrangler d1 execute bahrain-vpn-community --remote --file=./schema.sql
+# 3. Set GitHub Actions export token (NEVER put this in the Android APK):
+#    npx wrangler secret put COMMUNITY_EXPORT_TOKEN
+#    npx wrangler secret put RATE_LIMIT_SALT
+# 4. npx wrangler deploy
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bahrain-vpn-community"
+database_id = "00000000-0000-0000-0000-000000000000"

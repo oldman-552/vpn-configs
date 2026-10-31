@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -61,6 +62,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -127,6 +129,8 @@ fun ConnectHomeScreen(
     onConnectBestSmart: () -> Unit = onToggleConnect,
     onNextServer: () -> Unit,
     onOpenServersTab: () -> Unit,
+    onOpenHotspot: () -> Unit = {},
+    onOpenCommunityTesting: () -> Unit = {},
     onCopy: (String, String) -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -527,6 +531,39 @@ fun ConnectHomeScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+            }
+        }
+
+        // ── وصول سريع لمشاركة VPN عبر الهوتسبوت (بدون روت) والفحص المجتمعي الموثّق ──
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(
+                onClick = onOpenHotspot,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
+            ) {
+                Icon(Icons.Filled.WifiTethering, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    tr("نقطة اتصال VPN", "VPN Hotspot"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            OutlinedButton(
+                onClick = onOpenCommunityTesting,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
+            ) {
+                Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    tr("فحص المجتمع (IR)", "Community (IR)"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
 
@@ -1448,6 +1485,8 @@ fun SettingsAndExportScreen(
     onShareFile: (File) -> Unit,
     onOpenSplitApps: () -> Unit = {},
     onOpenEnterpriseHub: () -> Unit = {},
+    onOpenHotspot: () -> Unit = {},
+    onOpenCommunityTesting: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val p = vm.settings()
@@ -1583,6 +1622,29 @@ fun SettingsAndExportScreen(
                 modifier = Modifier.weight(1f),
             ) {
                 Text(tr("المركز المؤسسي والسرعة", "Account & Speed Studio"))
+            }
+        }
+
+        // ── الوصول السريع لنقطة اتصال الـ VPN بدون روت والفحص المجتمعي الموثّق ──
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(
+                onClick = onOpenHotspot,
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Filled.WifiTethering, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(tr("نقطة اتصال VPN", "VPN Hotspot"))
+            }
+            OutlinedButton(
+                onClick = onOpenCommunityTesting,
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(tr("فحص المجتمع (IR)", "Community (IR)"))
             }
         }
 
@@ -1764,6 +1826,7 @@ fun SettingsAndExportScreen(
                 ) {
                     listOf(
                         "smart" to tr("الذكي الشامل", "Smart Balanced"),
+                        "iran_community" to tr("🇮🇷 إيران (المجتمع)", "🇮🇷 Iran Community"),
                         "reliable" to tr("الأكثر استقرارًا", "Most Reliable"),
                         "low_latency" to tr("الأقل تأخيرًا", "Low Latency"),
                         "high_throughput" to tr("الأعلى سرعة", "High Throughput"),

@@ -27,7 +27,7 @@ from scoring import ScoredNode, country_flag, diversify_scored_nodes
 
 CENTRAL_TOP500_MAX = 500
 CENTRAL_TOP500_SCHEMA_VERSION = "1.0.0"
-SUPPORTED_CENTRAL_PROTOCOLS = frozenset({"vless", "vmess", "trojan", "hysteria2", "ss", "tuic"})
+SUPPORTED_CENTRAL_PROTOCOLS = frozenset({"vless", "vmess", "trojan", "hysteria2", "ss", "tuic", "socks", "http"})
 
 
 def strip_uri_fragment(uri: str) -> str:

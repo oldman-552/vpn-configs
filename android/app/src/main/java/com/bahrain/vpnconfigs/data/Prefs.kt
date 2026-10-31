@@ -281,4 +281,108 @@ class Prefs(ctx: Context) {
     var lastPromoRotationIndex: Int
         get() = sp.getInt("last_promo_rotation_idx", -1)
         set(v) = sp.edit { putInt("last_promo_rotation_idx", v) }
+
+    // ─────────── إعدادات الفحص المجتمعي الطوعي (معطّل افتراضيًا — موافقة صريحة) ───────────
+    var communityTestingEnabled: Boolean
+        get() = sp.getBoolean("community_testing_enabled", false) && communityConsentAtMs > 0L
+        set(v) = sp.edit { putBoolean("community_testing_enabled", v) }
+
+    var communityConsentAtMs: Long
+        get() = sp.getLong("community_consent_at_ms", 0L)
+        set(v) = sp.edit { putLong("community_consent_at_ms", v.coerceAtLeast(0L)) }
+
+    var communityWifiOnly: Boolean
+        get() = sp.getBoolean("community_wifi_only", true)
+        set(v) = sp.edit { putBoolean("community_wifi_only", v) }
+
+    var communityMaxConfigsPerRun: Int
+        get() = sp.getInt("community_max_configs_per_run", 15).coerceIn(5, 50)
+        set(v) = sp.edit { putInt("community_max_configs_per_run", v.coerceIn(5, 50)) }
+
+    var communityDailyLimit: Int
+        get() = sp.getInt("community_daily_limit", 60).coerceIn(10, 250)
+        set(v) = sp.edit { putInt("community_daily_limit", v.coerceIn(10, 250)) }
+
+    var communityBackgroundScheduleEnabled: Boolean
+        get() = sp.getBoolean("community_bg_schedule", false)
+        set(v) = sp.edit { putBoolean("community_bg_schedule", v) }
+
+    var communityEndpointOverride: String
+        get() = (sp.getString("community_endpoint_override", "") ?: "").trim()
+        set(v) {
+            val clean = v.trim()
+            val safe = if (clean.startsWith("https://", ignoreCase = true) || clean.startsWith("http://127.0.0.1:", ignoreCase = true)) {
+                clean.trimEnd('/')
+            } else ""
+            sp.edit { putString("community_endpoint_override", safe) }
+        }
+
+    var communityInstallSalt: String
+        get() {
+            val cur = sp.getString("community_install_salt", "") ?: ""
+            if (cur.length >= 24) return cur
+            val generated = java.util.UUID.randomUUID().toString().replace("-", "") +
+                java.util.UUID.randomUUID().toString().replace("-", "").take(16)
+            sp.edit { putString("community_install_salt", generated) }
+            return generated
+        }
+        private set(v) = sp.edit { putString("community_install_salt", v) }
+
+    var lastVerifiedOriginCountry: String
+        get() = (sp.getString("community_last_origin_cc", "") ?: "").trim().uppercase()
+        set(v) = sp.edit { putString("community_last_origin_cc", v.trim().uppercase().take(4)) }
+
+    var lastCommunityRunAtMs: Long
+        get() = sp.getLong("community_last_run_ms", 0L)
+        set(v) = sp.edit { putLong("community_last_run_ms", v.coerceAtLeast(0L)) }
+
+    fun grantCommunityTestingConsent() {
+        val now = System.currentTimeMillis()
+        sp.edit {
+            putLong("community_consent_at_ms", now)
+            putBoolean("community_testing_enabled", true)
+        }
+    }
+
+    fun revokeCommunityTestingConsent() {
+        val freshSalt = java.util.UUID.randomUUID().toString().replace("-", "") +
+            java.util.UUID.randomUUID().toString().replace("-", "").take(16)
+        sp.edit {
+            putBoolean("community_testing_enabled", false)
+            putBoolean("community_bg_schedule", false)
+            putLong("community_consent_at_ms", 0L)
+            putString("community_install_salt", freshSalt)
+            remove("community_last_origin_cc")
+        }
+    }
+
+    // ─────────── إعدادات نقطة اتصال الـ VPN بدون روت (Rootless VPN Hotspot) ───────────
+    var hotspotProxyPort: Int
+        get() = sp.getInt("hotspot_proxy_port", 20880).coerceIn(10240, 65000)
+        set(v) = sp.edit { putInt("hotspot_proxy_port", v.coerceIn(10240, 65000)) }
+
+    var hotspotRequireAuth: Boolean
+        get() = sp.getBoolean("hotspot_require_auth", false)
+        set(v) = sp.edit { putBoolean("hotspot_require_auth", v) }
+
+    var hotspotUsername: String
+        get() = (sp.getString("hotspot_auth_user", "vpnshare") ?: "vpnshare").trim().ifBlank { "vpnshare" }
+        set(v) = sp.edit { putString("hotspot_auth_user", v.trim().take(32).ifBlank { "vpnshare" }) }
+
+    var hotspotPassword: String
+        get() {
+            val cur = (sp.getString("hotspot_auth_pass", "") ?: "").trim()
+            if (cur.length >= 6) return cur
+            val alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+            val rnd = java.security.SecureRandom()
+            val generated = (1..10).map { alphabet[rnd.nextInt(alphabet.length)] }.joinToString("")
+            sp.edit { putString("hotspot_auth_pass", generated) }
+            return generated
+        }
+        set(v) {
+            val clean = v.trim().take(48)
+            if (clean.length >= 6) {
+                sp.edit { putString("hotspot_auth_pass", clean) }
+            }
+        }
 }

@@ -219,12 +219,44 @@ data class RankingHistorySnapshotRow(
     val stabilityScore: Double,
 )
 
+data class CommunityTestReportRecord(
+    val id: Long = 0L,
+    val reportId: String,
+    val serverId: String,
+    val configFingerprint: String,
+    val protocol: String,
+    val testedAtMs: Long,
+    val success: Boolean,
+    val handshakeMs: Long,
+    val latencyMs: Long,
+    val downloadKbps: Double,
+    val stabilityScore: Double,
+    val dnsOk: Boolean,
+    val tcpOk: Boolean,
+    val udpOk: Boolean,
+    val failureReason: String,
+    val verifiedCountry: String,
+    val countryConfidence: String,
+    val vpnInterference: Boolean,
+    val networkTransport: String,
+    val submitted: Boolean = false,
+    val submittedAtMs: Long = 0L,
+)
+
+data class CommunityReportStatsSummary(
+    val totalTested: Int = 0,
+    val totalSuccess: Int = 0,
+    val verifiedIranCount: Int = 0,
+    val pendingUploadCount: Int = 0,
+    val submittedCount: Int = 0,
+)
+
 class ClientDatabase private constructor(ctx: Context) :
     SQLiteOpenHelper(ctx.applicationContext, DB_NAME, null, DB_VERSION) {
 
     companion object {
         const val DB_NAME = "bahrain_vpn_client.db"
-        const val DB_VERSION = 3
+        const val DB_VERSION = 4
 
         @Volatile
         private var instance: ClientDatabase? = null
@@ -247,6 +279,7 @@ class ClientDatabase private constructor(ctx: Context) :
         createSchemaV1(db)
         upgradeToV2(db)
         upgradeToV3(db)
+        upgradeToV4(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -258,6 +291,9 @@ class ClientDatabase private constructor(ctx: Context) :
         }
         if (oldVersion < 3 && newVersion >= 3) {
             upgradeToV3(db)
+        }
+        if (oldVersion < 4 && newVersion >= 4) {
+            upgradeToV4(db)
         }
     }
 
@@ -454,6 +490,43 @@ class ClientDatabase private constructor(ctx: Context) :
         )
         db.execSQL(
             "CREATE INDEX IF NOT EXISTS idx_rank_hist_srv ON local_ranking_history(server_id, network_profile, ranked_at_ms DESC);"
+        )
+    }
+
+    private fun upgradeToV4(db: SQLiteDatabase) {
+        // 5) Privacy-minimal opt-in Community Testing reports (zero credentials, zero raw URIs, zero PII/GPS)
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS community_test_reports (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_id           TEXT NOT NULL UNIQUE,
+                server_id           TEXT NOT NULL,
+                config_fingerprint  TEXT NOT NULL,
+                protocol            TEXT NOT NULL,
+                tested_at_ms        INTEGER NOT NULL,
+                success             INTEGER NOT NULL DEFAULT 0,
+                handshake_ms        INTEGER NOT NULL DEFAULT 0,
+                latency_ms          INTEGER NOT NULL DEFAULT 0,
+                download_kbps       REAL NOT NULL DEFAULT 0.0,
+                stability_score     REAL NOT NULL DEFAULT 0.0,
+                dns_ok              INTEGER NOT NULL DEFAULT 0,
+                tcp_ok              INTEGER NOT NULL DEFAULT 0,
+                udp_ok              INTEGER NOT NULL DEFAULT 0,
+                failure_reason      TEXT NOT NULL DEFAULT '',
+                verified_country    TEXT NOT NULL DEFAULT '',
+                country_confidence  TEXT NOT NULL DEFAULT 'UNVERIFIED',
+                vpn_interference    INTEGER NOT NULL DEFAULT 0,
+                network_transport   TEXT NOT NULL DEFAULT 'UNKNOWN',
+                submitted           INTEGER NOT NULL DEFAULT 0,
+                submitted_at_ms     INTEGER NOT NULL DEFAULT 0
+            );
+            """.trimIndent()
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_comm_rep_pending ON community_test_reports(submitted, tested_at_ms ASC);"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_comm_rep_recent ON community_test_reports(tested_at_ms DESC);"
         )
     }
 
@@ -1359,5 +1432,153 @@ class ClientDatabase private constructor(ctx: Context) :
                 }
             }
         }
+    }
+
+    // ─────────────────── Community Testing Reports (Opt-In, Secret-Free) ───────────────────
+
+    private fun readCommunityReportRow(c: android.database.Cursor): CommunityTestReportRecord =
+        CommunityTestReportRecord(
+            id = c.getLong(c.getColumnIndexOrThrow("id")),
+            reportId = c.getString(c.getColumnIndexOrThrow("report_id")),
+            serverId = c.getString(c.getColumnIndexOrThrow("server_id")),
+            configFingerprint = c.getString(c.getColumnIndexOrThrow("config_fingerprint")),
+            protocol = c.getString(c.getColumnIndexOrThrow("protocol")),
+            testedAtMs = c.getLong(c.getColumnIndexOrThrow("tested_at_ms")),
+            success = c.getInt(c.getColumnIndexOrThrow("success")) == 1,
+            handshakeMs = c.getLong(c.getColumnIndexOrThrow("handshake_ms")),
+            latencyMs = c.getLong(c.getColumnIndexOrThrow("latency_ms")),
+            downloadKbps = c.getDouble(c.getColumnIndexOrThrow("download_kbps")),
+            stabilityScore = c.getDouble(c.getColumnIndexOrThrow("stability_score")),
+            dnsOk = c.getInt(c.getColumnIndexOrThrow("dns_ok")) == 1,
+            tcpOk = c.getInt(c.getColumnIndexOrThrow("tcp_ok")) == 1,
+            udpOk = c.getInt(c.getColumnIndexOrThrow("udp_ok")) == 1,
+            failureReason = c.getString(c.getColumnIndexOrThrow("failure_reason")),
+            verifiedCountry = c.getString(c.getColumnIndexOrThrow("verified_country")),
+            countryConfidence = c.getString(c.getColumnIndexOrThrow("country_confidence")),
+            vpnInterference = c.getInt(c.getColumnIndexOrThrow("vpn_interference")) == 1,
+            networkTransport = c.getString(c.getColumnIndexOrThrow("network_transport")),
+            submitted = c.getInt(c.getColumnIndexOrThrow("submitted")) == 1,
+            submittedAtMs = c.getLong(c.getColumnIndexOrThrow("submitted_at_ms")),
+        )
+
+    fun insertCommunityReport(report: CommunityTestReportRecord): Long = synchronized(lock) {
+        val safeSid = report.serverId.trim().lowercase().filter { it in '0'..'9' || it in 'a'..'f' }.take(32)
+        val safeFp = report.configFingerprint.trim().lowercase().filter { it in '0'..'9' || it in 'a'..'f' }.take(64)
+        require(safeSid.isNotEmpty() && safeFp.isNotEmpty()) { "Missing canonical fingerprint" }
+        val db = writableDatabase
+        val cv = ContentValues().apply {
+            put("report_id", report.reportId.take(64))
+            put("server_id", safeSid)
+            put("config_fingerprint", safeFp)
+            put("protocol", report.protocol.trim().lowercase().take(16))
+            put("tested_at_ms", report.testedAtMs)
+            put("success", if (report.success) 1 else 0)
+            put("handshake_ms", report.handshakeMs.coerceAtLeast(0L))
+            put("latency_ms", report.latencyMs.coerceAtLeast(0L))
+            put("download_kbps", report.downloadKbps.coerceAtLeast(0.0))
+            put("stability_score", report.stabilityScore.coerceIn(0.0, 100.0))
+            put("dns_ok", if (report.dnsOk) 1 else 0)
+            put("tcp_ok", if (report.tcpOk) 1 else 0)
+            put("udp_ok", if (report.udpOk) 1 else 0)
+            put("failure_reason", report.failureReason.replace("://", "_").take(48))
+            put("verified_country", report.verifiedCountry.trim().uppercase().take(4))
+            put("country_confidence", report.countryConfidence.trim().uppercase().take(32))
+            put("vpn_interference", if (report.vpnInterference) 1 else 0)
+            put("network_transport", report.networkTransport.trim().uppercase().take(16))
+            put("submitted", if (report.submitted) 1 else 0)
+            put("submitted_at_ms", report.submittedAtMs.coerceAtLeast(0L))
+        }
+        val rowId = db.insertWithOnConflict("community_test_reports", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+        // Bound local table size to most recent 1000 rows
+        db.execSQL(
+            """
+            DELETE FROM community_test_reports
+            WHERE id NOT IN (
+                SELECT id FROM community_test_reports ORDER BY tested_at_ms DESC, id DESC LIMIT 1000
+            )
+            """.trimIndent()
+        )
+        rowId
+    }
+
+    fun countCommunityReportsSince(sinceMs: Long): Int = synchronized(lock) {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM community_test_reports WHERE tested_at_ms >= ?",
+            arrayOf(sinceMs.toString()),
+        ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+    }
+
+    fun listPendingCommunityReports(limit: Int = 25): List<CommunityTestReportRecord> = synchronized(lock) {
+        readableDatabase.rawQuery(
+            """
+            SELECT * FROM community_test_reports
+            WHERE submitted = 0 AND vpn_interference = 0 AND country_confidence = 'VERIFIED_DIRECT_IP'
+            ORDER BY tested_at_ms ASC LIMIT ?
+            """.trimIndent(),
+            arrayOf(limit.coerceIn(1, 100).toString()),
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) add(readCommunityReportRow(c))
+            }
+        }
+    }
+
+    fun listRecentCommunityReports(limit: Int = 40): List<CommunityTestReportRecord> = synchronized(lock) {
+        readableDatabase.rawQuery(
+            "SELECT * FROM community_test_reports ORDER BY tested_at_ms DESC, id DESC LIMIT ?",
+            arrayOf(limit.coerceIn(1, 200).toString()),
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) add(readCommunityReportRow(c))
+            }
+        }
+    }
+
+    fun markCommunityReportsSubmitted(reportIds: List<String>, nowMs: Long = System.currentTimeMillis()): Int = synchronized(lock) {
+        if (reportIds.isEmpty()) return 0
+        val db = writableDatabase
+        var updated = 0
+        db.beginTransaction()
+        try {
+            for (rid in reportIds) {
+                val cv = ContentValues().apply {
+                    put("submitted", 1)
+                    put("submitted_at_ms", nowMs)
+                }
+                updated += db.update("community_test_reports", cv, "report_id = ?", arrayOf(rid))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        updated
+    }
+
+    fun getCommunityReportsSummary(): CommunityReportStatsSummary = synchronized(lock) {
+        readableDatabase.rawQuery(
+            """
+            SELECT
+                COUNT(*) AS total_cnt,
+                SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS ok_cnt,
+                SUM(CASE WHEN verified_country = 'IR' AND vpn_interference = 0 THEN 1 ELSE 0 END) AS ir_cnt,
+                SUM(CASE WHEN submitted = 0 AND vpn_interference = 0 AND country_confidence = 'VERIFIED_DIRECT_IP' THEN 1 ELSE 0 END) AS pend_cnt,
+                SUM(CASE WHEN submitted = 1 THEN 1 ELSE 0 END) AS sub_cnt
+            FROM community_test_reports
+            """.trimIndent(),
+            null,
+        ).use { c ->
+            if (!c.moveToFirst()) CommunityReportStatsSummary()
+            else CommunityReportStatsSummary(
+                totalTested = c.getInt(0),
+                totalSuccess = c.getInt(1),
+                verifiedIranCount = c.getInt(2),
+                pendingUploadCount = c.getInt(3),
+                submittedCount = c.getInt(4),
+            )
+        }
+    }
+
+    fun clearAllCommunityReports() = synchronized(lock) {
+        writableDatabase.delete("community_test_reports", null, null)
     }
 }

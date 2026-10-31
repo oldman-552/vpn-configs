@@ -245,6 +245,8 @@ jobs:
                       "com/bahrain/vpnconfigs/ui/",
                       "com/bahrain/vpnconfigs/MainActivity",
                       "com/bahrain/vpnconfigs/vpn/",
+                      "com/bahrain/vpnconfigs/hotspot/",
+                      "com/bahrain/vpnconfigs/community/",
                       "com/bahrain/vpnconfigs/data/Prefs",
                       "com/bahrain/vpnconfigs/enterprise/",
                   )):
@@ -297,7 +299,7 @@ jobs:
           else
             VER_TAG="v${VER_NAME}"
           fi
-          NOTES="الإصدار الرسمي المعتمد **bahrain-vpn (${VER_TAG})** — يدعم اللغتين **العربية (اللغة الأساسية RTL) والإنجليزية (LTR)** مع التبديل الفوري الحي، وميزة **استثناء نطاقات \`.ir\` و \`.ایران\` من الـ VPN تلقائياً (مفعّلة افتراضياً مع زر تحكم في الإعدادات)**، ومعمارية **Central GitHub Top 500 + Local Android Personalized Top 50** المنفصلة لشبكتي \`Wi-Fi\` و\`Mobile Data\`، والتوافق الأمني الكامل مع **Google Play Protect** (توقيع رسمي \`RSA-4096 APK Signature v1/v2/v3\` وبدون صلاحيات \`Dropper\`)، والفحص التسلسلي عبر النفق الحقيقي (\`Quick Scan\` / \`Full Scan\`)، وتقليص الحجم عبر \`R8\`، وعُقد **VIP المشفّرة (\`AES-256-GCM\`)**، ومفتاح الإيقاف الصارم، وتطبيق الإدارة المستقل \`app-admin-release.apk\`."
+          NOTES="الإصدار الرسمي المعتمد **bahrain-vpn (${VER_TAG})** — يدعم اللغتين **العربية (اللغة الأساسية RTL) والإنجليزية (LTR)** مع التبديل الفوري الحي، وميزة **مشاركة اتصال الـ VPN عبر الهوتسبوت بدون روت (Rootless VPN Hotspot — HTTP/HTTPS + SOCKS5 TCP/UDP + ملف إعداد تلقائي PAC + إغلاق آمن صارم Fail-Closed عند انقطاع النفق)**، ونظام **الفحص المجتمعي الطوعي الموثّق لشبكات إيران (\`IR\`) والدول** بدون بروكسي وخصوصية صارمة، ودعم بروتوكولات \`VLESS / VMess / Trojan / Shadowsocks / Hysteria2 / TUIC / SOCKS5 / HTTP(S)\`، واستثناء نطاقات \`.ir\` و \`.ایران\` تلقائياً (مفعّل افتراضياً مع زر تحكم في الإعدادات)، ومعمارية **Central GitHub Top 500 + Local Android Personalized Top 50** المنفصلة لشبكتي \`Wi-Fi\` و\`Mobile Data\`، والتوافق الكامل مع **Google Play Protect** (توقيع رسمي \`RSA-4096 APK Signature v1/v2/v3\`)، وتطبيق الإدارة المستقل \`app-admin-release.apk\`."
 
           publish_release() {
             local tag="$1"

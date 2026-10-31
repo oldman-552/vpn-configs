@@ -62,6 +62,7 @@ import com.bahrain.vpnconfigs.data.Prefs
 import com.bahrain.vpnconfigs.ui.AppTheme
 import com.bahrain.vpnconfigs.ui.AppViewModel
 import com.bahrain.vpnconfigs.ui.AppsSplitScreen
+import com.bahrain.vpnconfigs.ui.CommunityTestingScreen
 import com.bahrain.vpnconfigs.ui.ConnectHomeScreen
 import com.bahrain.vpnconfigs.ui.EnterpriseHubScreen
 import com.bahrain.vpnconfigs.ui.FavoritesScreen
@@ -72,6 +73,7 @@ import com.bahrain.vpnconfigs.ui.ServerHistoryScreen
 import com.bahrain.vpnconfigs.ui.ServerItem
 import com.bahrain.vpnconfigs.ui.ServersListScreen
 import com.bahrain.vpnconfigs.ui.SettingsAndExportScreen
+import com.bahrain.vpnconfigs.ui.VpnHotspotScreen
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.util.AppI18n
 import com.bahrain.vpnconfigs.util.tr
@@ -282,7 +284,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                     label = { Text(tr("الأمان", "Security"), maxLines = 1) },
                 )
                 NavigationBarItem(
-                    selected = tab in setOf(5, 6, 7),
+                    selected = tab in setOf(5, 6, 7, 8, 9),
                     onClick = { tab = 5 },
                     icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                     label = { Text(tr("الإعدادات", "Settings"), maxLines = 1) },
@@ -317,6 +319,8 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                 },
                 onNextServer = { BahrainVpnService.switchNextServer(ctx) },
                 onOpenServersTab = { tab = 1 },
+                onOpenHotspot = { tab = 8 },
+                onOpenCommunityTesting = { tab = 9 },
                 onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
             )
             1 -> ServersListScreen(
@@ -392,6 +396,22 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                 modifier = m,
                 onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
             )
+            8 -> VpnHotspotScreen(
+                vpnStatus = vpnStatus,
+                onBack = { tab = 0 },
+                onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
+                modifier = m,
+            )
+            9 -> CommunityTestingScreen(
+                state = state,
+                vm = vm,
+                onBack = { tab = 0 },
+                onLoadIranCommunityPool = {
+                    vm.setFeedProfile("iran_community")
+                    tab = 1
+                },
+                modifier = m,
+            )
             else -> SettingsAndExportScreen(
                 vm = vm,
                 state = state,
@@ -407,6 +427,8 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                     vm.refreshEnterpriseState()
                     tab = 7
                 },
+                onOpenHotspot = { tab = 8 },
+                onOpenCommunityTesting = { tab = 9 },
             )
         }
     }
