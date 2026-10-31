@@ -642,7 +642,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** يعيد توليد الملصقات المعتمدة على اللغة («آخر تحديث» وعناوين VIP) عند التبديل الحي للغة. */
     fun refreshLanguageLabels() {
         AppI18n.initFromPrefs(getApplication())
-        val updatedLbl = UiMessages.formatLastUpdated(state.meta.generatedAt, prefs.lastUpdatedEpochMs)
+        val updatedLbl = UiMessages.formatLastUpdated(state.meta.generatedAt, prefs.lastRefreshWallMs)
         val rebuilt = buildServerList(state.configs, state.results, state.sortMode)
         state = state.copy(
             lastUpdatedLabel = updatedLbl,
