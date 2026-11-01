@@ -5,18 +5,30 @@
 // =====================================================================
 package com.bahrain.vpnconfigs.data
 
+import android.content.ContentValues
 import android.content.Context
+import android.os.Build
+import android.os.Environment
+import android.os.SystemClock
+import android.provider.MediaStore
 import android.util.Base64
 import com.bahrain.vpnconfigs.engine.Converters
+import com.bahrain.vpnconfigs.engine.SingBox
 import com.bahrain.vpnconfigs.engine.TestResult
 import com.bahrain.vpnconfigs.util.AppDiag
 import com.bahrain.vpnconfigs.util.UiMessages
+import com.bahrain.vpnconfigs.util.tr
+import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.net.URL
 import java.security.MessageDigest
+import java.util.Locale
 
 data class DeadConfigPurgeDecision(
     val shouldPurge: Boolean,
@@ -1311,12 +1323,332 @@ class Repo(
         )
     }
 
+    data class StableApkDownloadResult(
+        val savedDisplayName: String,
+        val abiLabel: String,
+        val sizeBytes: Long,
+        val sha256: String,
+        val checksumVerified: Boolean,
+    )
+
+    fun resolveDeviceReleaseAsset(
+        supportedAbis: Array<String> = Build.SUPPORTED_ABIS,
+    ): Pair<String, String> {
+        for (abi in supportedAbis) {
+            when (abi.trim()) {
+                "arm64-v8a" -> return "arm64-v8a" to "app-arm64-v8a-release.apk"
+                "x86_64" -> return "x86_64" to "app-x86_64-release.apk"
+            }
+        }
+        return "universal" to "app-universal-release.apk"
+    }
+
+    private fun releaseAssetUrl(fileName: String): String =
+        mirrorOverride?.invoke("release/$fileName")?.firstOrNull()
+            ?: "https://github.com/$owner/$repo/releases/latest/download/$fileName"
+
+    private fun openFollowedReleaseConnection(
+        initialUrl: String,
+        proxy: Proxy,
+        connectTimeoutMs: Int,
+        readTimeoutMs: Int,
+    ): HttpURLConnection? {
+        val enforceHttps = (mirrorOverride == null)
+        var currentUrl = initialUrl
+        for (hop in 0..6) {
+            val parsed = runCatching { URL(currentUrl) }.getOrNull() ?: return null
+            if (enforceHttps && !parsed.protocol.equals("https", ignoreCase = true)) {
+                return null
+            }
+            val conn = (parsed.openConnection(proxy) as HttpURLConnection).apply {
+                connectTimeout = connectTimeoutMs
+                readTimeout = readTimeoutMs
+                requestMethod = "GET"
+                instanceFollowRedirects = false
+                setRequestProperty("User-Agent", "bahrain-vpn/2.0")
+                setRequestProperty("Accept", "application/octet-stream, text/plain, */*")
+            }
+            val code = runCatching { conn.responseCode }.getOrElse {
+                runCatching { conn.disconnect() }
+                return null
+            }
+            if (code in listOf(301, 302, 303, 307, 308)) {
+                val loc = conn.getHeaderField("Location")?.trim().orEmpty()
+                runCatching { conn.disconnect() }
+                if (loc.isEmpty()) return null
+                val resolved = runCatching { URL(parsed, loc).toString() }.getOrNull() ?: return null
+                if (enforceHttps && !resolved.lowercase(Locale.US).startsWith("https://")) {
+                    return null
+                }
+                currentUrl = resolved
+                continue
+            }
+            if (code in 200..299) {
+                return conn
+            }
+            runCatching { conn.disconnect() }
+            return null
+        }
+        return null
+    }
+
+    private fun openReleaseStreamWithTunnelFallback(
+        targetUrl: String,
+        connectTimeoutMs: Int,
+        readTimeoutMs: Int,
+    ): HttpURLConnection? {
+        val preferTunnelProxy = mirrorOverride == null && VpnStateManager.status.value.isTunnelVerified
+        if (preferTunnelProxy) {
+            val socksProxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", SingBox.VPN_SOCKS_PORT))
+            val viaTunnel = openFollowedReleaseConnection(targetUrl, socksProxy, connectTimeoutMs, readTimeoutMs)
+            if (viaTunnel != null) return viaTunnel
+        }
+        return openFollowedReleaseConnection(targetUrl, Proxy.NO_PROXY, connectTimeoutMs, readTimeoutMs)
+    }
+
+    private fun fetchExpectedSha256ForAsset(assetFileName: String): String {
+        val sumsUrl = releaseAssetUrl("SHA256SUMS.txt")
+        val conn = openReleaseStreamWithTunnelFallback(sumsUrl, connectTimeoutMs = 12_000, readTimeoutMs = 12_000)
+            ?: return ""
+        return try {
+            val text = conn.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                val sb = StringBuilder()
+                val buf = CharArray(2048)
+                var total = 0
+                while (true) {
+                    val n = reader.read(buf)
+                    if (n <= 0) break
+                    total += n
+                    if (total > 64 * 1024) break
+                    sb.append(buf, 0, n)
+                }
+                sb.toString()
+            }
+            var found = ""
+            for (rawLine in text.lineSequence()) {
+                val parts = rawLine.trim().split(Regex("\\s+"), limit = 2)
+                if (parts.size == 2) {
+                    val hash = parts[0].trim().lowercase(Locale.US)
+                    val name = parts[1].trim().removePrefix("*").substringAfterLast('/')
+                    if (name == assetFileName && hash.length == 64 && hash.all { it in '0'..'9' || it in 'a'..'f' }) {
+                        found = hash
+                        break
+                    }
+                }
+            }
+            found
+        } catch (_: Exception) {
+            ""
+        } finally {
+            runCatching { conn.disconnect() }
+        }
+    }
+
+    /**
+     * ينزّل آخر نسخة مستقرة رسمية متوافقة مع معالج الجهاز مباشرةً من داخل التطبيق
+     * ويحفظها في مجلد التنزيلات (Downloads) باسم موحّد نظيف دون كشف أي رابط أو مصدر للواجهة،
+     * مع التحقق الصارم من بصمة SHA-256 وترويسة الحزمة قبل الحفظ.
+     */
+    fun downloadLatestStableApk(
+        supportedAbis: Array<String> = Build.SUPPORTED_ABIS,
+        expectedSha256Override: String = "",
+        isCancelled: () -> Boolean = { false },
+        onProgress: (percent: Int, downloadedBytes: Long, totalBytes: Long) -> Unit = { _, _, _ -> },
+    ): Result<StableApkDownloadResult> {
+        val (abiLabel, assetName) = resolveDeviceReleaseAsset(supportedAbis)
+        val cleanOverrideSha = expectedSha256Override.trim().lowercase(Locale.US)
+            .takeIf { it.length == 64 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }
+            .orEmpty()
+        val expectedSha = cleanOverrideSha.ifEmpty { fetchExpectedSha256ForAsset(assetName) }
+        if (isCancelled()) {
+            return Result.failure(InterruptedException(tr("تم إلغاء التحميل", "Download cancelled")))
+        }
+
+        val updatesCacheDir = File(ctx.cacheDir, "updates").apply { mkdirs() }
+        val tempFile = File(updatesCacheDir, "bahrain-vpn-stable.part")
+        runCatching { if (tempFile.exists()) tempFile.delete() }
+
+        val targetUrl = releaseAssetUrl(assetName)
+        var conn: HttpURLConnection? = null
+        return try {
+            onProgress(0, 0L, 0L)
+            conn = openReleaseStreamWithTunnelFallback(
+                targetUrl = targetUrl,
+                connectTimeoutMs = 18_000,
+                readTimeoutMs = 45_000,
+            ) ?: return Result.failure(
+                IllegalStateException(
+                    tr(
+                        "تعذّر الاتصال بخادم التحديث حاليًا — تحقّق من الإنترنت وحاول مرة أخرى",
+                        "Could not reach update service right now — check your connection and retry",
+                    )
+                )
+            )
+
+            val declaredTotal = conn.contentLengthLong
+            if (declaredTotal > MAX_APK_DOWNLOAD_BYTES) {
+                return Result.failure(
+                    IllegalStateException(tr("حجم ملف التحديث يتجاوز الحد الآمن", "Update package exceeds safe size limit"))
+                )
+            }
+
+            val md = MessageDigest.getInstance("SHA-256")
+            val headerMagic = ByteArray(4)
+            var magicFilled = 0
+            var totalRead = 0L
+            var lastProgressTickMs = 0L
+
+            conn.inputStream.use { input ->
+                FileOutputStream(tempFile).use { out ->
+                    val buf = ByteArray(32 * 1024)
+                    while (true) {
+                        if (isCancelled()) {
+                            throw InterruptedException(tr("تم إلغاء التحميل", "Download cancelled"))
+                        }
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        if (magicFilled < 4) {
+                            val copyLen = minOf(4 - magicFilled, n)
+                            System.arraycopy(buf, 0, headerMagic, magicFilled, copyLen)
+                            magicFilled += copyLen
+                        }
+                        totalRead += n
+                        if (totalRead > MAX_APK_DOWNLOAD_BYTES) {
+                            throw IllegalStateException(
+                                tr("حجم ملف التحديث يتجاوز الحد الآمن", "Update package exceeds safe size limit")
+                            )
+                        }
+                        md.update(buf, 0, n)
+                        out.write(buf, 0, n)
+
+                        val nowTick = runCatching { SystemClock.elapsedRealtime() }.getOrDefault(System.currentTimeMillis())
+                        if (nowTick - lastProgressTickMs >= 100L) {
+                            lastProgressTickMs = nowTick
+                            val pct = if (declaredTotal > 0L) {
+                                ((totalRead * 100L) / declaredTotal).toInt().coerceIn(1, 99)
+                            } else {
+                                -1
+                            }
+                            onProgress(pct, totalRead, declaredTotal.coerceAtLeast(0L))
+                        }
+                    }
+                    out.fd.sync()
+                }
+            }
+
+            val validZipMagic = magicFilled == 4 &&
+                headerMagic[0] == 0x50.toByte() &&
+                headerMagic[1] == 0x4B.toByte() &&
+                headerMagic[2] == 0x03.toByte() &&
+                headerMagic[3] == 0x04.toByte()
+            if (!validZipMagic || totalRead < MIN_APK_DOWNLOAD_BYTES) {
+                return Result.failure(
+                    IllegalStateException(
+                        tr("الملف المستلم غير مكتمل أو تالف — لم يتم حفظه", "Downloaded package was incomplete or invalid")
+                    )
+                )
+            }
+
+            val actualSha = md.digest().joinToString("") { "%02x".format(it) }
+            if (expectedSha.isNotEmpty() && !actualSha.equals(expectedSha, ignoreCase = true)) {
+                return Result.failure(
+                    SecurityException(
+                        tr(
+                            "فشل التحقق من بصمة الأمان SHA-256 للنسخة المحمّلة — تم رفض الملف لحمايتك",
+                            "SHA-256 integrity check failed — rejected package for your safety",
+                        )
+                    )
+                )
+            }
+
+            val savedDisplayName = STABLE_DOWNLOAD_FILE_NAME
+            val savedViaMediaStore = saveVerifiedFileToPublicDownloads(tempFile, savedDisplayName)
+            if (!savedViaMediaStore) {
+                val fallbackDir = File(
+                    ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: File(ctx.filesDir, "downloads"),
+                    "",
+                ).apply { mkdirs() }
+                val dest = File(fallbackDir, savedDisplayName)
+                tempFile.copyTo(dest, overwrite = true)
+            }
+
+            onProgress(100, totalRead, totalRead)
+            Result.success(
+                StableApkDownloadResult(
+                    savedDisplayName = savedDisplayName,
+                    abiLabel = abiLabel,
+                    sizeBytes = totalRead,
+                    sha256 = actualSha,
+                    checksumVerified = expectedSha.isNotEmpty(),
+                )
+            )
+        } catch (ie: InterruptedException) {
+            Result.failure(ie)
+        } catch (e: Exception) {
+            AppDiag.w("Repo", "opaque stable download error")
+            Result.failure(
+                IllegalStateException(
+                    UiMessages.sanitizeError(
+                        e.message,
+                        tr(
+                            "تعذّر إكمال تحميل النسخة المستقرة — حاول مجددًا",
+                            "Could not complete downloading the latest stable version — please retry",
+                        ),
+                    )
+                )
+            )
+        } finally {
+            runCatching { conn?.disconnect() }
+            runCatching { if (tempFile.exists()) tempFile.delete() }
+        }
+    }
+
+    private fun saveVerifiedFileToPublicDownloads(sourceFile: File, displayName: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        return runCatching {
+            val resolver = ctx.contentResolver
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            runCatching {
+                resolver.delete(
+                    collection,
+                    "${MediaStore.MediaColumns.DISPLAY_NAME} = ?",
+                    arrayOf(displayName),
+                )
+            }
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val itemUri = resolver.insert(collection, values) ?: return@runCatching false
+            val wroteOk = resolver.openOutputStream(itemUri)?.use { out ->
+                sourceFile.inputStream().use { input ->
+                    input.copyTo(out, bufferSize = 32 * 1024)
+                }
+                out.flush()
+                true
+            } ?: false
+            if (!wroteOk) {
+                runCatching { resolver.delete(itemUri, null, null) }
+                return@runCatching false
+            }
+            val publishValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }
+            resolver.update(itemUri, publishValues, null, null)
+            true
+        }.getOrDefault(false)
+    }
+
     companion object {
         @JvmField
         internal val DEFAULT_OWNER: String = "oldman-552"
         @JvmField
         internal val DEFAULT_REPO: String = "vpn-configs"
+        const val STABLE_DOWNLOAD_FILE_NAME: String = "bahrain-vpn-latest.apk"
         private const val MAX_BODY_BYTES = 10L * 1024L * 1024L
+        private const val MAX_APK_DOWNLOAD_BYTES = 140L * 1024L * 1024L
+        private const val MIN_APK_DOWNLOAD_BYTES = 16L * 1024L
         private const val MAX_BODY_CHARS = 8_000_000
         private const val MAX_PARSED_SERVERS = 5_000
         private const val MAX_TOP500_CAPACITY = 500

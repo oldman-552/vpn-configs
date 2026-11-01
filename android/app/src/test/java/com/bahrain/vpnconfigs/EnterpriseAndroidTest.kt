@@ -450,4 +450,104 @@ class EnterpriseAndroidTest {
             com.bahrain.vpnconfigs.util.AppI18n.setLanguage(ctx, com.bahrain.vpnconfigs.util.AppLang.AR)
         }
     }
+
+    @Test
+    fun opaqueInAppLatestStableDownloadVerifiesSha256AndHidesSourceUrls() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        // Build a synthetic valid 24 KB ZIP/APK-magic payload (starts with PK\x03\x04)
+        val payload = ByteArray(24 * 1024) { idx -> (idx * 31 + 7).toByte() }
+        payload[0] = 0x50
+        payload[1] = 0x4B
+        payload[2] = 0x03
+        payload[3] = 0x04
+        val expectedSha = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(payload)
+            .joinToString("") { "%02x".format(it) }
+        val sumsBody = "$expectedSha  app-arm64-v8a-release.apk\n".toByteArray(Charsets.UTF_8)
+
+        ServerSocket(0, 8, InetAddress.getByName("127.0.0.1")).use { server ->
+            val port = server.localPort
+            val running = AtomicBoolean(true)
+            val srvThread = thread(start = true) {
+                while (running.get()) {
+                    val sock = try {
+                        server.accept()
+                    } catch (_: Exception) {
+                        break
+                    }
+                    try {
+                        val reader = BufferedReader(InputStreamReader(sock.getInputStream(), Charsets.UTF_8))
+                        val reqLine = reader.readLine() ?: ""
+                        while (true) {
+                            val h = reader.readLine() ?: break
+                            if (h.isEmpty()) break
+                        }
+                        val path = reqLine.split(" ").getOrNull(1).orEmpty()
+                        val out = sock.getOutputStream()
+                        when {
+                            path == "/release/SHA256SUMS.txt" -> {
+                                val hdr = "HTTP/1.1 200 OK\r\nContent-Length: ${sumsBody.size}\r\nConnection: close\r\n\r\n"
+                                out.write(hdr.toByteArray(Charsets.UTF_8))
+                                out.write(sumsBody)
+                            }
+                            path == "/release/app-arm64-v8a-release.apk" -> {
+                                // Redirect hop to verify opaque redirect handling
+                                val hdr = "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:$port/cdn-blob/pkg.bin\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                                out.write(hdr.toByteArray(Charsets.UTF_8))
+                            }
+                            path == "/cdn-blob/pkg.bin" -> {
+                                val hdr = "HTTP/1.1 200 OK\r\nContent-Length: ${payload.size}\r\nConnection: close\r\n\r\n"
+                                out.write(hdr.toByteArray(Charsets.UTF_8))
+                                out.write(payload)
+                            }
+                            else -> {
+                                val hdr = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                                out.write(hdr.toByteArray(Charsets.UTF_8))
+                            }
+                        }
+                        out.flush()
+                    } catch (_: Exception) {
+                    } finally {
+                        runCatching { sock.close() }
+                    }
+                }
+            }
+
+            try {
+                val repo = Repo(
+                    ctx = ctx,
+                    mirrorOverride = { file -> listOf("http://127.0.0.1:$port/$file") },
+                )
+                val sawHundredPct = AtomicBoolean(false)
+                val okRes = repo.downloadLatestStableApk(
+                    supportedAbis = arrayOf("arm64-v8a"),
+                    onProgress = { pct, _, _ -> if (pct == 100) sawHundredPct.set(true) },
+                ).getOrThrow()
+
+                assertTrue(sawHundredPct.get())
+                assertEquals(Repo.STABLE_DOWNLOAD_FILE_NAME, okRes.savedDisplayName)
+                assertEquals("arm64-v8a", okRes.abiLabel)
+                assertEquals(payload.size.toLong(), okRes.sizeBytes)
+                assertEquals(expectedSha, okRes.sha256)
+                assertTrue(okRes.checksumVerified)
+                assertFalse(Repo.containsSourceIdentifier(okRes.toString()))
+                assertFalse(okRes.savedDisplayName.contains("http"))
+
+                // Tampered checksum must fail closed without leaking URLs or source names
+                val badRes = repo.downloadLatestStableApk(
+                    supportedAbis = arrayOf("arm64-v8a"),
+                    expectedSha256Override = "f".repeat(64),
+                )
+                assertTrue(badRes.isFailure)
+                val errText = badRes.exceptionOrNull()?.message.orEmpty()
+                assertFalse(errText.contains("127.0.0.1"))
+                assertFalse(errText.contains("http"))
+                assertFalse(Repo.containsSourceIdentifier(errText))
+            } finally {
+                running.set(false)
+                runCatching { server.close() }
+                srvThread.join(1000)
+            }
+        }
+    }
 }

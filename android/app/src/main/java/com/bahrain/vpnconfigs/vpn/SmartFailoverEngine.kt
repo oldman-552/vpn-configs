@@ -33,9 +33,9 @@ enum class FailoverMode(
     SMART(
         "SMART",
         "ذكي ومتوازن",
-        "تبديل تلقائي سلس عند انقطاع السيرفر أو تدهوره الحاد",
+        "تبديل تلقائي سلس عند انقطاع السيرفر أو ضعف السرعة والاستجابة",
         "Smart Balanced",
-        "Seamless auto-switch if tunnel drops or severely degrades",
+        "Seamless auto-switch if tunnel drops, stalls, or weakens",
     ),
     AGGRESSIVE(
         "AGGRESSIVE",
@@ -77,6 +77,38 @@ object SmartFailoverEngine {
     const val RAPID_CONFIRM_DELAY_MS: Long = 600L
     const val SECONDARY_CONFIRM_URL: String = "https://cp.cloudflare.com/generate_204"
     const val AGGRESSIVE_IMPROVEMENT_FACTOR: Double = 0.72
+    const val PROACTIVE_REPLACEMENT_MARGIN: Double = 0.72
+    const val PARALLEL_RACE_BATCH_SIZE: Int = 4
+    const val STALL_MIN_UPSTREAM_DEMAND_BPS: Long = 1_536L
+    const val STALL_MAX_CHOKED_DOWNSTREAM_BPS: Long = 4_096L
+
+    /**
+     * يرصد اختناق التحميل الفعلي (Traffic Stall): التطبيقات ترسل طلبات نشطة صاعدة (>= 1.5 KB/s)
+     * بينما التنزيل الوارد مخنوق (< 4 KB/s). لا يُحتسب إطلاقًا عند خمول الجهاز (Idle).
+     */
+    fun isTrafficSampleStalled(upSpeedBps: Long, downSpeedBps: Long): Boolean =
+        upSpeedBps >= STALL_MIN_UPSTREAM_DEMAND_BPS && downSpeedBps in 0L until STALL_MAX_CHOKED_DOWNSTREAM_BPS
+
+    /**
+     * يفرّق بذكاء بين ضعف السيرفر وضعف تغطية شبكة الهاتف نفسها:
+     * في التبديل الاستباقي (والسيرفر الحالي ما يزال متصلاً)، لا ننتقل للبديل إلا إذا ثبت فعليًا
+     * أنه أسرع بفارق واضح (>= 28%) أو سليم تمامًا عند اختناق التنزيل.
+     */
+    fun isReplacementWorthSwitching(
+        currentAvgLatencyMs: Double,
+        candidateLatencyMs: Long,
+        consecutiveTrafficStalls: Int = 0,
+        isHardDrop: Boolean = false,
+    ): Boolean {
+        if (candidateLatencyMs <= 0L) return false
+        if (isHardDrop) return true
+        if (consecutiveTrafficStalls >= 2) {
+            return candidateLatencyMs <= 380L ||
+                (currentAvgLatencyMs > 0.0 && candidateLatencyMs.toDouble() <= currentAvgLatencyMs * 0.85)
+        }
+        if (currentAvgLatencyMs <= 0.0) return candidateLatencyMs <= 320L
+        return candidateLatencyMs.toDouble() <= (currentAvgLatencyMs * PROACTIVE_REPLACEMENT_MARGIN)
+    }
 
     private val dropTimestampsMs = ConcurrentHashMap<String, Long>()
 
@@ -123,8 +155,8 @@ object SmartFailoverEngine {
     }
 
     /**
-     * يقيّم جودة النفق الحيّة ويرصد التدهور (ارتفاع التأخير، التذبذب، فقدان الحزم) قبل الانقطاع الكامل
-     * مع تطبيق Hysteresis وفترة استقرار دنيا لمنع حلقات التبديل السريع (Anti-Oscillation).
+     * يقيّم جودة النفق الحيّة ويرصد ضعف الاتصال (ارتفاع التأخير، التذبذب، فقدان الحزم، أو اختناق التنزيل الفعلي)
+     * قبل الانقطاع الكامل مع تطبيق Hysteresis وفترة استقرار دنيا لمنع حلقات التبديل السريع (Anti-Oscillation).
      */
     fun evaluateTunnelHealth(
         recentSamplesMs: List<Long>,
@@ -133,6 +165,7 @@ object SmartFailoverEngine {
         lastSwitchAtMs: Long,
         nowMs: Long = System.currentTimeMillis(),
         bestCandidateLatencyMs: Long = 0L,
+        consecutiveTrafficStalls: Int = 0,
     ): TunnelHealthSnapshot {
         val validLat = recentSamplesMs.filter { it > 0L }
         val latestLat = validLat.lastOrNull() ?: 0L
@@ -146,8 +179,18 @@ object SmartFailoverEngine {
             ((fails.toDouble() / recentOutcomes.size.toDouble()) * 1000.0).roundToInt() / 10.0
         } else 0.0
 
-        val severelyDegraded = (validLat.size >= 3 && avgLat >= 950.0) || lossPct >= 50.0 || jitter >= 320.0
-        val moderatelyDegraded = severelyDegraded || latestLat >= 650L || lossPct >= 25.0 || jitter >= 180.0
+        val trafficStalled = consecutiveTrafficStalls >= 2
+        val severelyDegraded =
+            (validLat.size >= 2 && avgLat >= 520.0) ||
+                lossPct >= 34.0 ||
+                jitter >= 210.0 ||
+                trafficStalled
+        val moderatelyDegraded =
+            severelyDegraded ||
+                latestLat >= 420L ||
+                lossPct >= 20.0 ||
+                jitter >= 150.0 ||
+                consecutiveTrafficStalls >= 1
 
         val qualityAr = when {
             severelyDegraded -> "ضعيفة (متدهورة)"
@@ -169,19 +212,24 @@ object SmartFailoverEngine {
         }
 
         if (mode == FailoverMode.SMART && severelyDegraded) {
+            val reasonText = if (trafficStalled) {
+                "رُصد اختناق في سرعة التحميل الفعلية — جارٍ الانتقال لسيرفر أسرع"
+            } else {
+                "رُصد ضعف في استجابة السيرفر (${avgLat.toInt()} ms) — جارٍ الانتقال لسيرفر أسرع"
+            }
             return TunnelHealthSnapshot(
                 qualityLabelAr = qualityAr,
                 isDegraded = true,
                 shouldProactiveSwitch = true,
                 jitterMs = jitter,
                 packetLossPct = lossPct,
-                reasonAr = "رُصد تدهور حاد في استجابة السيرفر (${avgLat.toInt()} ms)",
+                reasonAr = reasonText,
             )
         }
 
         if (mode == FailoverMode.AGGRESSIVE) {
             val candidateMuchFaster = bestCandidateLatencyMs in 1L..350L &&
-                avgLat >= 380.0 &&
+                avgLat >= 340.0 &&
                 bestCandidateLatencyMs.toDouble() <= (avgLat * AGGRESSIVE_IMPROVEMENT_FACTOR)
             if (severelyDegraded || (moderatelyDegraded && validLat.size >= 2) || candidateMuchFaster) {
                 return TunnelHealthSnapshot(

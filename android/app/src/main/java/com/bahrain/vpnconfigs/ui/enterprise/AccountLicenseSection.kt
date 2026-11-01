@@ -85,11 +85,15 @@ fun SignedAppUpdateBanner(
             }
             Button(
                 onClick = { vm.downloadAndInstallSignedUpdate() },
-                enabled = !state.updatingApk,
+                enabled = !state.updatingApk && !state.stableDownloadRunning,
             ) {
                 Text(
-                    if (state.updatingApk) tr("جارٍ فتح المتصفح الآمن…", "Opening secure browser…")
-                    else tr("فتح التحميل الرسمي الآمن (${upd.selectedAbi})", "Open Official Download (${upd.selectedAbi})")
+                    if (state.updatingApk || state.stableDownloadRunning) {
+                        val pct = if (state.stableDownloadPercent > 0) " (${state.stableDownloadPercent}%)" else ""
+                        tr("جارٍ التحميل داخل البرنامج…$pct", "Downloading inside app…$pct")
+                    } else {
+                        tr("تحميل النسخة المستقرة داخل البرنامج (${upd.selectedAbi})", "Download Stable Version (${upd.selectedAbi})")
+                    }
                 )
             }
         }

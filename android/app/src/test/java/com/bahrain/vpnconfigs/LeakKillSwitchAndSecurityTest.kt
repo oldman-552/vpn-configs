@@ -210,6 +210,51 @@ class LeakKillSwitchAndSecurityTest {
         // Adaptive polling stretches interval when healthy to save battery
         assertEquals(3_500L, SmartFailoverEngine.computeAdaptiveCheckIntervalMs(0, isDegraded = true))
         assertEquals(24_000L, SmartFailoverEngine.computeAdaptiveCheckIntervalMs(9, isDegraded = false))
+
+        // Traffic Stall & Weak-Connection Detection + Differential Replacement Gate
+        assertFalse("Idle tunnel must not be flagged as stalled", SmartFailoverEngine.isTrafficSampleStalled(200L, 0L))
+        assertTrue("Active upstream demand with choked downstream must flag stall", SmartFailoverEngine.isTrafficSampleStalled(3_200L, 1_500L))
+        assertFalse("Healthy high-speed download is not stalled", SmartFailoverEngine.isTrafficSampleStalled(4_000L, 250_000L))
+
+        val stalledHealth = SmartFailoverEngine.evaluateTunnelHealth(
+            recentSamplesMs = listOf(180L, 195L),
+            recentOutcomes = listOf(true, true),
+            mode = FailoverMode.SMART,
+            lastSwitchAtMs = now - 35_000L,
+            nowMs = now,
+            consecutiveTrafficStalls = 2,
+        )
+        assertTrue(stalledHealth.isDegraded)
+        assertTrue("2 consecutive traffic stalls must trigger proactive switch even when HTTP 204 ping looks low", stalledHealth.shouldProactiveSwitch)
+
+        val sluggishSmartHealth = SmartFailoverEngine.evaluateTunnelHealth(
+            recentSamplesMs = listOf(540L, 580L),
+            recentOutcomes = listOf(true, true),
+            mode = FailoverMode.SMART,
+            lastSwitchAtMs = now - 35_000L,
+            nowMs = now,
+        )
+        assertTrue(sluggishSmartHealth.isDegraded)
+        assertTrue("Weak average ping >= 520ms must trigger SMART proactive switch", sluggishSmartHealth.shouldProactiveSwitch)
+
+        // Differential replacement: do NOT switch when phone signal itself is weak (backup is equally slow)
+        assertFalse(
+            SmartFailoverEngine.isReplacementWorthSwitching(
+                currentAvgLatencyMs = 600.0,
+                candidateLatencyMs = 570L,
+                consecutiveTrafficStalls = 0,
+                isHardDrop = false,
+            )
+        )
+        // DO switch when backup is genuinely faster (>= 28% improvement)
+        assertTrue(
+            SmartFailoverEngine.isReplacementWorthSwitching(
+                currentAvgLatencyMs = 600.0,
+                candidateLatencyMs = 155L,
+                consecutiveTrafficStalls = 0,
+                isHardDrop = false,
+            )
+        )
     }
 
     @Test
