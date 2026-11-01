@@ -529,19 +529,19 @@ fun SettingsAndExportScreen(
             }
         }
 
-        // ── إعدادات الفحص التلقائي كل 4 ساعات ومعاملات الترتيب ──
+        // ── إعدادات التحديث والفحص التلقائي كل ساعة ومعاملات الترتيب ──
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(tr("معاملات الفحص والترتيب والتحديث (كل 4 ساعات)", "Scan, Ranking & 4-Hour Sync Parameters"), style = MaterialTheme.typography.titleMedium)
+                Text(tr("معاملات الفحص والترتيب والتحديث (كل ساعة)", "Scan, Ranking & 1-Hour Sync Parameters"), style = MaterialTheme.typography.titleMedium)
 
                 SettingToggleRow(
                     title = tr(
-                        "الفحص التلقائي المنتظم لجودة السيرفرات (كل 4 ساعات)",
-                        "Automatic Server Quality Testing (Every 4h)",
+                        "التحديث والفحص التلقائي المنتظم للسيرفرات (كل ساعة)",
+                        "Automatic Hourly Server Refresh & Quality Testing (Every 1h)",
                     ),
                     subtitle = tr(
-                        "يجلب أحدث حزمة كل 4 ساعات ويفحص الاستجابة والسرعة الفعلية ويحفظ النتائج في قوائم التطبيق (تقدير البيانات: ~15–22 MB لكل دورة عند خمول VPN والبطارية كافية). عند الإيقاف يتوقف فحص الخلفية مع الاحتفاظ بقائمة أفضل 100 المحفوظة.",
-                        "Refreshes the pool every 4 hours, measures latency & download speed, and saves results to app lists (~15–22 MB per idle cycle when VPN/Hotspot are inactive and battery is sufficient). Turning off cancels background work while keeping saved Top 100.",
+                        "يجلب أحدث السيرفرات كل ساعة ويفحص الكونفيقات مباشرةً (الاستجابة وسرعة التنزيل الفعلية 600 KB) ويحدّث قائمة المميزة جداً وأفضل 100 تلقائيًا عند خمول VPN وكفاية البطارية. عند الإيقاف يتوقف فحص الخلفية مع الاحتفاظ بالقوائم المحفوظة.",
+                        "Refreshes servers every hour, immediately probes configs (latency & 600 KB download speed), and updates the Elite & Top 100 lists when VPN/Hotspot are idle and battery is sufficient. Turning off cancels background work while keeping saved lists.",
                     ),
                     checked = autoRef,
                     onCheckedChange = {

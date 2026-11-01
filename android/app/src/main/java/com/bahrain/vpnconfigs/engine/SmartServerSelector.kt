@@ -27,7 +27,7 @@ object CentralScoringWeights {
     const val THROUGHPUT_WEIGHT: Double = 0.45
     const val STABILITY_WEIGHT: Double = 0.30
     const val PING_JITTER_WEIGHT: Double = 0.25
-    const val REFRESH_INTERVAL_HOURS: Long = 4L
+    const val REFRESH_INTERVAL_HOURS: Long = 1L
     const val FRESHNESS_TTL_MS: Long = REFRESH_INTERVAL_HOURS * 3_600_000L
 }
 
@@ -102,6 +102,7 @@ data class SmartServerCandidateInput(
     val label: String,
     val country: String = "",
     val isVip: Boolean = false,
+    val isElite: Boolean = false,
     val available: Boolean = true,
     val localLatencyMs: Long = 0L,
     val localJitterMs: Double = 0.0,
@@ -334,6 +335,8 @@ object SmartServerSelector {
 
         if (cand.isVip) {
             weighted += 5.0
+        } else if (cand.isElite && !cand.localFailed) {
+            weighted += 4.5
         }
 
         if (sid in recentlyProblematicIds) {
@@ -369,6 +372,9 @@ object SmartServerSelector {
         if (cand.isVip) {
             reasonsAr.add("عقدة VIP مخصّصة وموثّقة")
             reasonsEn.add("Attested dedicated VIP node")
+        } else if (cand.isElite && !cand.localFailed) {
+            reasonsAr.add("ضمن قائمة المميزة جداً (🔥)")
+            reasonsEn.add("In Very Distinguished (Elite) list")
         }
         if (effDlKbps >= 1024.0) {
             val mbps = ((effDlKbps * 8.0) / 1024.0 * 10.0).roundToInt() / 10.0

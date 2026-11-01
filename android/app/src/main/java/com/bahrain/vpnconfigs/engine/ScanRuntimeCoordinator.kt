@@ -84,17 +84,19 @@ object ScanRuntimeCoordinator {
     ) {
         val appCtx = ctx.applicationContext
         val prefs = Prefs(appCtx)
+        val repo = Repo(appCtx)
         val licenseGuard = EnterpriseLicenseGuard(appCtx)
-        val vipUris = licenseGuard.getAuthorizedVipNodes().map { it.uri }
-        val pool = (vipUris + prefs.customConfigs + baseConfigs).distinct()
-        if (pool.isEmpty()) return
-
-        activeJob?.cancel()
-
         val netMonitor = NetworkAwarenessMonitor(appCtx)
         val netSnap = netMonitor.refreshNow()
         val scanProfile = ScanNetworkProfile.fromTransportCode(netSnap.transport.code)
         val isMetered = netSnap.isMetered || scanProfile == ScanNetworkProfile.MOBILE_DATA
+
+        val vipUris = licenseGuard.getAuthorizedVipNodes().map { it.uri }
+        val eliteUris = repo.loadEliteServersForProfile(scanProfile).map { it.cfg }
+        val pool = (vipUris + eliteUris + prefs.customConfigs + baseConfigs).distinct()
+        if (pool.isEmpty()) return
+
+        activeJob?.cancel()
 
         val fgTitle = tr(
             "فحص أفضل السيرفرات (${scanProfile.labelAr})",
@@ -164,10 +166,10 @@ object ScanRuntimeCoordinator {
     }
 
     /**
-     * يُستدعى كل 4 ساعات من RefreshWorker لفحص السيرفرات وحفظ النتائج تلقائيًا في كافة القوائم
-     * دون المساس بأي فحص تفاعلي جارٍ حاليًا.
+     * يُستدعى كل ساعة من RefreshWorker لفحص السيرفرات مباشرةً وحفظ النتائج تلقائيًا في كافة القوائم
+     * (بما فيها ترقية وتحديث قائمة «المميزة جداً» بمهلة 6 ساعات) دون المساس بأي فحص تفاعلي جارٍ حاليًا.
      */
-    suspend fun executeScheduledFourHourScan(
+    suspend fun executeScheduledHourlyScan(
         ctx: Context,
         baseConfigs: List<String>,
         fingerprintsById: Map<String, String>,
@@ -182,7 +184,8 @@ object ScanRuntimeCoordinator {
         val repo = Repo(appCtx)
         val licenseGuard = EnterpriseLicenseGuard(appCtx)
         val vipUris = licenseGuard.getAuthorizedVipNodes().map { it.uri }
-        val pool = (vipUris + prefs.customConfigs + baseConfigs).distinct()
+        val eliteUris = repo.loadEliteServersForProfile(scanProfile).map { it.cfg }
+        val pool = (vipUris + eliteUris + prefs.customConfigs + baseConfigs).distinct()
         if (pool.isEmpty()) return false
 
         val prevSaved = repo.loadSavedResultsForProfile(scanProfile)
@@ -204,10 +207,28 @@ object ScanRuntimeCoordinator {
             )
             true
         } catch (e: Exception) {
-            AppDiag.w("ScanCoordinator", "scheduled 4h scan failed", e)
+            AppDiag.w("ScanCoordinator", "scheduled 1h scan failed", e)
             false
         }
     }
+
+    suspend fun executeScheduledFourHourScan(
+        ctx: Context,
+        baseConfigs: List<String>,
+        fingerprintsById: Map<String, String>,
+        scanProfile: ScanNetworkProfile,
+        isMetered: Boolean,
+        customScanner: SequentialTunnelScanner? = null,
+        activeNetworkSupplier: (() -> ScanNetworkProfile)? = null,
+    ): Boolean = executeScheduledHourlyScan(
+        ctx = ctx,
+        baseConfigs = baseConfigs,
+        fingerprintsById = fingerprintsById,
+        scanProfile = scanProfile,
+        isMetered = isMetered,
+        customScanner = customScanner,
+        activeNetworkSupplier = activeNetworkSupplier,
+    )
 
     fun cancelActiveScan(ctx: Context) {
         activeJob?.cancel()
@@ -314,6 +335,7 @@ object ScanRuntimeCoordinator {
             return
         }
 
+        val completedWallMs = System.currentTimeMillis()
         val vipProtectedSet = licenseGuard.getAuthorizedVipNodes()
             .map { Converters.cleanUri(it.uri) }
             .toHashSet()
@@ -324,15 +346,27 @@ object ScanRuntimeCoordinator {
         val favClean = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
         val favIds = clientDb.favoriteServerIds()
 
-        val purgeDecision = DeadConfigPurgePolicy.evaluate(
-            currentPool = baseConfigs,
+        // ترقية السيرفرات المميزة جداً تلقائياً وتطبيق مهلة الـ 6 ساعات قبل السماح بحذف أي سيرفر مميز جداً
+        val eliteRec = repo.reconcileAndSaveEliteAfterScan(
+            profile = scanProfile,
+            aliveResults = summary.results,
             failedUris = summary.failedCleanUris,
+            deviceOnline = true,
+            nowMs = completedWallMs,
+            vipCleanUris = vipProtectedSet,
+        )
+
+        val purgeDecision = DeadConfigPurgePolicy.evaluate(
+            currentPool = (eliteRec.retainedCleanUris + baseConfigs).distinct(),
+            failedUris = summary.failedCleanUris + eliteRec.expiredCleanUris,
             testedCount = summary.testedCount,
             aliveCount = summary.aliveCount,
             deviceOnline = true,
             favoriteCleanUris = favClean + activeConnectedClean,
             favoriteServerIds = favIds,
             vipCleanUris = vipProtectedSet,
+            eliteRetainedCleanUris = eliteRec.retainedCleanUris,
+            eliteRetainedServerIds = eliteRec.retainedServerIds,
         )
         if (purgeDecision.shouldPurge) {
             if (prefs.customConfigs.isNotEmpty()) {
@@ -345,17 +379,22 @@ object ScanRuntimeCoordinator {
                 purgeableCleanUris = purgeDecision.purgeableCleanUris,
                 remainingPool = purgeDecision.remainingPool,
                 bestLimit = minOf(prefs.bestN, PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT),
+                nowMs = completedWallMs,
             )
         }
 
         summary.failedCleanUris.forEach { VpnStateManager.markServerDropped(it) }
         summary.results.forEach { VpnStateManager.markServerHealthy(Converters.cleanUri(it.cfg)) }
 
-        val nextConfigs = if (purgeDecision.shouldPurge) purgeDecision.remainingPool else baseConfigs
+        val nextConfigs = if (purgeDecision.shouldPurge) {
+            purgeDecision.remainingPool
+        } else {
+            (eliteRec.retainedCleanUris + baseConfigs).distinct()
+        }
         val freshAliveSet = summary.results.map { Converters.cleanUri(it.cfg) }.toHashSet()
         val untouchedPrev = basePrevResults.filter { old ->
             val c = Converters.cleanUri(old.cfg)
-            c !in freshAliveSet && c !in summary.failedCleanUris
+            c !in freshAliveSet && c !in summary.failedCleanUris && c !in eliteRec.expiredCleanUris
         }
         val mergedResults = (summary.results + untouchedPrev).sortedWith(
             compareByDescending<TestResult> { it.speedKbps }
@@ -364,8 +403,7 @@ object ScanRuntimeCoordinator {
                 .thenBy { it.jitterMs }
         )
 
-        // Persist permanently into per-network saved list + exported files + 4-hour scan wall clock!
-        val completedWallMs = System.currentTimeMillis()
+        // Persist permanently into per-network saved list + exported files + 1-hour scan wall clock!
         repo.saveProfileResults(scanProfile, mergedResults)
         prefs.setLastScanWallMs(scanProfile, completedWallMs)
 

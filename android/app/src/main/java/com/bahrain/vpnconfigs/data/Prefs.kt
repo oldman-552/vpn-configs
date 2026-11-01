@@ -16,6 +16,7 @@ data class ConnectionHistoryEntry(
     val country: String = "",
     val pingMs: Long = 0L,
     val timestampMs: Long = 0L,
+    val serverId: String = "",
 )
 
 class Prefs(ctx: Context) {
@@ -91,7 +92,7 @@ class Prefs(ctx: Context) {
             putBoolean("auto_server_quality_testing_3h", v)
         }
 
-    /** الفحص التلقائي لجودة السيرفرات في الخلفية (كل 4 ساعات) — مفعّل افتراضياً وبدون نوافذ منبثقة مزعجة. */
+    /** الفحص التلقائي لجودة السيرفرات في الخلفية (كل ساعة) — مفعّل افتراضياً وبدون نوافذ منبثقة مزعجة. */
     var autoServerQualityTesting: Boolean
         get() = sp.getBoolean("auto_server_quality_testing_3h", sp.getBoolean("auto_refresh", true))
         set(v) = sp.edit {
@@ -260,6 +261,7 @@ class Prefs(ctx: Context) {
                                 country = o.optString("country"),
                                 pingMs = o.optLong("ping_ms", 0L),
                                 timestampMs = o.optLong("ts_ms", 0L),
+                                serverId = o.optString("server_id", ""),
                             )
                         )
                     }
@@ -279,6 +281,7 @@ class Prefs(ctx: Context) {
                         .put("country", item.country)
                         .put("ping_ms", item.pingMs)
                         .put("ts_ms", item.timestampMs)
+                        .put("server_id", item.serverId)
                 )
             }
             sp.edit { putString("connection_history_json", arr.toString()) }
@@ -290,6 +293,7 @@ class Prefs(ctx: Context) {
         proto: String,
         country: String = "",
         pingMs: Long = 0L,
+        serverId: String = "",
     ) {
         val now = System.currentTimeMillis()
         val entry = ConnectionHistoryEntry(
@@ -299,8 +303,12 @@ class Prefs(ctx: Context) {
             country = country,
             pingMs = pingMs,
             timestampMs = now,
+            serverId = serverId,
         )
-        val filtered = connectionHistory.filterNot { it.endpoint == endpoint && it.proto == proto }
+        val filtered = connectionHistory.filterNot { existing ->
+            (serverId.isNotBlank() && existing.serverId == serverId) ||
+                (existing.endpoint == endpoint && existing.proto == proto)
+        }
         connectionHistory = (listOf(entry) + filtered).take(20)
     }
 
