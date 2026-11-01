@@ -706,15 +706,15 @@ class Top500AndPersonalizedTop50Test {
     }
 
     @Test
-    fun workSchedulerConfiguresFourHourIntervalAndPrefsHonorsOptOut() {
+    fun workSchedulerConfiguresOneHourIntervalAndPrefsHonorsOptOut() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val prefs = Prefs(ctx)
 
-        assertEquals(4L, WorkScheduler.PERIOD_HOURS)
-        assertEquals("bahrain_vpn_quality_refresh_4h", WorkScheduler.UNIQUE_WORK_NAME)
-        assertEquals(4L, CentralScoringWeights.REFRESH_INTERVAL_HOURS)
-        assertEquals(4L * 3_600_000L, CentralScoringWeights.FRESHNESS_TTL_MS)
-        assertEquals(4L * 3_600_000L, DeadConfigPurgePolicy.PURGE_TTL_MS)
+        assertEquals(1L, WorkScheduler.PERIOD_HOURS)
+        assertEquals("bahrain_vpn_quality_refresh_1h", WorkScheduler.UNIQUE_WORK_NAME)
+        assertEquals(1L, CentralScoringWeights.REFRESH_INTERVAL_HOURS)
+        assertEquals(1L * 3_600_000L, CentralScoringWeights.FRESHNESS_TTL_MS)
+        assertEquals(1L * 3_600_000L, DeadConfigPurgePolicy.PURGE_TTL_MS)
 
         // Default is enabled (true) and synced with autoRefresh
         prefs.autoServerQualityTesting = true
@@ -949,5 +949,194 @@ class Top500AndPersonalizedTop50Test {
         assertEquals(500, summary.testedCount)
         assertEquals(4, batchCalls.get()) // ceil(500/180)=3 Stage-1 batches + 1 Stage-2 speed batch!
         assertEquals(100, summary.rankingBundle.top100.size)
+    }
+
+    @Test
+    fun eliteListAutoPromotesDistinguishedConfigsAndEnforcesSixHourRetentionBeforeDeletion() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val repo = Repo(ctx)
+        val t0 = 1_793_700_000_000L
+
+        val eliteCfg = Converters.cleanUri(buildSampleUri(2101))
+        val regularDeadCfg = Converters.cleanUri(buildSampleUri(2102))
+        val mediocreCfg = Converters.cleanUri(buildSampleUri(2103))
+
+        // Start clean for WIFI profile
+        repo.saveEliteServersForProfile(ScanNetworkProfile.WIFI, emptyList())
+
+        // 1) Scan at T0: eliteCfg achieves high download speed (3200 KB/s), low ping (65 ms), low jitter, high stability -> auto-promoted!
+        val rec0 = repo.reconcileAndSaveEliteAfterScan(
+            profile = ScanNetworkProfile.WIFI,
+            aliveResults = listOf(
+                TestResult(
+                    cfg = eliteCfg,
+                    ok = true,
+                    latencyMs = 65L,
+                    speedKbps = 3_200.0,
+                    testedAtMs = t0,
+                    jitterMs = 8.0,
+                    stabilityScore = 92.0,
+                ),
+                TestResult(
+                    cfg = mediocreCfg,
+                    ok = true,
+                    latencyMs = 430L,
+                    speedKbps = 240.0,
+                    testedAtMs = t0,
+                    jitterMs = 85.0,
+                    stabilityScore = 55.0,
+                ),
+            ),
+            failedUris = setOf(regularDeadCfg),
+            deviceOnline = true,
+            nowMs = t0,
+        )
+        assertEquals(1, rec0.entries.size)
+        assertEquals(eliteCfg, rec0.entries[0].cfg)
+        assertEquals(0L, rec0.entries[0].firstFailedAtMs)
+        assertNotNull(repo.existingEliteFile())
+
+        // 2) First failure at T0 + 1h: must record firstFailedAtMs and MUST NOT delete eliteCfg (whereas regularDeadCfg IS purged)
+        val t1h = t0 + 3_600_000L
+        val rec1 = repo.reconcileAndSaveEliteAfterScan(
+            profile = ScanNetworkProfile.WIFI,
+            aliveResults = listOf(
+                TestResult(cfg = mediocreCfg, ok = true, latencyMs = 300L, speedKbps = 400.0, testedAtMs = t1h, stabilityScore = 70.0),
+            ),
+            failedUris = setOf(eliteCfg, regularDeadCfg),
+            deviceOnline = true,
+            nowMs = t1h,
+        )
+        assertEquals(1, rec1.entries.size)
+        assertEquals(t1h, rec1.entries[0].firstFailedAtMs)
+        assertTrue(rec1.entries[0].isTemporarilyDown)
+        assertTrue(eliteCfg in rec1.retainedCleanUris)
+        assertTrue(rec1.expiredCleanUris.isEmpty())
+
+        val purgeAt1h = DeadConfigPurgePolicy.evaluate(
+            currentPool = listOf(eliteCfg, regularDeadCfg, mediocreCfg),
+            failedUris = setOf(eliteCfg, regularDeadCfg) + rec1.expiredCleanUris,
+            testedCount = 3,
+            aliveCount = 1,
+            deviceOnline = true,
+            eliteRetainedCleanUris = rec1.retainedCleanUris,
+            eliteRetainedServerIds = rec1.retainedServerIds,
+        )
+        assertTrue(purgeAt1h.shouldPurge)
+        assertFalse("Elite config must NOT be purged after only 1st failure", eliteCfg in purgeAt1h.purgeableCleanUris)
+        assertTrue("Regular dead config MUST be purged immediately", regularDeadCfg in purgeAt1h.purgeableCleanUris)
+        assertTrue(eliteCfg in purgeAt1h.remainingPool)
+
+        // 3) Still failing at 5h 59m since first failure (t1h + 5h59m): STILL retained (< 6 hours!)
+        val tAlmost6h = t1h + (6L * 3_600_000L) - 60_000L
+        val recAlmost6h = repo.reconcileAndSaveEliteAfterScan(
+            profile = ScanNetworkProfile.WIFI,
+            aliveResults = listOf(TestResult(cfg = mediocreCfg, ok = true, latencyMs = 280L, speedKbps = 450.0, testedAtMs = tAlmost6h)),
+            failedUris = setOf(eliteCfg),
+            deviceOnline = true,
+            nowMs = tAlmost6h,
+        )
+        assertEquals(1, recAlmost6h.entries.size)
+        assertEquals(t1h, recAlmost6h.entries[0].firstFailedAtMs)
+        assertTrue(eliteCfg in recAlmost6h.retainedCleanUris)
+
+        // 4) Recovery before 6 hours resets firstFailedAtMs back to 0L!
+        val tRecover = tAlmost6h + 30_000L
+        val recRecovered = repo.reconcileAndSaveEliteAfterScan(
+            profile = ScanNetworkProfile.WIFI,
+            aliveResults = listOf(
+                TestResult(cfg = eliteCfg, ok = true, latencyMs = 70L, speedKbps = 2_900.0, testedAtMs = tRecover, jitterMs = 9.0, stabilityScore = 90.0),
+            ),
+            failedUris = emptySet(),
+            deviceOnline = true,
+            nowMs = tRecover,
+        )
+        assertEquals(1, recRecovered.entries.size)
+        assertEquals(0L, recRecovered.entries[0].firstFailedAtMs)
+        assertFalse(recRecovered.entries[0].isTemporarilyDown)
+
+        // 5) New failure starts a fresh 6-hour clock at tNewFail; after full 6 hours of continuous failure -> deleted!
+        val tNewFail = tRecover + 3_600_000L
+        val recFailStart = repo.reconcileAndSaveEliteAfterScan(
+            profile = ScanNetworkProfile.WIFI,
+            aliveResults = listOf(TestResult(cfg = mediocreCfg, ok = true, latencyMs = 260L, speedKbps = 450.0, testedAtMs = tNewFail)),
+            failedUris = setOf(eliteCfg),
+            deviceOnline = true,
+            nowMs = tNewFail,
+        )
+        assertEquals(tNewFail, recFailStart.entries[0].firstFailedAtMs)
+
+        val tFull6h = tNewFail + com.bahrain.vpnconfigs.data.EliteServerPolicy.ELITE_RETENTION_GRACE_MS
+        val recExpired = repo.reconcileAndSaveEliteAfterScan(
+            profile = ScanNetworkProfile.WIFI,
+            aliveResults = listOf(TestResult(cfg = mediocreCfg, ok = true, latencyMs = 260L, speedKbps = 450.0, testedAtMs = tFull6h)),
+            failedUris = setOf(eliteCfg),
+            deviceOnline = true,
+            nowMs = tFull6h,
+        )
+        assertTrue("Elite config must be removed after 6 full hours of continuous failure", recExpired.entries.isEmpty())
+        assertTrue(eliteCfg in recExpired.expiredCleanUris)
+
+        val purgeAfter6h = DeadConfigPurgePolicy.evaluate(
+            currentPool = listOf(eliteCfg, mediocreCfg),
+            failedUris = setOf(eliteCfg) + recExpired.expiredCleanUris,
+            testedCount = 2,
+            aliveCount = 1,
+            deviceOnline = true,
+            eliteRetainedCleanUris = recExpired.retainedCleanUris,
+            eliteRetainedServerIds = recExpired.retainedServerIds,
+        )
+        assertTrue(purgeAfter6h.shouldPurge)
+        assertTrue("Expired Elite config must now be purged from pool", eliteCfg in purgeAfter6h.purgeableCleanUris)
+        assertFalse(eliteCfg in purgeAfter6h.remainingPool)
+    }
+
+    @Test
+    fun recentConnectionHistorySyncsTestedLatencyWithServersScreenAndNeverShowsUntested() {
+        val sampleCfg = Converters.cleanUri(buildSampleUri(2201))
+        val sid = Converters.stableServerId(sampleCfg)
+        val endpoint = Converters.endpointLabel(sampleCfg)
+        val proto = Converters.protocolBadge(sampleCfg)
+
+        val testedServerItem = com.bahrain.vpnconfigs.ui.ServerItem(
+            cfg = sampleCfg,
+            name = "bahrain-vpn #1",
+            proto = proto,
+            endpoint = endpoint,
+            latencyMs = 84L,
+            speedKbps = 2_450.0,
+            locallyTested = true,
+            localFailed = false,
+        )
+
+        // Case 1: Entry matched to tested server in ServersScreen reflects live tested latency & speed with locallyTested = true
+        val historyEntry = com.bahrain.vpnconfigs.data.ConnectionHistoryEntry(
+            label = "bahrain-vpn #1",
+            endpoint = endpoint,
+            proto = proto,
+            country = "DE",
+            pingMs = 140L,
+            timestampMs = 1_793_700_000_000L,
+            serverId = sid,
+        )
+        val synced = com.bahrain.vpnconfigs.ui.resolveRecentHistoryDisplay(historyEntry, listOf(testedServerItem))
+        assertTrue(synced.showBadge)
+        assertTrue("Must mark locallyTested = true so LatencyBadge never displays Untested", synced.locallyTested)
+        assertFalse(synced.localFailed)
+        assertEquals(84L, synced.latencyMs)
+        assertEquals(2_450.0, synced.speedKbps, 0.01)
+
+        // Case 2: Legacy entry (empty serverId, no match in current servers list) with pingMs > 0 still sets locallyTested = true
+        val standaloneEntry = com.bahrain.vpnconfigs.data.ConnectionHistoryEntry(
+            label = "bahrain-vpn #9",
+            endpoint = "198.51.100.77:443",
+            proto = "VLESS",
+            pingMs = 128L,
+            timestampMs = 1_793_700_000_000L,
+        )
+        val standalone = com.bahrain.vpnconfigs.ui.resolveRecentHistoryDisplay(standaloneEntry, emptyList())
+        assertTrue(standalone.showBadge)
+        assertTrue("Recorded session pingMs > 0 must mark locallyTested = true", standalone.locallyTested)
+        assertEquals(128L, standalone.latencyMs)
     }
 }

@@ -96,6 +96,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bahrain.vpnconfigs.data.ConnectionHistoryEntry
 import com.bahrain.vpnconfigs.data.LocalPoolTier
 import com.bahrain.vpnconfigs.engine.ServerSortMode
 import com.bahrain.vpnconfigs.util.AppI18n
@@ -107,6 +108,58 @@ import com.bahrain.vpnconfigs.vpn.VpnStateManager
 import com.bahrain.vpnconfigs.vpn.VpnStatus
 import kotlinx.coroutines.delay
 import java.io.File
+
+data class RecentHistoryDisplayState(
+    val matchedServer: ServerItem?,
+    val showBadge: Boolean,
+    val latencyMs: Long,
+    val locallyTested: Boolean,
+    val localFailed: Boolean,
+    val speedKbps: Double,
+)
+
+internal fun resolveRecentHistoryDisplay(
+    entry: ConnectionHistoryEntry,
+    servers: List<ServerItem>,
+): RecentHistoryDisplayState {
+    val matched = servers.firstOrNull { srv ->
+        entry.serverId.isNotBlank() && srv.serverId == entry.serverId
+    } ?: servers.firstOrNull { srv ->
+        srv.endpoint == entry.endpoint && srv.proto.equals(entry.proto, ignoreCase = true)
+    }
+
+    if (matched != null && (matched.locallyTested || matched.localFailed || matched.latencyMs > 0L)) {
+        val tested = matched.locallyTested || matched.latencyMs > 0L
+        return RecentHistoryDisplayState(
+            matchedServer = matched,
+            showBadge = tested || matched.localFailed,
+            latencyMs = if (matched.localFailed) -1L else matched.latencyMs,
+            locallyTested = tested,
+            localFailed = matched.localFailed,
+            speedKbps = if (!matched.localFailed && tested) matched.speedKbps else 0.0,
+        )
+    }
+
+    if (entry.pingMs > 0L) {
+        return RecentHistoryDisplayState(
+            matchedServer = matched,
+            showBadge = true,
+            latencyMs = entry.pingMs,
+            locallyTested = true,
+            localFailed = false,
+            speedKbps = 0.0,
+        )
+    }
+
+    return RecentHistoryDisplayState(
+        matchedServer = matched,
+        showBadge = false,
+        latencyMs = 0L,
+        locallyTested = false,
+        localFailed = false,
+        speedKbps = 0.0,
+    )
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  1) شاشة الاتصال الرئيسية (الاتصال)
@@ -123,6 +176,7 @@ fun ConnectHomeScreen(
     onOpenServersTab: () -> Unit,
     onOpenHotspot: () -> Unit = {},
     onOpenCommunityTesting: () -> Unit = {},
+    onReconnectServer: (ServerItem) -> Unit = {},
     onCopy: (String, String) -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -664,7 +718,10 @@ fun ConnectHomeScreen(
                         }
                     }
                     state.connectionHistory.take(5).forEach { entry ->
-                        val flag = if (entry.country.isNotBlank()) "${VpnStateManager.countryFlag(entry.country)} ${entry.country} • " else ""
+                        val resolved = resolveRecentHistoryDisplay(entry, state.servers)
+                        val liveSrv = resolved.matchedServer
+                        val displayCountry = liveSrv?.country?.ifBlank { entry.country } ?: entry.country
+                        val flag = if (displayCountry.isNotBlank()) "${VpnStateManager.countryFlag(displayCountry)} $displayCountry • " else ""
                         val agoMin = ((System.currentTimeMillis() - entry.timestampMs) / 60_000L).coerceAtLeast(0L)
                         val timeTxt = when {
                             agoMin < 1L -> tr("الآن", "Just now")
@@ -672,14 +729,25 @@ fun ConnectHomeScreen(
                             agoMin < 1440L -> tr("منذ ${agoMin / 60L}س", "${agoMin / 60L}h ago")
                             else -> tr("منذ ${agoMin / 1440L}ي", "${agoMin / 1440L}d ago")
                         }
+                        val canQuickReconnect = liveSrv != null && !liveSrv.localFailed
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .then(
+                                    if (canQuickReconnect) {
+                                        Modifier.clickable { onReconnectServer(liveSrv!!) }
+                                    } else {
+                                        Modifier
+                                    }
+                                )
+                                .padding(vertical = 2.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "$flag${entry.label} (${entry.proto})",
+                                    text = "$flag${liveSrv?.name?.ifBlank { entry.label } ?: entry.label} (${entry.proto})",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 1,
@@ -692,9 +760,20 @@ fun ConnectHomeScreen(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
+                                if (resolved.speedKbps > 0.0) {
+                                    Text(
+                                        text = formatPhoneSpeedLabel(resolved.speedKbps),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = phoneSpeedColor(resolved.speedKbps),
+                                    )
+                                }
                             }
-                            if (entry.pingMs > 0L) {
-                                LatencyBadge(entry.pingMs)
+                            if (resolved.showBadge) {
+                                LatencyBadge(
+                                    ms = resolved.latencyMs,
+                                    locallyTested = resolved.locallyTested,
+                                    localFailed = resolved.localFailed,
+                                )
                             }
                         }
                     }

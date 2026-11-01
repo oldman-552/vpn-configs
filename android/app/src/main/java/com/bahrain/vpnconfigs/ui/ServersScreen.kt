@@ -181,6 +181,7 @@ fun ServersListScreen(
         state.servers.filter { srv ->
             val passFilter = when (selectedFilter) {
                 "ALL" -> true
+                "ELITE" -> srv.isElite
                 "TOP_50" -> srv.localPoolTier == LocalPoolTier.TOP_50 || srv.isVip
                 "BACKUP" -> srv.localPoolTier == LocalPoolTier.BACKUP_POOL
                 "FAV" -> srv.isFavorite
@@ -217,8 +218,8 @@ fun ServersListScreen(
                 val updatedPart = if (state.lastUpdatedLabel.isNotBlank()) " • ${state.lastUpdatedLabel}" else ""
                 Text(
                     tr(
-                        "${state.activeNetworkProfile.labelAr}: أفضل ${state.top50Count}/100 • احتياطي ${state.backupPoolCount} • المرشّحات $poolTotal/500$updatedPart",
-                        "${state.activeNetworkProfile.labelEn}: Top ${state.top50Count}/100 • Backup ${state.backupPoolCount} • Pool $poolTotal/500$updatedPart",
+                        "${state.activeNetworkProfile.labelAr}: 🔥 المميزة جداً ${state.eliteCount} • أفضل ${state.top50Count}/100 • احتياطي ${state.backupPoolCount} • المرشّحات $poolTotal/500$updatedPart",
+                        "${state.activeNetworkProfile.labelEn}: 🔥 Elite ${state.eliteCount} • Top ${state.top50Count}/100 • Backup ${state.backupPoolCount} • Pool $poolTotal/500$updatedPart",
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary,
@@ -322,9 +323,10 @@ fun ServersListScreen(
             }
         }
 
-        // ── شرائح الفلترة (أفضل 100 للشبكة + الاحتياطي + البروتوكولات + المفضلة) ──
+        // ── شرائح الفلترة (المميزة جداً + أفضل 100 للشبكة + الاحتياطي + البروتوكولات + المفضلة) ──
         val chips = listOf(
             "ALL" to tr("الكل (${state.servers.size})", "All (${state.servers.size})"),
+            "ELITE" to tr("🔥 المميزة جداً (${state.eliteCount})", "🔥 Very Distinguished (${state.eliteCount})"),
             "TOP_50" to tr("🏆 أفضل 100 (${state.top50Count})", "🏆 Top 100 (${state.top50Count})"),
             "BACKUP" to tr("🛡️ الاحتياطي (${state.backupPoolCount})", "🛡️ Backup (${state.backupPoolCount})"),
             "FAV" to tr("⭐ المفضلة", "⭐ Favorites"),
@@ -503,6 +505,20 @@ private fun ServerCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (item.isElite) {
+                        Surface(
+                            color = Color(0xFFFF6D00).copy(alpha = 0.20f),
+                            shape = RoundedCornerShape(6.dp),
+                        ) {
+                            Text(
+                                tr("🔥 مميز جداً", "🔥 Elite"),
+                                color = Color(0xFFE65100),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
                     if (item.isVip) {
                         Surface(
                             color = Color(0xFFFFB300).copy(alpha = 0.22f),
@@ -592,6 +608,25 @@ private fun ServerCard(
                             text = formatPhoneSpeedLabel(item.speedKbps),
                             style = MaterialTheme.typography.labelSmall,
                             color = phoneSpeedColor(item.speedKbps),
+                            fontWeight = FontWeight.Medium,
+                        )
+                    } else if (item.isElite && item.localFailed && item.eliteFirstFailedAtMs > 0L) {
+                        val remMin = (((com.bahrain.vpnconfigs.data.EliteServerPolicy.ELITE_RETENTION_GRACE_MS -
+                            (System.currentTimeMillis() - item.eliteFirstFailedAtMs)) / 60_000L)).coerceAtLeast(1L)
+                        val remHours = remMin / 60L
+                        val remMinsPart = remMin % 60L
+                        val remText = if (remHours > 0L) {
+                            tr("${remHours}س ${remMinsPart}د", "${remHours}h ${remMinsPart}m")
+                        } else {
+                            tr("${remMinsPart}د", "${remMinsPart}m")
+                        }
+                        Text(
+                            text = tr(
+                                "منقطع مؤقتًا — محفوظ في المميزة جداً (يُحذف بعد $remText إن استمر الانقطاع)",
+                                "Temporarily unreachable — kept in Elite (removed in $remText if still down)",
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = VpnConnectingAmber,
                             fontWeight = FontWeight.Medium,
                         )
                     }

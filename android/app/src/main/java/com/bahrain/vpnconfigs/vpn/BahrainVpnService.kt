@@ -622,7 +622,17 @@ class BahrainVpnService : VpnService() {
             endpoint = chosenEndpoint,
             proto = chosenProto,
             pingMs = initialPing,
+            serverId = Converters.stableServerId(targetCfg),
         )
+        runCatching {
+            Repo(this).recordEliteSingleOutcome(
+                profile = ScanNetworkProfile.fromTransportCode(curNetCode),
+                rawCfg = targetCfg,
+                ok = true,
+                latencyMs = initialPing,
+                nowMs = now,
+            )
+        }
         SmartFailoverEngine.recordServerHealthy(Converters.cleanUri(targetCfg))
         VpnStateManager.markServerHealthy(Converters.cleanUri(targetCfg))
         VpnStateManager.update { prev ->
@@ -719,7 +729,17 @@ class BahrainVpnService : VpnService() {
             endpoint = candEndpoint,
             proto = candProto,
             pingMs = verifiedPingMs,
+            serverId = Converters.stableServerId(cand.cfg),
         )
+        runCatching {
+            Repo(this).recordEliteSingleOutcome(
+                profile = ScanNetworkProfile.fromTransportCode(curNetCode),
+                rawCfg = cand.cfg,
+                ok = true,
+                latencyMs = verifiedPingMs,
+                nowMs = now,
+            )
+        }
         SmartFailoverEngine.recordServerHealthy(Converters.cleanUri(cand.cfg))
         VpnStateManager.markServerHealthy(Converters.cleanUri(cand.cfg))
         val osLockdown = KillSwitchController.isOsLockdownActive(this)
@@ -1524,25 +1544,31 @@ class BahrainVpnService : VpnService() {
         val hints = cached?.serverHints ?: emptyMap()
         val cachedAll = (cached?.configs ?: emptyList())
         val purgedIds = repo.getActivePurgedDeadServerIds(curProf)
+        val eliteEntries = repo.loadEliteServersForProfile(curProf)
+        val retainedEliteIds = eliteEntries.map { it.serverId }.filter { it.isNotBlank() }.toHashSet()
+        val healthyEliteEntries = eliteEntries.filter { !it.isTemporarilyDown }
+        val healthyEliteIds = healthyEliteEntries.map { it.serverId }.toHashSet()
+        val healthyEliteById = healthyEliteEntries.associateBy { it.serverId }
+        val healthyEliteUris = healthyEliteEntries.map { Converters.cleanUri(it.cfg) }
         val favSet = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
         val favIds = clientDb.favoriteServerIds()
         val personalRanks = clientDb.getPersonalizedRankings(curProf)
         val cfgById = HashMap<String, String>()
-        (savedBest + cachedAll).forEach { raw ->
+        (healthyEliteUris + savedBest + cachedAll).forEach { raw ->
             val cl = Converters.cleanUri(raw)
             val sid = Converters.stableServerId(cl)
             if (sid.isNotBlank() && !cfgById.containsKey(sid)) cfgById[sid] = cl
         }
         val personalOrderedCfgs = personalRanks.mapNotNull { cfgById[it.serverId] }
         val vipUris = vipNodes.map { Converters.cleanUri(it.uri) }
-        val merged = (vipUris + prefs.customConfigs + personalOrderedCfgs + savedBest + cachedAll)
+        val merged = (vipUris + healthyEliteUris + prefs.customConfigs + personalOrderedCfgs + savedBest + cachedAll)
             .distinct()
             .filter { Converters.isSupported(it) }
         val built = merged.mapIndexedNotNull { idx, cfg ->
             val clean = Converters.cleanUri(cfg)
             val vip = vipByClean[clean]
             val sid = Converters.stableServerId(clean)
-            val isProtected = vip != null || clean in favSet || sid in favIds
+            val isProtected = vip != null || clean in favSet || sid in favIds || sid in retainedEliteIds
             if (!isProtected && sid in purgedIds) return@mapIndexedNotNull null
             val hint = hints[clean]
             val sec = SecurityEvaluator.evaluate(
@@ -1555,8 +1581,12 @@ class BahrainVpnService : VpnService() {
             if (sec.quarantined || sec.allowInsecure) return@mapIndexedNotNull null
             val localRes = bestByClean[clean]
             val netStat = netStatsById[sid]
-            val effSpeed = localRes?.speedKbps?.takeIf { it > 0.0 } ?: (netStat?.latestThroughputKbps ?: 0.0)
+            val eliteHit = healthyEliteById[sid]
+            val effSpeed = localRes?.speedKbps?.takeIf { it > 0.0 }
+                ?: eliteHit?.speedKbps?.takeIf { it > 0.0 }
+                ?: (netStat?.latestThroughputKbps ?: 0.0)
             val effLat = localRes?.latencyMs?.takeIf { it > 0L }
+                ?: eliteHit?.latencyMs?.takeIf { it > 0L }
                 ?: netStat?.latestLatencyMs?.takeIf { it > 0L }
                 ?: (hint?.latencyMs ?: 0L)
             ServerCandidate(
@@ -1565,6 +1595,7 @@ class BahrainVpnService : VpnService() {
                 speedKbps = effSpeed,
                 latencyMs = effLat,
                 isVip = vip != null,
+                isElite = sid in healthyEliteIds,
                 securityAssessment = sec.securityAssessment,
                 riskLevel = sec.riskLevel,
             )

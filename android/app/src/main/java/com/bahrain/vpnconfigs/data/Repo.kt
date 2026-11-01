@@ -15,6 +15,7 @@ import android.util.Base64
 import com.bahrain.vpnconfigs.engine.Converters
 import com.bahrain.vpnconfigs.engine.SingBox
 import com.bahrain.vpnconfigs.engine.TestResult
+import com.bahrain.vpnconfigs.engine.Tester
 import com.bahrain.vpnconfigs.util.AppDiag
 import com.bahrain.vpnconfigs.util.UiMessages
 import com.bahrain.vpnconfigs.util.tr
@@ -39,14 +40,16 @@ data class DeadConfigPurgeDecision(
 
 object DeadConfigPurgePolicy {
     const val OFFLINE_GUARD_MIN_BATCH: Int = 15
-    const val PURGE_TTL_MS: Long = 4L * 3_600_000L
+    const val PURGE_TTL_MS: Long = 1L * 3_600_000L
 
     /**
-     * يحسم الحذف التلقائي الفوري للكونفقات غير الشغّالة وفق الضوابط الثلاثة الصارمة:
+     * يحسم الحذف التلقائي الفوري للكونفقات غير الشغّالة وفق الضوابط الصارمة:
      *   1) حماية انقطاع إنترنت الهاتف (Offline Guard): إذا كان الهاتف بلا إنترنت أو فشل 100% من دفعة >= 15 كونفيق،
      *      لا يُحذف أي سيرفر محفوظ (Last Known Good).
      *   2) حماية المفضّلة (⭐) وعقد VIP الموثّقة: لا تُحذف تلقائيًا أبدًا.
-     *   3) حذف فوري لكافة الكونفقات العامة الفاشلة حتى تبقى القائمة صافية 100%.
+     *   3) حماية قائمة «المميزة جداً» (🔥): لا يُحذف الكونفيق المميز جداً إلا بعد انقطاعه المتواصل لمدة 6 ساعات كاملة
+     *      من أول مرة عدم اتصال.
+     *   4) حذف فوري لكافة الكونفقات العامة الفاشلة حتى تبقى القائمة صافية 100%.
      */
     fun evaluate(
         currentPool: List<String>,
@@ -57,6 +60,8 @@ object DeadConfigPurgePolicy {
         favoriteCleanUris: Set<String> = emptySet(),
         favoriteServerIds: Set<String> = emptySet(),
         vipCleanUris: Set<String> = emptySet(),
+        eliteRetainedCleanUris: Set<String> = emptySet(),
+        eliteRetainedServerIds: Set<String> = emptySet(),
     ): DeadConfigPurgeDecision {
         val offlineSuspected = !deviceOnline || (testedCount >= OFFLINE_GUARD_MIN_BATCH && aliveCount == 0)
         if (offlineSuspected || failedUris.isEmpty()) {
@@ -72,7 +77,10 @@ object DeadConfigPurgePolicy {
         val purgeable = LinkedHashSet<String>()
         for (c in failedClean) {
             val sid = Converters.stableServerId(c)
-            val isProtected = c in favoriteCleanUris || c in vipCleanUris || (sid.isNotBlank() && sid in favoriteServerIds)
+            val isProtected = c in favoriteCleanUris ||
+                c in vipCleanUris ||
+                c in eliteRetainedCleanUris ||
+                (sid.isNotBlank() && (sid in favoriteServerIds || sid in eliteRetainedServerIds))
             if (!isProtected) {
                 purgeable.add(c)
             }
@@ -107,6 +115,178 @@ object DeadConfigPurgePolicy {
             offlineGuardTriggered = false,
             purgeableCleanUris = purgeable,
             remainingPool = remaining,
+        )
+    }
+}
+
+data class EliteServerEntry(
+    val serverId: String,
+    val cfg: String,
+    val latencyMs: Long,
+    val speedKbps: Double,
+    val jitterMs: Double = 0.0,
+    val stabilityScore: Double = 0.0,
+    val addedAtMs: Long,
+    val lastHealthyAtMs: Long,
+    val firstFailedAtMs: Long = 0L,
+) {
+    val isTemporarilyDown: Boolean
+        get() = firstFailedAtMs > 0L
+
+    fun isExpiredAfterSixHours(nowMs: Long): Boolean =
+        firstFailedAtMs > 0L && (nowMs - firstFailedAtMs) >= EliteServerPolicy.ELITE_RETENTION_GRACE_MS
+}
+
+data class EliteReconciliationResult(
+    val entries: List<EliteServerEntry>,
+    val retainedCleanUris: Set<String>,
+    val retainedServerIds: Set<String>,
+    val expiredCleanUris: Set<String>,
+)
+
+object EliteServerPolicy {
+    /** مهلة الاحتفاظ بالكونفيق المميز جداً قبل الحذف النهائي: 6 ساعات كاملة من أول مرة عدم اتصال. */
+    const val ELITE_RETENTION_GRACE_MS: Long = 6L * 3_600_000L
+    const val ELITE_STD_MIN_SPEED_KBPS: Double = 1024.0
+    const val ELITE_ADAPTIVE_FLOOR_SPEED_KBPS: Double = 500.0
+    const val ELITE_MAX_LATENCY_MS: Long = 220L
+    const val ELITE_MAX_JITTER_MS: Double = 60.0
+    const val ELITE_MIN_STABILITY_SCORE: Double = 75.0
+    const val MAX_ELITE_SERVERS: Int = 60
+
+    fun computeEffectiveMinSpeedKbps(aliveResults: List<TestResult>): Double {
+        val peak = aliveResults.filter { it.ok }.maxOfOrNull { it.speedKbps } ?: 0.0
+        return if (peak >= ELITE_STD_MIN_SPEED_KBPS) {
+            ELITE_STD_MIN_SPEED_KBPS
+        } else {
+            maxOf(ELITE_ADAPTIVE_FLOOR_SPEED_KBPS, peak * 0.80)
+        }
+    }
+
+    fun qualifiesForElite(res: TestResult, minSpeedKbps: Double = ELITE_STD_MIN_SPEED_KBPS): Boolean {
+        if (!res.ok) return false
+        val clean = Converters.cleanUri(res.cfg)
+        if (!clean.contains("://") || !Converters.isSupported(clean)) return false
+        if (!Tester.passesHardSecurityPreFilter(clean)) return false
+        if (res.speedKbps < minSpeedKbps) return false
+        if (res.latencyMs !in 1L..ELITE_MAX_LATENCY_MS) return false
+        if (res.jitterMs > ELITE_MAX_JITTER_MS) return false
+        if (res.stabilityScore > 0.0 && res.stabilityScore < ELITE_MIN_STABILITY_SCORE) return false
+        return true
+    }
+
+    /**
+     * يرقّي الكونفيقات المميزة جداً تلقائياً ويطبّق قاعدة الـ 6 ساعات الصارمة:
+     *   • عند أول فشل اتصال يُسجّل `firstFailedAtMs = nowMs` ويبقى الكونفيق في القائمة محمياً من الحذف.
+     *   • إذا عاد للعمل قبل مرور 6 ساعات يُصفّر `firstFailedAtMs = 0L` فوراً.
+     *   • بعد مرور 6 ساعات متواصلة من أول فشل اتصال (مع وجود إنترنت بالجهاز) يُحذف الكونفيق نهائياً.
+     */
+    fun reconcileAfterScan(
+        existing: List<EliteServerEntry>,
+        aliveResults: List<TestResult>,
+        failedUris: Set<String>,
+        deviceOnline: Boolean = true,
+        nowMs: Long = System.currentTimeMillis(),
+    ): EliteReconciliationResult {
+        if (!deviceOnline) {
+            val cleanSet = existing.map { Converters.cleanUri(it.cfg) }.toHashSet()
+            val idSet = existing.map { it.serverId }.filter { it.isNotBlank() }.toHashSet()
+            return EliteReconciliationResult(
+                entries = existing,
+                retainedCleanUris = cleanSet,
+                retainedServerIds = idSet,
+                expiredCleanUris = emptySet(),
+            )
+        }
+
+        val minSpeed = computeEffectiveMinSpeedKbps(aliveResults)
+        val aliveById = HashMap<String, TestResult>()
+        for (r in aliveResults) {
+            if (!r.ok || r.latencyMs <= 0L) continue
+            val clean = Converters.cleanUri(r.cfg)
+            val sid = Converters.stableServerId(clean)
+            if (sid.isNotBlank()) {
+                val cur = aliveById[sid]
+                if (cur == null || r.speedKbps > cur.speedKbps) {
+                    aliveById[sid] = r.copy(cfg = clean)
+                }
+            }
+        }
+
+        val failedCleanSet = failedUris.map { Converters.cleanUri(it) }.filter { it.isNotBlank() }.toHashSet()
+        val failedIdSet = failedCleanSet.mapNotNull { Converters.stableServerId(it).takeIf { id -> id.isNotBlank() } }.toHashSet()
+
+        val updatedById = LinkedHashMap<String, EliteServerEntry>()
+        val expiredClean = LinkedHashSet<String>()
+
+        for (prev in existing) {
+            val clean = Converters.cleanUri(prev.cfg)
+            if (!clean.contains("://") || !Converters.isSupported(clean) || !Tester.passesHardSecurityPreFilter(clean)) {
+                continue
+            }
+            val sid = prev.serverId.ifBlank { Converters.stableServerId(clean) }
+            if (sid.isBlank()) continue
+
+            val aliveHit = aliveById[sid]
+            if (aliveHit != null) {
+                updatedById[sid] = prev.copy(
+                    serverId = sid,
+                    cfg = Converters.cleanUri(aliveHit.cfg),
+                    latencyMs = aliveHit.latencyMs,
+                    speedKbps = if (aliveHit.speedKbps > 0.0) aliveHit.speedKbps else prev.speedKbps,
+                    jitterMs = if (aliveHit.jitterMs > 0.0) aliveHit.jitterMs else prev.jitterMs,
+                    stabilityScore = if (aliveHit.stabilityScore > 0.0) aliveHit.stabilityScore else prev.stabilityScore,
+                    lastHealthyAtMs = nowMs,
+                    firstFailedAtMs = 0L,
+                )
+            } else if (clean in failedCleanSet || sid in failedIdSet) {
+                val firstFail = if (prev.firstFailedAtMs > 0L) prev.firstFailedAtMs else nowMs
+                if (nowMs - firstFail >= ELITE_RETENTION_GRACE_MS) {
+                    expiredClean.add(clean)
+                } else {
+                    updatedById[sid] = prev.copy(
+                        serverId = sid,
+                        cfg = clean,
+                        firstFailedAtMs = firstFail,
+                    )
+                }
+            } else {
+                updatedById[sid] = prev.copy(serverId = sid, cfg = clean)
+            }
+        }
+
+        for (r in aliveResults) {
+            if (!qualifiesForElite(r, minSpeed)) continue
+            val clean = Converters.cleanUri(r.cfg)
+            val sid = Converters.stableServerId(clean)
+            if (sid.isBlank() || updatedById.containsKey(sid)) continue
+            updatedById[sid] = EliteServerEntry(
+                serverId = sid,
+                cfg = clean,
+                latencyMs = r.latencyMs,
+                speedKbps = r.speedKbps,
+                jitterMs = r.jitterMs,
+                stabilityScore = r.stabilityScore,
+                addedAtMs = nowMs,
+                lastHealthyAtMs = nowMs,
+                firstFailedAtMs = 0L,
+            )
+        }
+
+        val sorted = updatedById.values.sortedWith(
+            compareBy<EliteServerEntry> { it.isTemporarilyDown }
+                .thenByDescending { it.speedKbps }
+                .thenByDescending { it.stabilityScore }
+                .thenBy { if (it.latencyMs > 0L) it.latencyMs else Long.MAX_VALUE }
+        ).take(MAX_ELITE_SERVERS)
+
+        val retainedClean = sorted.map { Converters.cleanUri(it.cfg) }.toHashSet()
+        val retainedIds = sorted.map { it.serverId }.filter { it.isNotBlank() }.toHashSet()
+        return EliteReconciliationResult(
+            entries = sorted,
+            retainedCleanUris = retainedClean,
+            retainedServerIds = retainedIds,
+            expiredCleanUris = expiredClean,
         )
     }
 }
@@ -846,7 +1026,153 @@ class Repo(
         return emptyList()
     }
 
-    // ─────────── سجل الحذف الفوري المعزول حسب الشبكة (دورة 4 ساعات) دون المساس ببصمات Top-500 ───────────
+    // ─────────── قائمة «المميزة جداً» المعزولة حسب الشبكة مع مهلة 6 ساعات قبل الحذف ───────────
+    private fun profileEliteFile(profile: ScanNetworkProfile): File =
+        File(dir, "local_elite_${profile.code}.json")
+
+    private val exportedEliteFile: File
+        get() = File(dir, "bahrain-vpn-elite.txt")
+
+    fun existingEliteFile(): File? = exportedEliteFile.takeIf { it.exists() && it.length() > 0L }
+
+    fun loadEliteServersForProfile(profile: ScanNetworkProfile): List<EliteServerEntry> {
+        val ef = profileEliteFile(profile)
+        if (!ef.exists()) return emptyList()
+        return runCatching {
+            val arr = JSONArray(ef.readText(Charsets.UTF_8))
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val cfg = Converters.cleanUri(o.optString("cfg"))
+                    if (!cfg.contains("://") || !Converters.isSupported(cfg)) continue
+                    if (!Tester.passesHardSecurityPreFilter(cfg)) continue
+                    val sid = o.optString("server_id").ifBlank { Converters.stableServerId(cfg) }
+                    if (sid.isBlank()) continue
+                    add(
+                        EliteServerEntry(
+                            serverId = sid,
+                            cfg = cfg,
+                            latencyMs = o.optLong("latency_ms", 0L),
+                            speedKbps = o.optDouble("speed_kbps", 0.0),
+                            jitterMs = o.optDouble("jitter_ms", 0.0),
+                            stabilityScore = o.optDouble("stability_score", 0.0),
+                            addedAtMs = o.optLong("added_at_ms", 0L),
+                            lastHealthyAtMs = o.optLong("last_healthy_at_ms", 0L),
+                            firstFailedAtMs = o.optLong("first_failed_at_ms", 0L),
+                        )
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    fun saveEliteServersForProfile(
+        profile: ScanNetworkProfile,
+        entries: List<EliteServerEntry>,
+        vipCleanUris: Set<String> = emptySet(),
+    ) {
+        runCatching {
+            val arr = JSONArray()
+            val seen = HashSet<String>()
+            entries.forEach { e ->
+                val clean = Converters.cleanUri(e.cfg)
+                val sid = e.serverId.ifBlank { Converters.stableServerId(clean) }
+                if (clean.contains("://") && sid.isNotBlank() && seen.add(sid)) {
+                    arr.put(
+                        JSONObject()
+                            .put("server_id", sid)
+                            .put("cfg", clean)
+                            .put("latency_ms", e.latencyMs)
+                            .put("speed_kbps", e.speedKbps)
+                            .put("jitter_ms", e.jitterMs)
+                            .put("stability_score", e.stabilityScore)
+                            .put("added_at_ms", e.addedAtMs)
+                            .put("last_healthy_at_ms", e.lastHealthyAtMs)
+                            .put("first_failed_at_ms", e.firstFailedAtMs)
+                    )
+                }
+            }
+            writeAtomic(profileEliteFile(profile), arr.toString())
+
+            val exportLines = entries
+                .filter { !it.isTemporarilyDown && Converters.cleanUri(it.cfg) !in vipCleanUris }
+                .mapIndexed { idx, e ->
+                    val remark = String.format(
+                        Locale.US,
+                        "bahrain-vpn Elite #%d | %dms | %.0fKB/s",
+                        idx + 1,
+                        e.latencyMs,
+                        e.speedKbps,
+                    )
+                    Converters.namedUri(Converters.cleanUri(e.cfg), remark)
+                }
+            if (exportLines.isNotEmpty()) {
+                writeAtomic(exportedEliteFile, exportLines.joinToString("\n") + "\n")
+            } else if (exportedEliteFile.exists()) {
+                exportedEliteFile.delete()
+            }
+        }
+    }
+
+    fun reconcileAndSaveEliteAfterScan(
+        profile: ScanNetworkProfile,
+        aliveResults: List<TestResult>,
+        failedUris: Set<String>,
+        deviceOnline: Boolean = true,
+        nowMs: Long = System.currentTimeMillis(),
+        vipCleanUris: Set<String> = emptySet(),
+    ): EliteReconciliationResult {
+        val current = loadEliteServersForProfile(profile)
+        val rec = EliteServerPolicy.reconcileAfterScan(
+            existing = current,
+            aliveResults = aliveResults,
+            failedUris = failedUris,
+            deviceOnline = deviceOnline,
+            nowMs = nowMs,
+        )
+        saveEliteServersForProfile(profile, rec.entries, vipCleanUris)
+        return rec
+    }
+
+    fun recordEliteSingleOutcome(
+        profile: ScanNetworkProfile,
+        rawCfg: String,
+        ok: Boolean,
+        latencyMs: Long = 0L,
+        speedKbps: Double = 0.0,
+        deviceOnline: Boolean = true,
+        nowMs: Long = System.currentTimeMillis(),
+        vipCleanUris: Set<String> = emptySet(),
+    ): EliteReconciliationResult {
+        val clean = Converters.cleanUri(rawCfg)
+        val current = loadEliteServersForProfile(profile)
+        val aliveList = if (ok && latencyMs > 0L) {
+            listOf(
+                TestResult(
+                    cfg = clean,
+                    ok = true,
+                    latencyMs = latencyMs,
+                    speedKbps = speedKbps,
+                    testedAtMs = nowMs,
+                    stabilityScore = 88.0,
+                )
+            )
+        } else {
+            emptyList()
+        }
+        val failedSet = if (!ok) setOf(clean) else emptySet()
+        val rec = EliteServerPolicy.reconcileAfterScan(
+            existing = current,
+            aliveResults = aliveList,
+            failedUris = failedSet,
+            deviceOnline = deviceOnline,
+            nowMs = nowMs,
+        )
+        saveEliteServersForProfile(profile, rec.entries, vipCleanUris)
+        return rec
+    }
+
+    // ─────────── سجل الحذف الفوري المعزول حسب الشبكة (دورة كل ساعة) دون المساس ببصمات Top-500 ───────────
     private fun purgedDeadFile(profile: ScanNetworkProfile): File =
         File(dir, "purged_dead_${profile.code}.json")
 

@@ -98,6 +98,8 @@ data class ServerItem(
     val isFavorite: Boolean = false,
     val isCustom: Boolean = false,
     val isVip: Boolean = false,
+    val isElite: Boolean = false,
+    val eliteFirstFailedAtMs: Long = 0L,
     val securityAssessment: String = "Unknown",
     val privacyAssessment: String = "Unknown",
     val riskLevel: String = "UNKNOWN",
@@ -199,6 +201,9 @@ data class UiState(
 ) {
     val top100Count: Int
         get() = top50Count
+
+    val eliteCount: Int
+        get() = servers.count { it.isElite }
 
     val selectedServer: ServerItem?
         get() = servers.firstOrNull { it.cfg == selectedCfg } ?: servers.firstOrNull()
@@ -460,21 +465,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val curProfile = currentNetworkProfile()
                     val deviceOnline = netAwareness.snapshot.value.connected
                     if (newlyDropped.isNotEmpty() && deviceOnline) {
+                        val nowDropMs = System.currentTimeMillis()
                         val filteredResults = state.results.filterNot { Converters.cleanUri(it.cfg) in newlyDropped }
                         val (purgeDecision, telAfterDrop) = withContext(Dispatchers.IO) {
                             val repo = buildRepo()
                             val vipClean = licenseGuard.getAuthorizedVipNodes().map { Converters.cleanUri(it.uri) }.toHashSet()
                             val favClean = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
                             val favIds = clientDb.favoriteServerIds()
-                            val dec = DeadConfigPurgePolicy.evaluate(
-                                currentPool = state.configs,
+                            val eliteRec = repo.reconcileAndSaveEliteAfterScan(
+                                profile = curProfile,
+                                aliveResults = emptyList(),
                                 failedUris = newlyDropped,
+                                deviceOnline = true,
+                                nowMs = nowDropMs,
+                                vipCleanUris = vipClean,
+                            )
+                            val dec = DeadConfigPurgePolicy.evaluate(
+                                currentPool = (eliteRec.retainedCleanUris + state.configs).distinct(),
+                                failedUris = newlyDropped + eliteRec.expiredCleanUris,
                                 testedCount = newlyDropped.size,
                                 aliveCount = (state.configs.size - newlyDropped.size).coerceAtLeast(1),
                                 deviceOnline = true,
                                 favoriteCleanUris = favClean,
                                 favoriteServerIds = favIds,
                                 vipCleanUris = vipClean,
+                                eliteRetainedCleanUris = eliteRec.retainedCleanUris,
+                                eliteRetainedServerIds = eliteRec.retainedServerIds,
                             )
                             if (dec.shouldPurge) {
                                 if (prefs.customConfigs.isNotEmpty()) {
@@ -487,6 +503,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                     purgeableCleanUris = dec.purgeableCleanUris,
                                     remainingPool = dec.remainingPool,
                                     bestLimit = minOf(prefs.bestN, PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT),
+                                    nowMs = nowDropMs,
                                 )
                             } else {
                                 repo.saveProfileResults(curProfile, filteredResults)
@@ -596,6 +613,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 refresh(silent = true)
             }
         }
+
+        // مؤقّت ساعي داخلي أثناء عمل التطبيق: يحدّث السيرفرات كل ساعة ويشغّل فحص الكونفيقات مباشرةً
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(60_000L)
+                if (!prefs.autoServerQualityTesting || !prefs.autoRefresh) continue
+                if (state.loading || state.testing || ScanRuntimeCoordinator.isScanning) continue
+                val vpnBusy = VpnStateManager.status.value.isActive ||
+                    com.bahrain.vpnconfigs.hotspot.VpnHotspotManager.state.value.isSharingActive
+                if (vpnBusy) continue
+                val curProf = currentNetworkProfile()
+                val now = System.currentTimeMillis()
+                val lastRef = prefs.lastRefreshWallMs
+                val lastScan = prefs.getLastScanWallMs(curProf)
+                val dueHourlyRefresh = lastRef <= 0L || (now - lastRef) >= CentralScoringWeights.FRESHNESS_TTL_MS
+                val dueHourlyScan = lastScan <= 0L || (now - lastScan) >= CentralScoringWeights.FRESHNESS_TTL_MS
+                if (dueHourlyRefresh || dueHourlyScan) {
+                    refresh(silent = true)
+                }
+            }
+        }
     }
 
     private fun buildRepo(): Repo = Repo(getApplication())
@@ -652,10 +690,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val resultMap = localResults.filter { it.ok && (it.latencyMs > 0L || it.speedKbps > 0.0) }
             .associateBy { Converters.cleanUri(it.cfg) }
         val netStatsById = clientDb.getNetworkStatsMap(networkProfile)
+        val repoInstance = buildRepo()
+        val activeEliteEntries = repoInstance.loadEliteServersForProfile(networkProfile)
+            .filterNot { it.isExpiredAfterSixHours(nowMs) }
+        val eliteById = activeEliteEntries.associateBy { it.serverId }
 
         val allUnique = LinkedHashSet<String>()
         vipNodes.forEach {
             val cleaned = Converters.cleanUri(it.uri)
+            if (Converters.isSupported(cleaned)) allUnique.add(cleaned)
+        }
+        activeEliteEntries.forEach {
+            val cleaned = Converters.cleanUri(it.cfg)
             if (Converters.isSupported(cleaned)) allUnique.add(cleaned)
         }
         favSet.forEach { if (Converters.isSupported(it)) allUnique.add(it) }
@@ -678,7 +724,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             nowMs = nowMs,
         )
 
-        val purgedIds = buildRepo().getActivePurgedDeadServerIds(networkProfile, nowMs)
+        val purgedIds = repoInstance.getActivePurgedDeadServerIds(networkProfile, nowMs)
         val droppedNow = VpnStateManager.status.value.droppedConfigs
         val rankablePairs = allUnique.mapNotNull { cfg ->
             val vipNode = vipByClean[cfg]
@@ -694,15 +740,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (secProfile.quarantined || secProfile.allowInsecure) return@mapNotNull null
 
             val sid = Converters.stableServerId(cfg)
+            val eliteEntry = eliteById[sid]
+            val isElite = eliteEntry != null
             val isFav = cfg in favSet || sid in favIdSet
-            val isProtected = isFav || vipNode != null
+            val isProtected = isFav || vipNode != null || isElite
             if (!isProtected && sid in purgedIds) return@mapNotNull null
 
             val fp = serverFingerprints[sid] ?: Converters.configFingerprint(cfg)
             val netStat = netStatsById[sid]
             val personalEntry = rankBundle.entriesById[sid]
-            val failed = cfg in failedConfigs || cfg in droppedNow || (netStat != null && netStat.consecutiveFailures >= 3)
-            // Auto-Purge Dead Configs: non-favorite, non-VIP failed configs are excluded immediately (0 dead clutter!)
+            val failed = cfg in failedConfigs ||
+                cfg in droppedNow ||
+                (eliteEntry != null && eliteEntry.isTemporarilyDown) ||
+                (netStat != null && netStat.consecutiveFailures >= 3)
+            // Auto-Purge Dead Configs: non-favorite, non-VIP, non-Elite(<6h) failed configs are excluded immediately
             if (failed && !isProtected) return@mapNotNull null
 
             val local = if (failed) null else resultMap[cfg]
@@ -712,6 +763,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 netStat.latestLatencyMs
             } else if (!failed && local != null && local.latencyMs > 0L) {
                 local.latencyMs
+            } else if (!failed && eliteEntry != null && eliteEntry.latencyMs > 0L) {
+                eliteEntry.latencyMs
             } else {
                 0L
             }
@@ -724,13 +777,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 failed -> 0.0
                 netStat != null && netStat.isQualifiedLocally && netStat.latestThroughputKbps > 0.0 -> netStat.latestThroughputKbps
                 netStat != null && netStat.isQualifiedLocally && netStat.bestThroughputKbps > 0.0 -> netStat.bestThroughputKbps
+                local != null && local.speedKbps > 0.0 -> local.speedKbps
+                eliteEntry != null && eliteEntry.speedKbps > 0.0 -> eliteEntry.speedKbps
                 else -> 0.0
             }
-            val effectiveJitter = if (!failed && netStat != null && netStat.isQualifiedLocally) netStat.ewmaJitterMs else 0.0
+            val effectiveJitter = if (!failed && netStat != null && netStat.isQualifiedLocally) {
+                netStat.ewmaJitterMs
+            } else if (!failed && eliteEntry != null) {
+                eliteEntry.jitterMs
+            } else {
+                0.0
+            }
             val effectiveLoss = if (!failed && netStat != null && netStat.scanCount > 0) netStat.ewmaPacketLossPct else 0.0
             val effectiveEstab = if (!failed && netStat != null) netStat.latestEstablishMs else 0L
-            val effectiveTestedMs = netStat?.lastScanAtMs ?: 0L
-            val isLocallyVerifiedForProfile = !failed && personalEntry != null
+            val effectiveTestedMs = netStat?.lastScanAtMs ?: (eliteEntry?.lastHealthyAtMs ?: 0L)
+            val isLocallyVerifiedForProfile = !failed && (personalEntry != null || eliteEntry != null)
 
             val rankable = RankableServer(
                 cfg = cfg,
@@ -776,14 +837,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 isFavorite = isFav,
                 isCustom = cfg in customSet,
                 isVip = vipNode != null,
+                isElite = isElite,
+                eliteFirstFailedAtMs = eliteEntry?.firstFailedAtMs ?: 0L,
                 securityAssessment = secProfile.securityAssessment,
                 privacyAssessment = secProfile.privacyAssessment,
                 riskLevel = secProfile.riskLevel,
                 securitySummaryAr = secProfile.summaryAr,
-                localPoolTier = personalEntry?.poolTier ?: LocalPoolTier.CANDIDATE_ONLY,
+                localPoolTier = personalEntry?.poolTier ?: if (isElite && !failed) LocalPoolTier.TOP_50 else LocalPoolTier.CANDIDATE_ONLY,
                 personalizedRank = personalEntry?.rankPosition ?: 0,
                 personalizedScore = personalEntry?.personalizedScore ?: 0.0,
-                stabilityScore = personalEntry?.stabilityScore ?: (netStat?.stabilityScore ?: 0.0),
+                stabilityScore = personalEntry?.stabilityScore ?: (netStat?.stabilityScore ?: (eliteEntry?.stabilityScore ?: 0.0)),
                 packetLossPct = effectiveLoss,
                 establishMs = effectiveEstab,
                 configFingerprint = fp,
@@ -796,8 +859,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .sortedWith { a, b ->
                 val itemA = a.second
                 val itemB = b.second
+                val healthyEliteA = itemA.isElite && !itemA.localFailed
+                val healthyEliteB = itemB.isElite && !itemB.localFailed
                 if (itemA.isVip != itemB.isVip && itemA.localFailed == itemB.localFailed) {
                     if (itemA.isVip) -1 else 1
+                } else if (healthyEliteA != healthyEliteB) {
+                    if (healthyEliteA) -1 else 1
                 } else if (itemA.localPoolTier != itemB.localPoolTier) {
                     // TOP_50 (0) -> BACKUP_POOL (1) -> CANDIDATE_ONLY (2)
                     itemA.localPoolTier.ordinal.compareTo(itemB.localPoolTier.ordinal)
@@ -826,6 +893,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     speedKbps = it.speedKbps,
                     latencyMs = it.latencyMs,
                     isVip = it.isVip,
+                    isElite = it.isElite && !it.localFailed,
                     securityAssessment = it.securityAssessment,
                     riskLevel = it.riskLevel,
                 )
@@ -933,6 +1001,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 label = srv.name,
                 country = srv.country,
                 isVip = srv.isVip,
+                isElite = srv.isElite && !srv.localFailed,
                 available = true,
                 localLatencyMs = srv.latencyMs.coerceAtLeast(0L),
                 localJitterMs = srv.jitterMs,
@@ -1309,15 +1378,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 effectiveResults.maxOfOrNull { it.testedAtMs } ?: 0L,
             )
             val hasSavedRankings = existingPersonalTop100.isNotEmpty() || effectiveResults.isNotEmpty()
-            val isSavedScanFreshWithin4h = hasSavedRankings &&
+            val isSavedScanFreshWithin1h = hasSavedRankings &&
                 latestSavedScanMs > 0L &&
                 (nowWallMs - latestSavedScanMs) in 0 until CentralScoringWeights.FRESHNESS_TTL_MS
 
             val refreshSucceededLive = res.error == null && !res.fromCacheFallback && res.configs.isNotEmpty()
             if (refreshSucceededLive) {
                 prefs.lastRefreshWallMs = nowWallMs
-                // لا نمسح الكونفيقات الميتة المحذوفة خلال الإطلاق الصامت طالما نتائج الفحص المحفوظة ضمن نافذة الـ 4 ساعات
-                if (!silent || !isSavedScanFreshWithin4h) {
+                // لا نمسح الكونفيقات الميتة المحذوفة خلال الإطلاق الصامت طالما نتائج الفحص المحفوظة ضمن نافذة الساعة الواحدة
+                if (!silent || !isSavedScanFreshWithin1h) {
                     failedConfigs.clear()
                     withContext(Dispatchers.IO) { r.clearPurgedDeadForProfile(netProfile) }
                 }
@@ -1330,6 +1399,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 state.allFile
             }
 
+            val knownResultIds = buildSet {
+                existingPersonalTop100.forEach { add(it.serverId) }
+                effectiveResults.forEach { add(Converters.stableServerId(Converters.cleanUri(it.cfg))) }
+            }
+            val hasNewUntestedConfigs = refreshSucceededLive && newConfigs.any { raw ->
+                val sid = Converters.stableServerId(Converters.cleanUri(raw))
+                sid.isNotBlank() && sid !in knownResultIds
+            }
+
             val vpnOrHotspotBusy = VpnStateManager.status.value.isActive ||
                 com.bahrain.vpnconfigs.hotspot.VpnHotspotManager.state.value.isSharingActive
             val shouldAutoScan = sequentialScanner.engineAvailable &&
@@ -1340,7 +1418,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     !vpnOrHotspotBusy && (
                         !hasSavedRankings ||
-                            (prefs.autoServerQualityTesting && !isSavedScanFreshWithin4h)
+                            (prefs.autoServerQualityTesting && (!isSavedScanFreshWithin1h || hasNewUntestedConfigs))
                         )
                 }
 
@@ -1511,7 +1589,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     state.results.forEach { if (Converters.cleanUri(it.cfg) != cleanedCfg) add(it) }
                 }
                 val rebuilt = withContext(Dispatchers.IO) {
-                    buildRepo().saveProfileResults(netProfile, updatedResults)
+                    val repo = buildRepo()
+                    val vipClean = licenseGuard.getAuthorizedVipNodes().map { Converters.cleanUri(it.uri) }.toHashSet()
+                    repo.recordEliteSingleOutcome(
+                        profile = netProfile,
+                        rawCfg = cleanedCfg,
+                        ok = true,
+                        latencyMs = res.latencyMs,
+                        speedKbps = res.speedKbps,
+                        deviceOnline = true,
+                        vipCleanUris = vipClean,
+                    )
+                    repo.saveProfileResults(netProfile, updatedResults)
                     buildServerList(state.configs, updatedResults, state.sortMode, netProfile)
                 }
                 val sel = resolveSelected(state.selectedCfg, rebuilt)
@@ -1539,20 +1628,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 var wasPurged = false
                 val updatedResults = state.results.filterNot { Converters.cleanUri(it.cfg) == cleanedCfg }
                 if (deviceOnline) {
+                    val nowSingleFailMs = System.currentTimeMillis()
                     val purgeDec = withContext(Dispatchers.IO) {
                         val repo = buildRepo()
                         val vipClean = licenseGuard.getAuthorizedVipNodes().map { Converters.cleanUri(it.uri) }.toHashSet()
                         val favClean = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
                         val favIds = clientDb.favoriteServerIds()
+                        val eliteRec = repo.recordEliteSingleOutcome(
+                            profile = netProfile,
+                            rawCfg = cleanedCfg,
+                            ok = false,
+                            deviceOnline = true,
+                            nowMs = nowSingleFailMs,
+                            vipCleanUris = vipClean,
+                        )
                         val dec = DeadConfigPurgePolicy.evaluate(
-                            currentPool = state.configs,
-                            failedUris = setOf(cleanedCfg),
+                            currentPool = (eliteRec.retainedCleanUris + state.configs).distinct(),
+                            failedUris = setOf(cleanedCfg) + eliteRec.expiredCleanUris,
                             testedCount = 1,
                             aliveCount = (state.configs.size - 1).coerceAtLeast(1),
                             deviceOnline = true,
                             favoriteCleanUris = favClean,
                             favoriteServerIds = favIds,
                             vipCleanUris = vipClean,
+                            eliteRetainedCleanUris = eliteRec.retainedCleanUris,
+                            eliteRetainedServerIds = eliteRec.retainedServerIds,
                         )
                         if (dec.shouldPurge) {
                             if (prefs.customConfigs.isNotEmpty()) {
@@ -1565,6 +1665,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 purgeableCleanUris = dec.purgeableCleanUris,
                                 remainingPool = dec.remainingPool,
                                 bestLimit = minOf(prefs.bestN, PersonalizedTop50Ranker.PERSONALIZED_TOP_LIMIT),
+                                nowMs = nowSingleFailMs,
                             )
                         } else {
                             repo.saveProfileResults(netProfile, updatedResults)
@@ -1671,7 +1772,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** تفعيل أو إيقاف الفحص التلقائي لجودة السيرفرات كل 4 ساعات في الخلفية وحفظها في القوائم مع احترام إيقاف المستخدم فورًا. */
+    /** تفعيل أو إيقاف الفحص التلقائي لجودة السيرفرات كل ساعة في الخلفية وحفظها في القوائم مع احترام إيقاف المستخدم فورًا. */
     fun setAutoServerQualityTesting(enabled: Boolean) {
         prefs.autoServerQualityTesting = enabled
         WorkScheduler.syncSchedule(getApplication())
@@ -1680,13 +1781,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             error = null,
             info = if (enabled) {
                 tr(
-                    "تم تفعيل الفحص التلقائي المنتظم كل 4 ساعات وحفظ النتائج في القوائم",
-                    "Enabled automatic server quality scan every 4 hours (saved to lists)",
+                    "تم تفعيل التحديث والفحص التلقائي المنتظم كل ساعة وحفظ النتائج في القوائم",
+                    "Enabled automatic hourly server refresh & quality scan (saved to lists)",
                 )
             } else {
                 tr(
-                    "تم إيقاف الفحص التلقائي في الخلفية مع الاحتفاظ بنتائج أفضل 100 المحفوظة",
-                    "Disabled background server quality testing (kept saved Top 100 rankings)",
+                    "تم إيقاف الفحص التلقائي في الخلفية مع الاحتفاظ بنتائج أفضل 100 والمميزة جداً",
+                    "Disabled background server quality testing (kept saved Top 100 & Elite lists)",
                 )
             },
         )

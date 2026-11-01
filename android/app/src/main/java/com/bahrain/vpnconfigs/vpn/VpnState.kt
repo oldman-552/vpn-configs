@@ -39,6 +39,7 @@ data class ServerCandidate(
     val speedKbps: Double = 0.0,
     val latencyMs: Long = 0L,
     val isVip: Boolean = false,
+    val isElite: Boolean = false,
     val securityAssessment: String = "Unknown",
     val riskLevel: String = "UNKNOWN",
 )

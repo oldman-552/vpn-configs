@@ -1,5 +1,5 @@
 // =====================================================================
-// RefreshWorker.kt — العامل الدوري الموحّد كل 4 ساعات لفحص جودة السيرفرات وحفظها في القوائم:
+// RefreshWorker.kt — العامل الدوري الموحّد كل ساعة لتحديث وفحص جودة السيرفرات مباشرةً وحفظها في القوائم:
 //   • يحترم خيار الإعدادات Automatic Server Quality Testing والبطارية (>= 25%).
 //   • يتخطى الفحص الثقيل فورًا إذا كان الـ VPN أو الـ VPN Hotspot نشطًا لعدم إزعاج التصفح.
 //   • يحدّث حزمة الـ Top 500 من GitHub (مع العودة للكاش المحلي الموثّق عند تعذّر الوصول المؤقت)،
@@ -72,7 +72,7 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
             return Result.success()
         }
 
-        val ok = ScanRuntimeCoordinator.executeScheduledFourHourScan(
+        val ok = ScanRuntimeCoordinator.executeScheduledHourlyScan(
             ctx = appCtx,
             baseConfigs = resolvedConfigs,
             fingerprintsById = resolvedFingerprints,

@@ -299,6 +299,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
                 onOpenServersTab = { tab = 1 },
                 onOpenHotspot = { tab = 8 },
                 onOpenCommunityTesting = { tab = 9 },
+                onReconnectServer = { srv -> requestConnect(srv) },
                 onCopy = { txt, msg -> copyToClipboard(ctx, txt, msg) },
             )
             1 -> ServersListScreen(
