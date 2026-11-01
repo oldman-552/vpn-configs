@@ -42,6 +42,7 @@ import com.bahrain.vpnconfigs.util.AppI18n
 import com.bahrain.vpnconfigs.util.UiMessages
 import com.bahrain.vpnconfigs.util.tr
 import hev.htproxy.TProxyService
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -466,10 +467,45 @@ class BahrainVpnService : VpnService() {
         singBox.stopDaemon(daemon)
         daemon = null
 
+        // Happy Eyeballs Top-4 Smart Connect Race: سباق متوازٍ لأفضل 4 سيرفرات لاختيار الأسرع فعليًا في أجزاء من الثانية
+        var targetCfg = chosenCfg
+        var targetLabel = chosenLabel
+        var preVerifiedPingMs = -1L
+        if (prefs.smartAutoSelect &&
+            foMode != FailoverMode.OFF &&
+            pool.size > 1 &&
+            !com.bahrain.vpnconfigs.engine.WarpManager.isWarp(chosenCfg)
+        ) {
+            val primaryCand = pool.firstOrNull { Converters.cleanUri(it.cfg) == Converters.cleanUri(chosenCfg) }
+                ?: ServerCandidate(cfg = chosenCfg, label = chosenLabel)
+            val topBackups = SmartFailoverEngine.rankFailoverCandidates(
+                excludeCfg = chosenCfg,
+                pool = pool,
+                maxCandidates = SmartFailoverEngine.PARALLEL_RACE_BATCH_SIZE - 1,
+            )
+            val racePool = listOf(primaryCand) + topBackups
+            if (racePool.size >= 2) {
+                val racedWinner = raceParallelCandidateBatch(
+                    candidates = racePool,
+                    preferFirstGraceMs = 85L,
+                    timeoutMs = 2_300,
+                )
+                if (racedWinner != null) {
+                    targetCfg = racedWinner.first.cfg
+                    targetLabel = racedWinner.first.label
+                    preVerifiedPingMs = racedWinner.second
+                    if (Converters.cleanUri(targetCfg) != Converters.cleanUri(chosenCfg)) {
+                        prefs.selectedCfg = targetCfg
+                        prefs.selectedLabel = targetLabel
+                    }
+                }
+            }
+        }
+
         val establishStartMs = System.currentTimeMillis()
         val physicalDns = netAwareness.snapshot.value.systemDnsServers.firstOrNull()
         val newDaemon = singBox.startDaemon(
-            cfg = chosenCfg,
+            cfg = targetCfg,
             port = SingBox.VPN_SOCKS_PORT,
             dnsServer = prefs.dnsServer,
             useDoh = prefs.dnsDoh,
@@ -480,10 +516,17 @@ class BahrainVpnService : VpnService() {
         )
 
         val initialPing = if (newDaemon != null) {
-            val probe = runCatching {
-                Socks.measureRealDelay(SingBox.VPN_SOCKS_PORT, SingBox.TEST_URL, 4200)
-            }.getOrNull()
-            if (probe != null && probe.status in listOf(200, 204)) probe.elapsedMs else -1L
+            if (preVerifiedPingMs > 0L) {
+                val quickVerify = runCatching {
+                    Socks.measureRealDelay(SingBox.VPN_SOCKS_PORT, SingBox.TEST_URL, 2600)
+                }.getOrNull()
+                if (quickVerify != null && quickVerify.status in listOf(200, 204)) quickVerify.elapsedMs else preVerifiedPingMs
+            } else {
+                val probe = runCatching {
+                    Socks.measureRealDelay(SingBox.VPN_SOCKS_PORT, SingBox.TEST_URL, 3200)
+                }.getOrNull()
+                if (probe != null && probe.status in listOf(200, 204)) probe.elapsedMs else -1L
+            }
         } else {
             -1L
         }
@@ -492,13 +535,13 @@ class BahrainVpnService : VpnService() {
 
         if (newDaemon == null || initialPing < 0L) {
             singBox.stopDaemon(newDaemon)
-            val cleanFailed = Converters.cleanUri(chosenCfg)
+            val cleanFailed = Converters.cleanUri(targetCfg)
             SmartFailoverEngine.recordServerDrop(cleanFailed)
             VpnStateManager.markServerDropped(cleanFailed)
             runCatching {
                 clientDb.recordFailedConnectionAttempt(
                     cfg = cleanFailed,
-                    serverLabel = chosenLabel,
+                    serverLabel = targetLabel,
                     failureReason = if (newDaemon == null) "فشل تشغيل محرك النفق" else "انتهاء مهلة استجابة السيرفر",
                     networkType = curNetCode,
                 )
@@ -515,18 +558,18 @@ class BahrainVpnService : VpnService() {
                     prev.copy(
                         phase = VpnPhase.SWITCHING_SERVER,
                         switchingStatus = "بحث متوازٍ عن بديل شغّال…",
-                        statusMessage = "$chosenLabel لم يستجب — جارٍ البحث الذكي عن أسرع بديل…",
+                        statusMessage = "$targetLabel لم يستجب — جارٍ البحث الذكي عن أسرع بديل…",
                     )
                 }
                 updateNotification("جارٍ البحث الذكي عن سيرفر بديل…", "")
-                val alt = findWorkingAlternativeParallel(excludeCfg = chosenCfg, pool = pool)
+                val alt = findWorkingAlternativeParallel(excludeCfg = targetCfg, pool = pool)
                 if (alt != null) {
                     connectWithVerifiedDaemon(
                         cand = alt.first,
                         verifiedDaemon = alt.second,
                         verifiedPingMs = alt.third,
                         forceRebuildTun = false,
-                        previousLabel = chosenLabel,
+                        previousLabel = targetLabel,
                     )
                     return
                 }
@@ -549,13 +592,13 @@ class BahrainVpnService : VpnService() {
         }
 
         val now = System.currentTimeMillis()
-        val chosenProto = Converters.protocolBadge(chosenCfg)
-        val chosenEndpoint = Converters.endpointLabel(chosenCfg)
+        val chosenProto = Converters.protocolBadge(targetCfg)
+        val chosenEndpoint = Converters.endpointLabel(targetCfg)
         finalizeActiveSessionRow()
         activeHistoryRowId = runCatching {
             clientDb.startSessionRecord(
-                cfg = chosenCfg,
-                serverLabel = chosenLabel,
+                cfg = targetCfg,
+                serverLabel = targetLabel,
                 country = "",
                 initialLatencyMs = initialPing,
                 networkType = curNetCode,
@@ -564,7 +607,7 @@ class BahrainVpnService : VpnService() {
         }.getOrDefault(0L)
         runCatching {
             clientDb.recordServerProbeOrSessionOutcome(
-                cfgOrServerId = chosenCfg,
+                cfgOrServerId = targetCfg,
                 ok = true,
                 establishMs = establishDurationMs,
                 latencyMs = initialPing,
@@ -573,20 +616,20 @@ class BahrainVpnService : VpnService() {
             )
         }
         reconnectManager.onTunnelVerified()
-        VpnStateManager.appendEvent("تم التحقق من الاتصال عبر $chosenLabel (${initialPing} ms)")
+        VpnStateManager.appendEvent("تم التحقق من الاتصال عبر $targetLabel (${initialPing} ms)")
         prefs.recordConnection(
-            label = chosenLabel,
+            label = targetLabel,
             endpoint = chosenEndpoint,
             proto = chosenProto,
             pingMs = initialPing,
         )
-        SmartFailoverEngine.recordServerHealthy(Converters.cleanUri(chosenCfg))
-        VpnStateManager.markServerHealthy(Converters.cleanUri(chosenCfg))
+        SmartFailoverEngine.recordServerHealthy(Converters.cleanUri(targetCfg))
+        VpnStateManager.markServerHealthy(Converters.cleanUri(targetCfg))
         VpnStateManager.update { prev ->
             prev.copy(
                 phase = VpnPhase.CONNECTED,
-                activeCfg = chosenCfg,
-                activeLabel = chosenLabel,
+                activeCfg = targetCfg,
+                activeLabel = targetLabel,
                 activeProto = chosenProto,
                 activeEndpoint = chosenEndpoint,
                 connectedSinceMs = if (tunAlreadyUp && prev.connectedSinceMs > 0L) prev.connectedSinceMs else now,
@@ -598,13 +641,13 @@ class BahrainVpnService : VpnService() {
                 exitCountry = "",
                 failoverMode = foMode.key,
                 switchingStatus = "متّصل ومستقر",
-                previousServerLabel = if (tunAlreadyUp && prevLabel != chosenLabel) prevLabel else prev.previousServerLabel,
+                previousServerLabel = if (tunAlreadyUp && prevLabel != targetLabel) prevLabel else prev.previousServerLabel,
                 targetServerLabel = "",
-                lastSuccessfulSwitchAtMs = if (tunAlreadyUp && prevLabel != chosenLabel) now else prev.lastSuccessfulSwitchAtMs,
+                lastSuccessfulSwitchAtMs = if (tunAlreadyUp && prevLabel != targetLabel) now else prev.lastSuccessfulSwitchAtMs,
                 killSwitchActive = killSwitchOn,
                 osLockdownActive = osLockdown,
                 reconnectAttempt = 0,
-                statusMessage = tr("متّصل بأمان عبر $chosenLabel (${initialPing} ms)", "Connected via $chosenLabel (${initialPing} ms)"),
+                statusMessage = tr("متّصل بأمان عبر $targetLabel (${initialPing} ms)", "Connected via $targetLabel (${initialPing} ms)"),
                 error = null,
             )
         }
@@ -1070,11 +1113,12 @@ class BahrainVpnService : VpnService() {
             }
         }
 
-        // Phase 6 & 9: مراقب الجودة الاستباقي والتبديل الذكي التكيّفي
+        // Phase 6 & 9: مراقب الجودة الاستباقي ورصد اختناق السرعة والتبديل الذكي التكيّفي
         probeJob = serviceScope.launch {
             val recentPings = ArrayDeque<Long>()
             val recentOutcomes = ArrayDeque<Boolean>()
             var consecutiveHealthy = 0
+            var consecutiveTrafficStalls = 0
             val guard = EnterpriseLicenseGuard(applicationContext)
 
             delay(SmartFailoverEngine.HEALTHY_CHECK_INTERVAL_MS)
@@ -1122,6 +1166,13 @@ class BahrainVpnService : VpnService() {
                     VpnStateManager.markServerHealthy(activeClean)
 
                     val curStatus = VpnStateManager.status.value
+                    consecutiveTrafficStalls = if (
+                        SmartFailoverEngine.isTrafficSampleStalled(curStatus.upSpeedBps, curStatus.downSpeedBps)
+                    ) {
+                        consecutiveTrafficStalls + 1
+                    } else {
+                        0
+                    }
                     val bestCandLat = VpnStateManager.serverPool
                         .asSequence()
                         .filter { Converters.cleanUri(it.cfg) != activeClean && it.latencyMs > 0L }
@@ -1133,6 +1184,7 @@ class BahrainVpnService : VpnService() {
                         mode = foMode,
                         lastSwitchAtMs = curStatus.lastSuccessfulSwitchAtMs.coerceAtLeast(curStatus.connectedSinceMs),
                         bestCandidateLatencyMs = bestCandLat,
+                        consecutiveTrafficStalls = consecutiveTrafficStalls,
                     )
 
                     consecutiveHealthy = if (health.isDegraded) 0 else (consecutiveHealthy + 1)
@@ -1159,12 +1211,14 @@ class BahrainVpnService : VpnService() {
                             packetLossPct = health.packetLossPct,
                             connectionQuality = health.qualityLabelAr,
                             failoverMode = foMode.key,
-                            switchingStatus = if (health.isDegraded) "رُصد بطء في الاستجابة" else "متّصل ومستقر",
+                            switchingStatus = if (health.isDegraded) "رُصد ضعف في الاتصال" else "متّصل ومستقر",
                         )
                     }
 
                     val remoteAutoFailover = guard.getRemoteConfig().optBoolean("auto_failover_enabled", true)
                     if (health.shouldProactiveSwitch && remoteAutoFailover) {
+                        val curAvgPing = recentPings.filter { it > 0L }.let { if (it.isNotEmpty()) it.average() else 0.0 }
+                        val stallsNow = consecutiveTrafficStalls
                         val switched = opLock.withLock {
                             if (!VpnStateManager.status.value.isTunnelVerified) {
                                 false
@@ -1175,13 +1229,20 @@ class BahrainVpnService : VpnService() {
                                 VpnStateManager.update { s ->
                                     s.copy(
                                         phase = VpnPhase.SWITCHING_SERVER,
-                                        switchingStatus = "فحص بديل أسرع بالخلفية…",
+                                        switchingStatus = "سباق متوازٍ لاختيار بديل أسرع بالخلفية…",
                                         statusMessage = health.reasonAr.ifBlank { "جارٍ الانتقال السلس لسيرفر أفضل…" },
                                     )
                                 }
-                                // نتحقق من البديل على منافذ الاختبار أولًا دون قطع النفق الحالي إلا عند نجاح البديل!
-                                val alt = probeVerifiedCandidateWithoutStoppingCurrent(curCfg, pool)
+                                // فحص أفضل 4 بدائل بالتوازي دون إيقاف النفق الحالي، ولا ننتقل إلا إذا ثبت أن البديل أسرع فعليًا!
+                                val alt = probeVerifiedCandidateWithoutStoppingCurrent(
+                                    excludeCfg = curCfg,
+                                    pool = pool,
+                                    currentAvgLatencyMs = curAvgPing,
+                                    consecutiveTrafficStalls = stallsNow,
+                                    isHardDrop = false,
+                                )
                                 if (alt != null) {
+                                    consecutiveTrafficStalls = 0
                                     AppHealthMonitor.recordIssue(
                                         applicationContext,
                                         type = "PROACTIVE_FAILOVER",
@@ -1213,11 +1274,11 @@ class BahrainVpnService : VpnService() {
                                         false
                                     }
                                 } else {
-                                    // لا يوجد بديل أفضل متاح الآن — أبقِ السيرفر الحالي يعمل دون انقطاع
+                                    // لا يوجد بديل أسرع فعليًا الآن (قد يكون ضعف التغطية من الشبكة المحلية) — أبقِ النفق الحالي دون تقطيع
                                     VpnStateManager.update { s ->
                                         s.copy(
                                             phase = VpnPhase.CONNECTION_DEGRADED,
-                                            switchingStatus = "الإبقاء على النفق الحالي (لا يوجد بديل أسرع)",
+                                            switchingStatus = "الإبقاء على النفق الحالي (لا يوجد بديل أسرع فعليًا)",
                                         )
                                     }
                                     false
@@ -1236,6 +1297,7 @@ class BahrainVpnService : VpnService() {
                     delay(nextInterval)
                 } else {
                     consecutiveHealthy = 0
+                    consecutiveTrafficStalls = 0
                     val droppedCur = VpnStateManager.status.value.activeCfg ?: ""
                     val prevLbl = VpnStateManager.status.value.activeLabel
                     if (droppedCur.isNotBlank()) {
@@ -1292,66 +1354,135 @@ class BahrainVpnService : VpnService() {
     }
 
     /**
-     * يتحقق من عمل سيرفر بديل بالتسلسل الصارم (نفق واحد في كل مرة على منفذ معزول 20901)
-     * احترامًا لقيود Android VpnService وتوفيرًا للبطارية، ويتوقف فور إيجاد أول بديل شغّال.
+     * سباق Happy Eyeballs متوازٍ لدفعة من السيرفرات (حتى 4 سيرفرات معًا على منافذ 20910..20913)
+     * يعيد أول سيرفر يستجيب فعليًا بأسرع زمن دون انتظار انتهاء مهلة السيرفرات الميتة،
+     * ودون إيقاف نفق الـ VPN النشط على المنفذ 20808.
+     */
+    private suspend fun raceParallelCandidateBatch(
+        candidates: List<ServerCandidate>,
+        preferFirstGraceMs: Long = 0L,
+        timeoutMs: Int = 2_400,
+    ): Pair<ServerCandidate, Long>? = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        if (candidates.isEmpty() || !singBox.isAvailable) return@withContext null
+        val curProf = ScanNetworkProfile.fromTransportCode(netAwareness.snapshot.value.transport.code)
+        val batchPortItems = candidates.take(SmartFailoverEngine.PARALLEL_RACE_BATCH_SIZE)
+            .mapIndexed { idx, cand -> cand.cfg to (20910 + idx) }
+        val session = singBox.startBatchDaemon(
+            items = batchPortItems,
+            dnsServer = prefs.dnsServer,
+            useDoh = prefs.dnsDoh,
+            waitMs = 950L,
+        ) ?: return@withContext null
+
+        val candByPort = HashMap<Int, Pair<Int, ServerCandidate>>()
+        candidates.take(SmartFailoverEngine.PARALLEL_RACE_BATCH_SIZE).forEachIndexed { idx, cand ->
+            candByPort[20910 + idx] = idx to cand
+        }
+
+        try {
+            val winnerDeferred = CompletableDeferred<Pair<ServerCandidate, Long>?>()
+            val primaryAliveFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+            coroutineScope {
+                val jobs = session.slots.mapNotNull { slot ->
+                    val (origIdx, cand) = candByPort[slot.listenPort] ?: return@mapNotNull null
+                    launch {
+                        val probe = runCatching {
+                            Socks.measureRealDelay(slot.listenPort, SingBox.TEST_URL, timeoutMs)
+                        }.getOrNull()
+                        val clean = Converters.cleanUri(cand.cfg)
+                        val ok = probe != null && probe.status in listOf(200, 204) && probe.elapsedMs > 0L
+                        if (ok) {
+                            val pingMs = probe!!.elapsedMs
+                            if (origIdx == 0) primaryAliveFlag.set(true)
+                            VpnStateManager.markServerHealthy(clean)
+                            runCatching {
+                                clientDb.recordNetworkScanMeasurement(
+                                    cfgOrServerId = clean,
+                                    networkProfile = curProf,
+                                    scanMode = "RACE_PROBE",
+                                    success = true,
+                                    establishMs = pingMs,
+                                    latencyMs = pingMs,
+                                    jitterMs = 0.0,
+                                    packetLossPct = 0.0,
+                                    stabilityScore = 88.0,
+                                )
+                            }
+                            if (origIdx > 0 && preferFirstGraceMs > 0L && !primaryAliveFlag.get()) {
+                                delay(preferFirstGraceMs)
+                            }
+                            winnerDeferred.complete(cand to pingMs)
+                        } else {
+                            VpnStateManager.markServerDropped(clean)
+                        }
+                    }
+                }
+                val monitorAllDone = launch {
+                    jobs.forEach { it.join() }
+                    winnerDeferred.complete(null)
+                }
+                val picked = winnerDeferred.await()
+                jobs.forEach { it.cancel() }
+                monitorAllDone.cancel()
+                picked
+            }
+        } finally {
+            singBox.stopBatchDaemon(session)
+        }
+    }
+
+    /**
+     * يختبر دفعات من 4 سيرفرات بديلة بالتوازي دون قطع النفق الحالي،
+     * وفي التبديل الاستباقي لا يقبل البديل إلا إذا ثبت تفوّقه الفعلي عبر isReplacementWorthSwitching.
      */
     private suspend fun probeVerifiedCandidateWithoutStoppingCurrent(
         excludeCfg: String,
         pool: List<ServerCandidate>,
+        currentAvgLatencyMs: Double = 0.0,
+        consecutiveTrafficStalls: Int = 0,
+        isHardDrop: Boolean = true,
     ): Pair<ServerCandidate, Long>? {
+        val maxCheck = if (isHardDrop) 8 else SmartFailoverEngine.PARALLEL_RACE_BATCH_SIZE
         val candidates = SmartFailoverEngine.rankFailoverCandidates(
             excludeCfg = excludeCfg,
             pool = pool,
-            maxCandidates = 8,
+            maxCandidates = maxCheck,
         )
-        val curProf = ScanNetworkProfile.fromTransportCode(netAwareness.snapshot.value.transport.code)
-        for (cand in candidates) {
-            val r = kotlinx.coroutines.withContext(Dispatchers.IO) {
-                singBox.testRealTunnelSequential(
-                    cfg = cand.cfg,
-                    port = 20901,
-                    timeoutSec = 4,
-                    probeSamples = 2,
-                    measureThroughput = false,
-                    dnsServer = prefs.dnsServer,
-                    useDoh = prefs.dnsDoh,
+        if (candidates.isEmpty()) return null
+
+        for (chunk in candidates.chunked(SmartFailoverEngine.PARALLEL_RACE_BATCH_SIZE)) {
+            val winner = raceParallelCandidateBatch(
+                candidates = chunk,
+                preferFirstGraceMs = 45L,
+                timeoutMs = if (isHardDrop) 2_600 else 2_100,
+            )
+            if (winner != null &&
+                SmartFailoverEngine.isReplacementWorthSwitching(
+                    currentAvgLatencyMs = currentAvgLatencyMs,
+                    candidateLatencyMs = winner.second,
+                    consecutiveTrafficStalls = consecutiveTrafficStalls,
+                    isHardDrop = isHardDrop,
                 )
-            }
-            val clean = Converters.cleanUri(cand.cfg)
-            val ok = r.ok && r.latencyMs > 0L
-            runCatching {
-                clientDb.recordNetworkScanMeasurement(
-                    cfgOrServerId = clean,
-                    networkProfile = curProf,
-                    scanMode = "FAILOVER_PROBE",
-                    success = ok,
-                    establishMs = r.establishMs,
-                    latencyMs = r.latencyMs,
-                    jitterMs = r.jitterMs,
-                    packetLossPct = if (ok) r.packetLossPct else 100.0,
-                    stabilityScore = r.stabilityScore,
-                    failureReason = if (ok) "" else r.error,
-                )
-            }
-            if (ok) {
-                VpnStateManager.markServerHealthy(clean)
-                return cand to r.latencyMs
-            } else {
-                VpnStateManager.markServerDropped(clean)
+            ) {
+                return winner
             }
         }
         return null
     }
 
     /**
-     * يختبر دفعات من 4 سيرفرات بالتوازي على منافذ مؤقتة (20901..20904) مرتبةً عبر SmartFailoverEngine
-     * للانتقال الفوري دون هدم واجهة TUN (تبقى واجهة TUN مقفلة طوال العملية).
+     * يختبر دفعات من 4 سيرفرات بالتوازي مرتبةً عبر SmartFailoverEngine
+     * للانتقال الفوري عند انقطاع السيرفر دون هدم واجهة TUN (تبقى واجهة TUN مقفلة طوال العملية).
      */
     private suspend fun findWorkingAlternativeParallel(
         excludeCfg: String,
         pool: List<ServerCandidate>,
     ): Triple<ServerCandidate, RunningDaemon, Long>? {
-        val winner = probeVerifiedCandidateWithoutStoppingCurrent(excludeCfg, pool)
+        val winner = probeVerifiedCandidateWithoutStoppingCurrent(
+            excludeCfg = excludeCfg,
+            pool = pool,
+            isHardDrop = true,
+        )
         if (winner != null) {
             singBox.stopDaemon(daemon)
             daemon = null
@@ -1378,10 +1509,12 @@ class BahrainVpnService : VpnService() {
         if (current.isNotEmpty()) return current
 
         val repo = Repo(applicationContext)
+        val curProf = ScanNetworkProfile.fromTransportCode(netAwareness.snapshot.value.transport.code)
         val vipNodes = EnterpriseLicenseGuard(applicationContext).getAuthorizedVipNodes()
         val vipByClean = vipNodes.associateBy { Converters.cleanUri(it.uri) }
-        val savedBestResults = repo.loadSavedBest()
+        val savedBestResults = repo.loadSavedResultsForProfile(curProf).ifEmpty { repo.loadSavedBest() }
         val bestByClean = savedBestResults.associateBy { Converters.cleanUri(it.cfg) }
+        val netStatsById = clientDb.getNetworkStatsMap(curProf)
         val savedBest = savedBestResults.sortedWith(
             compareByDescending<com.bahrain.vpnconfigs.engine.TestResult> { it.speedKbps > 0.0 }
                 .thenByDescending { it.speedKbps }
@@ -1390,13 +1523,12 @@ class BahrainVpnService : VpnService() {
         val cached = repo.loadCached(prefs.feedProfile)
         val hints = cached?.serverHints ?: emptyMap()
         val cachedAll = (cached?.configs ?: emptyList())
-        val curProf = ScanNetworkProfile.fromTransportCode(netAwareness.snapshot.value.transport.code)
         val purgedIds = repo.getActivePurgedDeadServerIds(curProf)
         val favSet = prefs.favorites.map { Converters.cleanUri(it) }.toHashSet()
         val favIds = clientDb.favoriteServerIds()
         val personalRanks = clientDb.getPersonalizedRankings(curProf)
         val cfgById = HashMap<String, String>()
-        cachedAll.forEach { raw ->
+        (savedBest + cachedAll).forEach { raw ->
             val cl = Converters.cleanUri(raw)
             val sid = Converters.stableServerId(cl)
             if (sid.isNotBlank() && !cfgById.containsKey(sid)) cfgById[sid] = cl
@@ -1422,11 +1554,16 @@ class BahrainVpnService : VpnService() {
             )
             if (sec.quarantined || sec.allowInsecure) return@mapIndexedNotNull null
             val localRes = bestByClean[clean]
+            val netStat = netStatsById[sid]
+            val effSpeed = localRes?.speedKbps?.takeIf { it > 0.0 } ?: (netStat?.latestThroughputKbps ?: 0.0)
+            val effLat = localRes?.latencyMs?.takeIf { it > 0L }
+                ?: netStat?.latestLatencyMs?.takeIf { it > 0L }
+                ?: (hint?.latencyMs ?: 0L)
             ServerCandidate(
                 cfg = cfg,
                 label = if (vip != null) "💎 VIP • ${vip.label}" else "bahrain-vpn #${idx + 1}",
-                speedKbps = localRes?.speedKbps ?: 0.0,
-                latencyMs = localRes?.latencyMs ?: (hint?.latencyMs ?: 0L),
+                speedKbps = effSpeed,
+                latencyMs = effLat,
                 isVip = vip != null,
                 securityAssessment = sec.securityAssessment,
                 riskLevel = sec.riskLevel,

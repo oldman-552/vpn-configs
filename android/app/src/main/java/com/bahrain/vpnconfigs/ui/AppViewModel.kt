@@ -164,6 +164,13 @@ data class UiState(
     val appHealth: AppHealthSnapshot = AppHealthSnapshot(20L, 0.0, 0, 0, 0, false, emptyList()),
     val availableUpdate: AppUpdateInfo? = null,
     val updatingApk: Boolean = false,
+    val stableDownloadRunning: Boolean = false,
+    val stableDownloadPercent: Int = 0,
+    val stableDownloadDoneMb: Double = 0.0,
+    val stableDownloadTotalMb: Double = 0.0,
+    val stableDownloadCompletedName: String = "",
+    val stableDownloadStatusMsg: String? = null,
+    val stableDownloadIsError: Boolean = false,
     // ── الذكاء التاريخي والمفضّلة المتقدمة والاختيار الذكي (v1) ──
     val smartAutoSelect: Boolean = true,
     val preferredCountry: String = "ALL",
@@ -256,6 +263,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private var testJob: Job? = null
+    private var stableDownloadJob: Job? = null
+    @Volatile
+    private var stableDownloadCancelRequested: Boolean = false
     private var lastObservedDropped: Set<String> = emptySet()
     private var lastObservedPreviewSeq: Long = ScanRuntimeCoordinator.state.value.previewSeq
     private var lastObservedCompletionSeq: Long = ScanRuntimeCoordinator.state.value.completionSeq
@@ -1972,29 +1982,107 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun downloadAndInstallSignedUpdate() {
-        val upd = state.availableUpdate ?: return
-        if (state.updatingApk) return
-        state = state.copy(updatingApk = true, error = null)
-        val res = AppUpdateManager.openVerifiedUpdateInSystemBrowser(getApplication(), upd)
-        res.fold(
-            onSuccess = {
-                val shaHint = if (upd.apkSha256.length == 64) tr(" (تم نسخ بصمة SHA-256 للتحقق)", " (SHA-256 copied)") else ""
-                state = state.copy(
-                    updatingApk = false,
-                    info = tr(
-                        "تم فتح رابط التحديث الرسمي الآمن لحزمة ${upd.selectedAbi} في المتصفح$shaHint",
-                        "Opened official HTTPS download for ${upd.selectedAbi} in browser$shaHint",
-                    ),
-                )
-            },
-            onFailure = { err ->
-                state = state.copy(
-                    updatingApk = false,
-                    error = err.message ?: tr("تعذّر فتح رابط التحديث الرسمي", "Could not open official update URL"),
-                )
-            },
+    fun downloadLatestStableApp(expectedSha256Override: String = "") {
+        if (state.stableDownloadRunning) return
+        stableDownloadCancelRequested = false
+        state = state.copy(
+            updatingApk = true,
+            stableDownloadRunning = true,
+            stableDownloadPercent = 0,
+            stableDownloadDoneMb = 0.0,
+            stableDownloadTotalMb = 0.0,
+            stableDownloadCompletedName = "",
+            stableDownloadStatusMsg = tr(
+                "جارٍ تحميل آخر نسخة مستقرة داخل البرنامج…",
+                "Downloading latest stable version inside the app…",
+            ),
+            stableDownloadIsError = false,
+            error = null,
         )
+
+        stableDownloadJob = viewModelScope.launch {
+            val res = withContext(Dispatchers.IO) {
+                buildRepo().downloadLatestStableApk(
+                    expectedSha256Override = expectedSha256Override,
+                    isCancelled = { stableDownloadCancelRequested },
+                    onProgress = { pct, doneBytes, totalBytes ->
+                        val doneMb = doneBytes.toDouble() / (1024.0 * 1024.0)
+                        val totalMb = if (totalBytes > 0L) totalBytes.toDouble() / (1024.0 * 1024.0) else 0.0
+                        viewModelScope.launch(Dispatchers.Main.immediate) {
+                            if (state.stableDownloadRunning) {
+                                state = state.copy(
+                                    stableDownloadPercent = pct,
+                                    stableDownloadDoneMb = doneMb,
+                                    stableDownloadTotalMb = totalMb,
+                                )
+                            }
+                        }
+                    },
+                )
+            }
+
+            if (stableDownloadCancelRequested) {
+                state = state.copy(
+                    updatingApk = false,
+                    stableDownloadRunning = false,
+                    stableDownloadStatusMsg = tr("تم إلغاء تحميل النسخة المستقرة", "Stable version download cancelled"),
+                    stableDownloadIsError = false,
+                )
+                return@launch
+            }
+
+            res.fold(
+                onSuccess = { out ->
+                    val mbStr = String.format(Locale.US, "%.1f MB", out.sizeBytes.toDouble() / (1024.0 * 1024.0))
+                    val doneText = tr(
+                        "تم تحميل آخر نسخة مستقرة والتحقق من سلامتها ($mbStr) — حُفظ الملف (${out.savedDisplayName}) في مجلد التنزيلات (Downloads)",
+                        "Downloaded & verified latest stable version ($mbStr) — saved (${out.savedDisplayName}) to Downloads",
+                    )
+                    state = state.copy(
+                        updatingApk = false,
+                        stableDownloadRunning = false,
+                        stableDownloadPercent = 100,
+                        stableDownloadCompletedName = out.savedDisplayName,
+                        stableDownloadStatusMsg = doneText,
+                        stableDownloadIsError = false,
+                        info = doneText,
+                    )
+                },
+                onFailure = { err ->
+                    val safeErr = UiMessages.sanitizeError(
+                        err.message,
+                        tr(
+                            "تعذّر إكمال تحميل النسخة المستقرة — تحقّق من الاتصال وحاول مجددًا",
+                            "Could not download latest stable version — check connection and retry",
+                        ),
+                    )
+                    state = state.copy(
+                        updatingApk = false,
+                        stableDownloadRunning = false,
+                        stableDownloadStatusMsg = safeErr,
+                        stableDownloadIsError = true,
+                        error = safeErr,
+                    )
+                },
+            )
+        }
+    }
+
+    fun cancelStableAppDownload() {
+        stableDownloadCancelRequested = true
+        stableDownloadJob?.cancel()
+        stableDownloadJob = null
+        state = state.copy(
+            updatingApk = false,
+            stableDownloadRunning = false,
+            stableDownloadStatusMsg = tr("تم إلغاء تحميل النسخة المستقرة", "Stable version download cancelled"),
+            stableDownloadIsError = false,
+        )
+    }
+
+    fun downloadAndInstallSignedUpdate() {
+        val upd = state.availableUpdate
+        downloadLatestStableApp(expectedSha256Override = upd?.apkSha256.orEmpty())
     }
 
     fun evaluateSecurityReport(vpnStatus: VpnStatus): SecurityStatusReport {

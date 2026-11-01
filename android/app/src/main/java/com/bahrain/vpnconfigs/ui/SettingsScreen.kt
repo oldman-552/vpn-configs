@@ -1,5 +1,7 @@
 package com.bahrain.vpnconfigs.ui
 
+import android.app.DownloadManager
+import android.content.Intent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -238,6 +240,117 @@ fun SettingsAndExportScreen(
                         },
                         label = { Text("English") },
                     )
+                }
+            }
+        }
+
+        // ── تحميل آخر نسخة مستقرة من البرنامج مباشرةً داخل التطبيق (بدون إظهار أي وصلة أو مصدر) ──
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.ArrowDownward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        tr("تحميل آخر نسخة مستقرة من البرنامج", "Download Latest Stable Version"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Text(
+                    tr(
+                        "ينزّل أحدث نسخة مستقرة متوافقة مع معالج جهازك مباشرةً من داخل البرنامج إلى مجلد التنزيلات (Downloads) مع التحقق التلقائي من سلامة الحزمة.",
+                        "Downloads the latest verified stable build for your device directly inside the app into your Downloads folder.",
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+
+                if (state.stableDownloadRunning) {
+                    if (state.stableDownloadPercent in 1..100) {
+                        LinearProgressIndicator(
+                            progress = { state.stableDownloadPercent / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                    val sizeDetail = if (state.stableDownloadTotalMb > 0.1) {
+                        String.format(
+                            java.util.Locale.US,
+                            " (%.1f / %.1f MB)",
+                            state.stableDownloadDoneMb,
+                            state.stableDownloadTotalMb,
+                        )
+                    } else if (state.stableDownloadDoneMb > 0.1) {
+                        String.format(java.util.Locale.US, " (%.1f MB)", state.stableDownloadDoneMb)
+                    } else ""
+                    val pctText = if (state.stableDownloadPercent >= 0) "${state.stableDownloadPercent}%" else "…"
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            tr(
+                                "جارٍ تحميل النسخة المستقرة… $pctText$sizeDetail",
+                                "Downloading stable build… $pctText$sizeDetail",
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        TextButton(onClick = { vm.cancelStableAppDownload() }) {
+                            Text(tr("إلغاء", "Cancel"))
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { vm.downloadLatestStableApp() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            Icons.Filled.ArrowDownward,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(tr("تحميل آخر نسخة مستقرة الآن", "Download Latest Stable Version"))
+                    }
+                }
+
+                if (!state.stableDownloadRunning && !state.stableDownloadStatusMsg.isNullOrBlank()) {
+                    Text(
+                        text = state.stableDownloadStatusMsg,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (state.stableDownloadIsError) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
+                }
+
+                if (!state.stableDownloadRunning && state.stableDownloadCompletedName.isNotBlank()) {
+                    OutlinedButton(
+                        onClick = {
+                            runCatching {
+                                val viewDownloads = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                ctx.startActivity(viewDownloads)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(tr("فتح مجلد التنزيلات (Downloads)", "Open Downloads Folder"))
+                    }
                 }
             }
         }
