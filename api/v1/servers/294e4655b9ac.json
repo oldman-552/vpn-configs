@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "294e4655b9ac",
+    "name": "bahrain-vpn 577",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "*.fastervpn.world",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 62.2,
+    "reliability_score": 98.4,
+    "composite_score": 46.9,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 215.0,
+    "jitter_ms": 22.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": -7.8,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

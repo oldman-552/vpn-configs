@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6bb193fc1449",
+    "name": "bahrain-vpn 695",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "15.204.233.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 51.6,
+    "reliability_score": 98.4,
+    "composite_score": 40.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 206.0,
+    "jitter_ms": 130.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": -21.2,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

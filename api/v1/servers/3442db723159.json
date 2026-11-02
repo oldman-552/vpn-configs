@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "3442db723159",
+    "name": "bahrain-vpn 645",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "43.173.1.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": false,
+    "performance_score": 49.0,
+    "reliability_score": 70.7,
+    "composite_score": 44.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 224.0,
+    "jitter_ms": 14.2,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": 6.2,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

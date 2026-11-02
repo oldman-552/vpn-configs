@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7b4b71089452",
+    "name": "bahrain-vpn 696",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "38.107.234.0/24",
+    "exit_country": "KZ",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 52.2,
+    "reliability_score": 96.6,
+    "composite_score": 40.6,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 321.0,
+    "jitter_ms": 90.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 90.91,
+    "consecutive_alive": 10,
+    "score_delta": 5.4,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

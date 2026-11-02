@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "3cc279bdef4a",
+    "name": "bahrain-vpn 167",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.145779.xyz",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 73.4,
+    "reliability_score": 96.3,
+    "composite_score": 51.1,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 75.0,
+    "jitter_ms": 0.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 7,
+    "score_delta": -5.8,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

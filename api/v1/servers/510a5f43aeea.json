@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "510a5f43aeea",
+    "name": "bahrain-vpn 434",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "179.61.138.0/24",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.6,
+    "reliability_score": 88.7,
+    "composite_score": 48.5,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 159.0,
+    "jitter_ms": 2.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 83.33,
+    "consecutive_alive": 3,
+    "score_delta": -4.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

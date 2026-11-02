@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "f031cebe2f9f",
+    "name": "bahrain-vpn 620",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "45.86.61.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": false,
+    "performance_score": 50.9,
+    "reliability_score": 70.7,
+    "composite_score": 46.1,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 194.0,
+    "jitter_ms": 6.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": -3.3,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

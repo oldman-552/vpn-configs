@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ae2488556a45",
+    "name": "bahrain-vpn 181",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "104.17.96.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": true,
+    "performance_score": 58.9,
+    "reliability_score": 70.7,
+    "composite_score": 50.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 47.0,
+    "jitter_ms": 0.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": 0.1,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

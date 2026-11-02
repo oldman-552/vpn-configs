@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "8c0b57e9022e",
+    "name": "bahrain-vpn 544",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "143.198.76.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": false,
+    "performance_score": 50.7,
+    "reliability_score": 70.1,
+    "composite_score": 47.5,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 37.0,
+    "jitter_ms": 23.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 9,
+    "score_delta": -5.8,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

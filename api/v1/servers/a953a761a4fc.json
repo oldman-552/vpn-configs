@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "a953a761a4fc",
+    "name": "bahrain-vpn 643",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "156.252.229.0/24",
+    "exit_country": "ES",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 59.9,
+    "reliability_score": 97.3,
+    "composite_score": 45.1,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 204.0,
+    "jitter_ms": 50.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 8,
+    "score_delta": -2.1,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "de11fc6e40df",
+    "name": "bahrain-vpn 733",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "47.76.57.0/24",
+    "exit_country": "HK",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 23.4,
+    "reliability_score": 83.4,
+    "composite_score": 23.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 867.0,
+    "jitter_ms": 441.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 3,
+    "score_delta": -41.8,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

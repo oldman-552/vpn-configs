@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "86eb874df12f",
+    "name": "bahrain-vpn 581",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "66.163.118.0/24",
+    "exit_country": "ES",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.2,
+    "reliability_score": 92.7,
+    "composite_score": 46.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 177.0,
+    "jitter_ms": 21.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 85.71,
+    "consecutive_alive": 6,
+    "score_delta": -3.4,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

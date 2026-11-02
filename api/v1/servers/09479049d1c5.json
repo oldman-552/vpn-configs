@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "09479049d1c5",
+    "name": "bahrain-vpn 94",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "66.163.114.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 74.4,
+    "reliability_score": 98.2,
+    "composite_score": 79.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 45.0,
+    "jitter_ms": 38.8,
+    "download_mbps": 23.1,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 11,
+    "score_delta": -5.1,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

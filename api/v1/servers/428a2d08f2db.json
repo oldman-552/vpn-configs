@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "428a2d08f2db",
+    "name": "bahrain-vpn 339",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "206.206.78.0/24",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 66.7,
+    "reliability_score": 96.3,
+    "composite_score": 49.1,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 175.0,
+    "jitter_ms": 1.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 7,
+    "score_delta": 4.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

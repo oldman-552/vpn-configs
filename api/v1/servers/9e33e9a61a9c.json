@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "9e33e9a61a9c",
+    "name": "bahrain-vpn 243",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "104.18.37.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": true,
+    "performance_score": 57.0,
+    "reliability_score": 70.7,
+    "composite_score": 49.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 49.0,
+    "jitter_ms": 6.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": 0.3,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

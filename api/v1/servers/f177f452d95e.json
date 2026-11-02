@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "f177f452d95e",
+    "name": "bahrain-vpn 654",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "82.38.31.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 52.5,
+    "reliability_score": 55.2,
+    "composite_score": 44.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 166.0,
+    "jitter_ms": 3.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 91.67,
+    "consecutive_alive": 1,
+    "score_delta": -3.8,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

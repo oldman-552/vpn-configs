@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "16062cc81c35",
+    "name": "bahrain-vpn 119",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "43.130.35.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 55.9,
+    "reliability_score": 98.4,
+    "composite_score": 63.9,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 37.0,
+    "jitter_ms": 33.9,
+    "download_mbps": 1.53,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": -16.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

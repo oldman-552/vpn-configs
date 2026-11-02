@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "055719b3a051",
+    "name": "bahrain-vpn 88",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "216.152.155.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 80.1,
+    "reliability_score": 84.1,
+    "composite_score": 80.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 47.0,
+    "jitter_ms": 2.6,
+    "download_mbps": 14.74,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 77.78,
+    "consecutive_alive": 2,
+    "score_delta": 0.4,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "85ed0ce89ddc",
+    "name": "bahrain-vpn 722",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.h1clayd.click",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 29.0,
+    "reliability_score": 70.4,
+    "composite_score": 29.9,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 655.0,
+    "jitter_ms": 193.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 10,
+    "score_delta": -24.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

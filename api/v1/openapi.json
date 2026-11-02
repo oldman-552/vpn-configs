@@ -1,0 +1,186 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "bahrain-vpn Public Infrastructure Intelligence API",
+    "version": "1.0.0",
+    "description": "Read-only, secret-free telemetry API exposing multi-dimensional VPN server performance, reliability, security/privacy assessments, protocol analytics, geographic distributions, and source health."
+  },
+  "paths": {
+    "/api/v1/servers": {
+      "get": {
+        "summary": "List sanitized active servers with pagination and filtering",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "DE"
+            }
+          },
+          {
+            "name": "protocol",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "vless"
+            }
+          },
+          {
+            "name": "risk",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CRITICAL",
+                "HIGH",
+                "LOW",
+                "MEDIUM",
+                "UNKNOWN"
+              ]
+            }
+          },
+          {
+            "name": "security",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "Failed",
+                "Partial",
+                "Unknown",
+                "Verified"
+              ]
+            }
+          },
+          {
+            "name": "min_performance",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BALANCED",
+                "HIGH_RELIABILITY",
+                "HIGH_SPEED",
+                "LOW_LATENCY",
+                "PRIVACY_AWARE"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated server list"
+          },
+          "400": {
+            "description": "Invalid filter"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/api/v1/servers/{id}": {
+      "get": {
+        "summary": "Retrieve sanitized telemetry for a single server ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server detail"
+          },
+          "404": {
+            "description": "Server not found"
+          }
+        }
+      }
+    },
+    "/api/v1/statistics": {
+      "get": {
+        "summary": "Global overview, averages, risk distribution, and historical trend series",
+        "responses": {
+          "200": {
+            "description": "Statistics object"
+          }
+        }
+      }
+    },
+    "/api/v1/countries": {
+      "get": {
+        "summary": "Geographic server distribution and country-level reliability/performance",
+        "responses": {
+          "200": {
+            "description": "Countries analytics"
+          }
+        }
+      }
+    },
+    "/api/v1/protocols": {
+      "get": {
+        "summary": "Protocol distribution, success rates, and average performance",
+        "responses": {
+          "200": {
+            "description": "Protocols analytics"
+          }
+        }
+      }
+    },
+    "/api/v1/sources": {
+      "get": {
+        "summary": "Sanitized Telegram & GitHub source health and quarantine summary",
+        "responses": {
+          "200": {
+            "description": "Sources analytics"
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "summary": "Pipeline liveness, freshness, and operational health",
+        "responses": {
+          "200": {
+            "description": "Health check"
+          }
+        }
+      }
+    }
+  }
+}

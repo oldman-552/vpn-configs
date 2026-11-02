@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "3f77570dd2e5",
+    "name": "bahrain-vpn 702",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "152.67.200.0/24",
+    "exit_country": "KR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 50.6,
+    "reliability_score": 97.3,
+    "composite_score": 39.7,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 172.0,
+    "jitter_ms": 137.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 8,
+    "score_delta": -8.7,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

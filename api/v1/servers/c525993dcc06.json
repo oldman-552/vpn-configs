@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c525993dcc06",
+    "name": "bahrain-vpn 522",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "*.zestapp778.com",
+    "exit_country": "IN",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 62.5,
+    "reliability_score": 85.8,
+    "composite_score": 47.7,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 241.0,
+    "jitter_ms": 5.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 83.33,
+    "consecutive_alive": 2,
+    "score_delta": 2.4,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

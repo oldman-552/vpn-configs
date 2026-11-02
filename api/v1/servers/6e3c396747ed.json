@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6e3c396747ed",
+    "name": "bahrain-vpn 285",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "202.146.222.0/24",
+    "exit_country": "HK",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.7,
+    "reliability_score": 98.4,
+    "composite_score": 49.6,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 159.0,
+    "jitter_ms": 1.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": 5.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

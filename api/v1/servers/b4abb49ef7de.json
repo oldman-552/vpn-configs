@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "b4abb49ef7de",
+    "name": "bahrain-vpn 719",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "45.207.207.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 42.9,
+    "reliability_score": 74.7,
+    "composite_score": 32.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 283.0,
+    "jitter_ms": 224.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 1,
+    "score_delta": -8.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

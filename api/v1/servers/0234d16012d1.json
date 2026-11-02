@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "0234d16012d1",
+    "name": "bahrain-vpn 666",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "185.178.208.0/24",
+    "exit_country": "PL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 61.4,
+    "reliability_score": 83.3,
+    "composite_score": 44.0,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 215.0,
+    "jitter_ms": 31.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -5.4,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

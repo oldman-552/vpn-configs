@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "574493bbc9f4",
+    "name": "bahrain-vpn 177",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "172.67.231.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": true,
+    "performance_score": 59.2,
+    "reliability_score": 70.7,
+    "composite_score": 50.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 46.0,
+    "jitter_ms": 0.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": 0.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "bf9eee3472bb",
+    "name": "bahrain-vpn 41",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "47.251.25.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 86.7,
+    "reliability_score": 83.3,
+    "composite_score": 84.4,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 46.0,
+    "jitter_ms": 10.7,
+    "download_mbps": 51.63,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": 14.1,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

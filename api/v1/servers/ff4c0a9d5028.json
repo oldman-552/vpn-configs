@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ff4c0a9d5028",
+    "name": "bahrain-vpn 287",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "149.104.107.0/24",
+    "exit_country": "CO",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 68.9,
+    "reliability_score": 87.8,
+    "composite_score": 49.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 115.0,
+    "jitter_ms": 11.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 80.0,
+    "consecutive_alive": 4,
+    "score_delta": -0.7,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

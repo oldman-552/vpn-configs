@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "0d11d0f480a8",
+    "name": "bahrain-vpn 616",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "*.m3hrzd.ir",
+    "exit_country": "FI",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 65.3,
+    "reliability_score": 83.3,
+    "composite_score": 46.2,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 187.0,
+    "jitter_ms": 7.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -4.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

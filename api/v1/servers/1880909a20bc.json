@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1880909a20bc",
+    "name": "bahrain-vpn 410",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "31.57.248.0/24",
+    "exit_country": "HK",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.8,
+    "reliability_score": 98.2,
+    "composite_score": 48.6,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 151.0,
+    "jitter_ms": 4.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 11,
+    "score_delta": 2.9,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

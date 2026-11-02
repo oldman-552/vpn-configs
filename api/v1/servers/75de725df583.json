@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "75de725df583",
+    "name": "bahrain-vpn 151",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "185.230.230.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 71.4,
+    "reliability_score": 90.0,
+    "composite_score": 51.5,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 76.0,
+    "jitter_ms": 8.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 75.0,
+    "consecutive_alive": 5,
+    "score_delta": 28.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

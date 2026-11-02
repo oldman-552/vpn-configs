@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-11-02T04:04:20Z",
+  "overview": {
+    "total_discovered_servers": 47010,
+    "currently_operational_servers": 935,
+    "unstable_servers": 313,
+    "failed_servers": 1391,
+    "suppressed_servers": 506,
+    "quarantined_servers": 0,
+    "retired_servers": 0,
+    "newly_discovered_24h": 4782,
+    "removed_from_active_rotation": 506
+  },
+  "status_breakdown": {
+    "DISCOVERED": 43865,
+    "FAILED": 1391,
+    "OPERATIONAL": 935,
+    "SUPPRESSED": 506,
+    "UNSTABLE": 313
+  },
+  "failure_categories": {
+    "CONNECTION_TIMEOUT": 50,
+    "TLS_ERROR": 34,
+    "PACKET_LOSS": 5
+  },
+  "daily_trends": [
+    {
+      "day_bucket": "2026-10-31",
+      "tracked_servers": 2421,
+      "avg_latency_ms": 188.46,
+      "avg_p95_latency_ms": 248.5,
+      "avg_download_kbps": 2089.61,
+      "peak_download_kbps": 6860.26,
+      "avg_packet_loss_pct": 65.28,
+      "avg_observed_uptime_pct": 36.23
+    },
+    {
+      "day_bucket": "2026-11-01",
+      "tracked_servers": 2037,
+      "avg_latency_ms": 167.15,
+      "avg_p95_latency_ms": 214.59,
+      "avg_download_kbps": 2713.69,
+      "peak_download_kbps": 8453.02,
+      "avg_packet_loss_pct": 52.83,
+      "avg_observed_uptime_pct": 49.05
+    },
+    {
+      "day_bucket": "2026-11-02",
+      "tracked_servers": 1200,
+      "avg_latency_ms": 145.75,
+      "avg_p95_latency_ms": 145.75,
+      "avg_download_kbps": 3064.88,
+      "peak_download_kbps": 7179.39,
+      "avg_packet_loss_pct": 40.06,
+      "avg_observed_uptime_pct": 61.42
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c3568e98c894",
+    "name": "bahrain-vpn 466",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "129.150.59.0/24",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 66.8,
+    "reliability_score": 83.2,
+    "composite_score": 48.2,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 172.0,
+    "jitter_ms": 2.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 60.0,
+    "consecutive_alive": 3,
+    "score_delta": 17.8,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

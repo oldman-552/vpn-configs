@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "2b7d9fba5750",
+    "name": "bahrain-vpn 480",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "103.106.229.0/24",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 66.5,
+    "reliability_score": 98.4,
+    "composite_score": 48.0,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 175.0,
+    "jitter_ms": 3.2,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": 2.8,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

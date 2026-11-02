@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c7f179671e35",
+    "name": "bahrain-vpn 392",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "169.197.142.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 62.9,
+    "reliability_score": 89.1,
+    "composite_score": 48.7,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 28.0,
+    "jitter_ms": 27.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 83.33,
+    "consecutive_alive": 4,
+    "score_delta": -7.3,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "bundle": {
+    "schema_version": 3,
+    "bundle_release": "2.0",
+    "generated_at": "2026-10-31T14:49:14Z",
+    "public_key_spki_b64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8F2e48sOe5sqpnOTWh9tq1vCUCt6fCzHE01onwFZO3BTSrE9lkK8+5lvtAP/AcZEKtUt69EJK/F5kFBku3mO9g==",
+    "remote_config": {
+      "auth_require_account": false,
+      "maintenance_mode": {
+        "enabled": false,
+        "message_ar": "النظام في وضع الصيانة المجدولة",
+        "message_en": "System under scheduled maintenance"
+      },
+      "min_app_version_code": 1,
+      "default_device_limit": 1,
+      "auto_block_on_device_violation": false,
+      "trial_duration_hours": 48,
+      "heartbeat_interval_sec": 60,
+      "speed_test_endpoints": {
+        "download_url": "https://speed.cloudflare.com/__down?bytes=1000000",
+        "upload_url": "https://speed.cloudflare.com/__up",
+        "ping_url": "https://www.gstatic.com/generate_204"
+      },
+      "disabled_server_ids": [],
+      "default_server_id": "",
+      "data_retention_days": 90,
+      "auto_failover_enabled": true
+    },
+    "app_updates": [
+      {
+        "id": "ver_user_2_0",
+        "target_app": "USER",
+        "version_code": 2,
+        "version_name": "2.0",
+        "release_notes": "الإصدار الرسمي bahrain-vpn v2: مشاركة VPN عبر الهوتسبوت بدون روت (HTTP/SOCKS5/PAC + Fail-Closed)، الفحص المجتمعي الطوعي الموثّق لإيران (IR)، استثناء نطاقات .ir تلقائياً، العربية أساسية + الإنجليزية، وتوقيع RSA-4096 v1/v2/v3",
+        "release_date": "2026-10-31T14:49:14Z",
+        "mandatory": 0,
+        "min_supported_code": 1,
+        "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v2/app-arm64-v8a-release.apk",
+        "apk_sha256": "",
+        "signing_cert_sha256": "",
+        "is_active": 1,
+        "abi_assets_json": "{\"arm64-v8a\": {\"apk_url\": \"https://github.com/oldman-552/vpn-configs/releases/download/v2/app-arm64-v8a-release.apk\", \"apk_sha256\": \"\"}, \"x86_64\": {\"apk_url\": \"https://github.com/oldman-552/vpn-configs/releases/download/v2/app-x86_64-release.apk\", \"apk_sha256\": \"\"}, \"universal\": {\"apk_url\": \"https://github.com/oldman-552/vpn-configs/releases/download/v2/app-release.apk\", \"apk_sha256\": \"\"}}",
+        "abi_assets": {
+          "arm64-v8a": {
+            "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v2/app-arm64-v8a-release.apk",
+            "apk_sha256": ""
+          },
+          "x86_64": {
+            "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v2/app-x86_64-release.apk",
+            "apk_sha256": ""
+          },
+          "universal": {
+            "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v2/app-release.apk",
+            "apk_sha256": ""
+          }
+        }
+      },
+      {
+        "id": "ver_admin_2_0",
+        "target_app": "ADMIN",
+        "version_code": 2,
+        "version_name": "2.0",
+        "release_notes": "تطبيق إدارة bahrain-vpn v2 الرسمي (عربي + إنجليزي) مع إدارة سيرفرات VIP المشفّرة وتوقيع الحزم عبر GitHub",
+        "release_date": "2026-10-31T14:49:14Z",
+        "mandatory": 0,
+        "min_supported_code": 1,
+        "apk_url": "https://github.com/oldman-552/vpn-configs/releases/download/v2/app-admin-release.apk",
+        "apk_sha256": "",
+        "signing_cert_sha256": "",
+        "is_active": 1,
+        "abi_assets_json": "{}",
+        "abi_assets": {}
+      }
+    ],
+    "vip_nodes_enc_b64": "",
+    "licenses": {}
+  },
+  "signature_b64": "MEUCIEvAMqBMyswFTTTO5a+D0uDuAMUXlPz7PiCy8uJR4RfWAiEAzWHFnuY2AjKCGYnJiCeNPKurFxeJnLtAKYqgn+nL5eo="
+}

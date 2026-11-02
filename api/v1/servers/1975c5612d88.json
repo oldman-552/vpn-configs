@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1975c5612d88",
+    "name": "bahrain-vpn 693",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "15.204.247.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 52.1,
+    "reliability_score": 82.1,
+    "composite_score": 41.1,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 433.0,
+    "jitter_ms": 26.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 2,
+    "score_delta": -27.7,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

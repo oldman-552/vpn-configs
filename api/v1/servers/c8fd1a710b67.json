@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c8fd1a710b67",
+    "name": "bahrain-vpn 688",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "15.204.247.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 53.8,
+    "reliability_score": 83.8,
+    "composite_score": 41.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 377.0,
+    "jitter_ms": 35.2,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 83.33,
+    "consecutive_alive": 2,
+    "score_delta": 2.7,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

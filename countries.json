@@ -1,0 +1,367 @@
+{
+  "generated_at": "2026-11-02T04:04:20Z",
+  "total_alive": 737,
+  "verified_exit_trace_count": 704,
+  "countries": [
+    {
+      "code": "US",
+      "flag": "🇺🇸",
+      "count": 215,
+      "verified_exit_count": 215,
+      "best_latency_ms": 23,
+      "top_score": 88.8
+    },
+    {
+      "code": "NL",
+      "flag": "🇳🇱",
+      "count": 149,
+      "verified_exit_count": 149,
+      "best_latency_ms": 139,
+      "top_score": 50.6
+    },
+    {
+      "code": "DE",
+      "flag": "🇩🇪",
+      "count": 53,
+      "verified_exit_count": 53,
+      "best_latency_ms": 145,
+      "top_score": 50.7
+    },
+    {
+      "code": "XX",
+      "flag": "🌐",
+      "count": 33,
+      "verified_exit_count": 0,
+      "best_latency_ms": 16,
+      "top_score": 50.9
+    },
+    {
+      "code": "CA",
+      "flag": "🇨🇦",
+      "count": 29,
+      "verified_exit_count": 29,
+      "best_latency_ms": 58,
+      "top_score": 82.8
+    },
+    {
+      "code": "HK",
+      "flag": "🇭🇰",
+      "count": 23,
+      "verified_exit_count": 23,
+      "best_latency_ms": 151,
+      "top_score": 49.6
+    },
+    {
+      "code": "FR",
+      "flag": "🇫🇷",
+      "count": 22,
+      "verified_exit_count": 22,
+      "best_latency_ms": 139,
+      "top_score": 49.7
+    },
+    {
+      "code": "JP",
+      "flag": "🇯🇵",
+      "count": 22,
+      "verified_exit_count": 22,
+      "best_latency_ms": 108,
+      "top_score": 51.5
+    },
+    {
+      "code": "SG",
+      "flag": "🇸🇬",
+      "count": 22,
+      "verified_exit_count": 22,
+      "best_latency_ms": 171,
+      "top_score": 49.5
+    },
+    {
+      "code": "KR",
+      "flag": "🇰🇷",
+      "count": 20,
+      "verified_exit_count": 20,
+      "best_latency_ms": 154,
+      "top_score": 47.7
+    },
+    {
+      "code": "ES",
+      "flag": "🇪🇸",
+      "count": 19,
+      "verified_exit_count": 19,
+      "best_latency_ms": 174,
+      "top_score": 48.7
+    },
+    {
+      "code": "TW",
+      "flag": "🇹🇼",
+      "count": 16,
+      "verified_exit_count": 16,
+      "best_latency_ms": 140,
+      "top_score": 49.0
+    },
+    {
+      "code": "IT",
+      "flag": "🇮🇹",
+      "count": 15,
+      "verified_exit_count": 15,
+      "best_latency_ms": 159,
+      "top_score": 49.2
+    },
+    {
+      "code": "PL",
+      "flag": "🇵🇱",
+      "count": 13,
+      "verified_exit_count": 13,
+      "best_latency_ms": 162,
+      "top_score": 49.5
+    },
+    {
+      "code": "CH",
+      "flag": "🇨🇭",
+      "count": 11,
+      "verified_exit_count": 11,
+      "best_latency_ms": 162,
+      "top_score": 49.9
+    },
+    {
+      "code": "GB",
+      "flag": "🇬🇧",
+      "count": 9,
+      "verified_exit_count": 9,
+      "best_latency_ms": 140,
+      "top_score": 50.7
+    },
+    {
+      "code": "FI",
+      "flag": "🇫🇮",
+      "count": 8,
+      "verified_exit_count": 8,
+      "best_latency_ms": 174,
+      "top_score": 48.3
+    },
+    {
+      "code": "MX",
+      "flag": "🇲🇽",
+      "count": 7,
+      "verified_exit_count": 7,
+      "best_latency_ms": 51,
+      "top_score": 82.7
+    },
+    {
+      "code": "IN",
+      "flag": "🇮🇳",
+      "count": 5,
+      "verified_exit_count": 5,
+      "best_latency_ms": 239,
+      "top_score": 47.7
+    },
+    {
+      "code": "IR",
+      "flag": "🇮🇷",
+      "count": 5,
+      "verified_exit_count": 5,
+      "best_latency_ms": 304,
+      "top_score": 45.4
+    },
+    {
+      "code": "KZ",
+      "flag": "🇰🇿",
+      "count": 3,
+      "verified_exit_count": 3,
+      "best_latency_ms": 290,
+      "top_score": 40.9
+    },
+    {
+      "code": "PH",
+      "flag": "🇵🇭",
+      "count": 3,
+      "verified_exit_count": 3,
+      "best_latency_ms": 239,
+      "top_score": 46.9
+    },
+    {
+      "code": "RO",
+      "flag": "🇷🇴",
+      "count": 3,
+      "verified_exit_count": 3,
+      "best_latency_ms": 229,
+      "top_score": 47.0
+    },
+    {
+      "code": "RU",
+      "flag": "🇷🇺",
+      "count": 3,
+      "verified_exit_count": 3,
+      "best_latency_ms": 218,
+      "top_score": 46.0
+    },
+    {
+      "code": "TH",
+      "flag": "🇹🇭",
+      "count": 3,
+      "verified_exit_count": 3,
+      "best_latency_ms": 195,
+      "top_score": 47.7
+    },
+    {
+      "code": "AT",
+      "flag": "🇦🇹",
+      "count": 2,
+      "verified_exit_count": 2,
+      "best_latency_ms": 167,
+      "top_score": 47.4
+    },
+    {
+      "code": "BG",
+      "flag": "🇧🇬",
+      "count": 2,
+      "verified_exit_count": 2,
+      "best_latency_ms": 178,
+      "top_score": 48.9
+    },
+    {
+      "code": "CL",
+      "flag": "🇨🇱",
+      "count": 2,
+      "verified_exit_count": 2,
+      "best_latency_ms": 153,
+      "top_score": 50.5
+    },
+    {
+      "code": "DK",
+      "flag": "🇩🇰",
+      "count": 2,
+      "verified_exit_count": 2,
+      "best_latency_ms": 178,
+      "top_score": 47.2
+    },
+    {
+      "code": "SE",
+      "flag": "🇸🇪",
+      "count": 2,
+      "verified_exit_count": 2,
+      "best_latency_ms": 167,
+      "top_score": 49.2
+    },
+    {
+      "code": "ZA",
+      "flag": "🇿🇦",
+      "count": 2,
+      "verified_exit_count": 2,
+      "best_latency_ms": 271,
+      "top_score": 46.4
+    },
+    {
+      "code": "AU",
+      "flag": "🇦🇺",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 146,
+      "top_score": 50.3
+    },
+    {
+      "code": "BR",
+      "flag": "🇧🇷",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 174,
+      "top_score": 49.4
+    },
+    {
+      "code": "BY",
+      "flag": "🇧🇾",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 200,
+      "top_score": 46.2
+    },
+    {
+      "code": "CO",
+      "flag": "🇨🇴",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 115,
+      "top_score": 49.6
+    },
+    {
+      "code": "CZ",
+      "flag": "🇨🇿",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 154,
+      "top_score": 48.6
+    },
+    {
+      "code": "EE",
+      "flag": "🇪🇪",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 203,
+      "top_score": 43.7
+    },
+    {
+      "code": "EG",
+      "flag": "🇪🇬",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 245,
+      "top_score": 46.0
+    },
+    {
+      "code": "ID",
+      "flag": "🇮🇩",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 16,
+      "top_score": 63.0
+    },
+    {
+      "code": "IE",
+      "flag": "🇮🇪",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 132,
+      "top_score": 47.6
+    },
+    {
+      "code": "LV",
+      "flag": "🇱🇻",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 181,
+      "top_score": 45.8
+    },
+    {
+      "code": "MY",
+      "flag": "🇲🇾",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 189,
+      "top_score": 46.9
+    },
+    {
+      "code": "NO",
+      "flag": "🇳🇴",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 176,
+      "top_score": 43.6
+    },
+    {
+      "code": "PE",
+      "flag": "🇵🇪",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 801,
+      "top_score": 23.5
+    },
+    {
+      "code": "TR",
+      "flag": "🇹🇷",
+      "count": 1,
+      "verified_exit_count": 1,
+      "best_latency_ms": 282,
+      "top_score": 40.0
+    }
+  ]
+}

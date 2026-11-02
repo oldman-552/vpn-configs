@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "dd71a85c91ec",
+    "name": "bahrain-vpn 547",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "149.28.130.0/24",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 66.5,
+    "reliability_score": 87.9,
+    "composite_score": 47.4,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 172.0,
+    "jitter_ms": 4.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 6.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

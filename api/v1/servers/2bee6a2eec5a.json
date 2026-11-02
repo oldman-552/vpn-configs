@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "2bee6a2eec5a",
+    "name": "bahrain-vpn 45",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.levikogjgfdd.ir",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 80.8,
+    "reliability_score": 98.4,
+    "composite_score": 84.1,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 63.0,
+    "jitter_ms": 27.2,
+    "download_mbps": 34.56,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": 10.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

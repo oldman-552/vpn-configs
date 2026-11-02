@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c2f0aff6b22d",
+    "name": "bahrain-vpn 680",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.quick-cdn.net",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.5,
+    "reliability_score": 76.4,
+    "composite_score": 43.2,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 78.0,
+    "jitter_ms": 36.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 1,
+    "score_delta": 0.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

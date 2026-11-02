@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "680ddae3f96d",
+    "name": "bahrain-vpn 651",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "195.141.65.0/24",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 51.9,
+    "reliability_score": 60.2,
+    "composite_score": 44.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 177.0,
+    "jitter_ms": 4.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -16.4,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

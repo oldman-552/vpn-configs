@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "130068e301af",
+    "name": "bahrain-vpn 281",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "82.38.31.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.3,
+    "reliability_score": 98.4,
+    "composite_score": 49.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 162.0,
+    "jitter_ms": 2.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": -2.6,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

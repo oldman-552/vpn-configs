@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "86429681a441",
+    "name": "bahrain-vpn 379",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "193.108.119.0/24",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 68.2,
+    "reliability_score": 95.6,
+    "composite_score": 48.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 146.0,
+    "jitter_ms": 3.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 90.91,
+    "consecutive_alive": 7,
+    "score_delta": -4.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

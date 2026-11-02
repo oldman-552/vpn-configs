@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "821cc1ecb31a",
+    "name": "bahrain-vpn 459",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "202.50.253.0/24",
+    "exit_country": "IT",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.6,
+    "reliability_score": 79.1,
+    "composite_score": 48.3,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 162.0,
+    "jitter_ms": 0.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 75.0,
+    "consecutive_alive": 1,
+    "score_delta": 18.1,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

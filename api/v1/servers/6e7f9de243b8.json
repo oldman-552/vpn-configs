@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6e7f9de243b8",
+    "name": "bahrain-vpn 101",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "23.162.200.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 79.0,
+    "reliability_score": 80.2,
+    "composite_score": 78.9,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 61.0,
+    "jitter_ms": 2.8,
+    "download_mbps": 13.65,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 83.33,
+    "consecutive_alive": 1,
+    "score_delta": -1.8,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

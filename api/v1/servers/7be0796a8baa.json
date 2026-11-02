@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7be0796a8baa",
+    "name": "bahrain-vpn 614",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "95.128.71.0/24",
+    "exit_country": "BY",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 63.0,
+    "reliability_score": 98.4,
+    "composite_score": 46.2,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 200.0,
+    "jitter_ms": 22.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": -3.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

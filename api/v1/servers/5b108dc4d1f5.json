@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "5b108dc4d1f5",
+    "name": "bahrain-vpn 571",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "82.118.16.0/24",
+    "exit_country": "IT",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 52.3,
+    "reliability_score": 70.7,
+    "composite_score": 47.0,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 173.0,
+    "jitter_ms": 1.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": -17.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

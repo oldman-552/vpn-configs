@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6d90a3efe51a",
+    "name": "bahrain-vpn 672",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "*.m3hrzd.ir",
+    "exit_country": "EE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 60.6,
+    "reliability_score": 83.3,
+    "composite_score": 43.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 203.0,
+    "jitter_ms": 44.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -7.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

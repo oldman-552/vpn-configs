@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "bff189aa5786",
+    "name": "bahrain-vpn 653",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "156.252.229.0/24",
+    "exit_country": "ES",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 60.1,
+    "reliability_score": 95.0,
+    "composite_score": 44.6,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 203.0,
+    "jitter_ms": 49.2,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 6,
+    "score_delta": -3.2,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

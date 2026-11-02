@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "834ec5730d22",
+    "name": "bahrain-vpn 445",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "*.ubuntuupdates.com",
+    "exit_country": "GB",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.6,
+    "reliability_score": 88.2,
+    "composite_score": 48.4,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 164.0,
+    "jitter_ms": 24.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 81.82,
+    "consecutive_alive": 3,
+    "score_delta": -5.2,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

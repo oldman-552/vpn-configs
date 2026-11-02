@@ -1,0 +1,2604 @@
+{
+  "generated_at": "2026-11-02T04:06:37Z",
+  "quarantined_total": 288,
+  "reasons_summary": {
+    "broken_ss_cipher": 149,
+    "invalid_or_missing_reality_public_key": 61,
+    "suspicious_infrastructure_port": 45,
+    "unencrypted_vmess_none_without_tls": 33
+  },
+  "entries": [
+    {
+      "config_hash": "0b5e8bcb5b5f09ba",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@51.222.12.127:445 [fp:0b5e8bcb5b5f]",
+      "reason": "suspicious_infrastructure_port:445",
+      "risk_level": "CRITICAL",
+      "sources_count": 4,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2cd0325a8dfa790d",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@51.222.141.125:445 [fp:2cd0325a8dfa]",
+      "reason": "suspicious_infrastructure_port:445",
+      "risk_level": "CRITICAL",
+      "sources_count": 5,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "188f98c49fa659b6",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@67.220.95.3:18000?net=tcp [fp:188f98c49fa6]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 5,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "dbf8253342175d80",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@167.88.61.50:3389 [fp:dbf825334217]",
+      "reason": "suspicious_infrastructure_port:3389",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "26e5f529b0eae104",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@51.79.178.63:3306 [fp:26e5f529b0ea]",
+      "reason": "suspicious_infrastructure_port:3306",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "5f8baee9cb54bc8b",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@103.11.76.248:80 [fp:5f8baee9cb54]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "6ffc425baebf0715",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@107.151.182.197:8080 [fp:6ffc425baebf]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "5043fe14ed8d5d3f",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@107.151.182.253:8080 [fp:5043fe14ed8d]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a1978ff003813eb3",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@107.155.57.11:8080 [fp:a1978ff00381]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "bb91991a4ec87448",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@107.155.57.51:8080 [fp:bb91991a4ec8]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c1d138b7aa53f147",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@128.1.186.132:8080 [fp:c1d138b7aa53]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "b23890c1d2b5bbcf",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@128.1.186.73:8080 [fp:b23890c1d2b5]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "336138fef7cc0b54",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@128.199.172.224:8080 [fp:336138fef7cc]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "17f7682f60bbfaf7",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@137.184.174.93:8080 [fp:17f7682f60bb]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 3,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "97f49e491362bcf9",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@138.197.141.58:8080 [fp:97f49e491362]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a42c5a48a8686b2d",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@138.199.42.68:8080 [fp:a42c5a48a868]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "1465911aaf3707dc",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@138.199.43.159:8080 [fp:1465911aaf37]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c0c4671c8000e8bd",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@146.70.20.147:8080 [fp:c0c4671c8000]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0deb711bbc9bf581",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@146.70.46.199:8080 [fp:0deb711bbc9b]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "cd38935d193c9236",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@146.70.46.214:8080 [fp:cd38935d193c]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "9e0a8236788264c6",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@146.70.61.18:8080 [fp:9e0a82367882]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "1085204728837755",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@146.70.61.37:8080 [fp:108520472883]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c96ed99c5d79624b",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@169.150.210.233:8080 [fp:c96ed99c5d79]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "78a78972b2a3feda",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@23.251.121.242:8080 [fp:78a78972b2a3]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "de2e8d4e03947b20",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@68.183.227.236:8080 [fp:de2e8d4e0394]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2223f56b7e5c2572",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@68.183.227.45:8080 [fp:2223f56b7e5c]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0589fe763f52d6db",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@68.183.227.4:8080 [fp:0589fe763f52]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 3,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "23864a901ca5e64f",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@68.183.235.122:8080 [fp:23864a901ca5]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "78bef0c7e79379c3",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@68.183.235.240:8080 [fp:78bef0c7e793]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "9c125c9ffd8709d9",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@79.110.53.169:8080 [fp:9c125c9ffd87]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "e3289c7d6a9173ac",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@79.110.54.250:8080 [fp:e3289c7d6a91]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "34d2630eb73932db",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@98.98.142.161:8080 [fp:34d2630eb739]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a108f2259ad1112c",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@98.98.207.163:8080 [fp:a108f2259ad1]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "58d42bf96f16d25c",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@98.98.79.198:8080 [fp:58d42bf96f16]",
+      "reason": "broken_ss_cipher:rc4-md5",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c0dcc5174622f63d",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@124.57.36.207:37020 [fp:c0dcc5174622]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "e62e5f9fb52b5b36",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@125.138.18.69:11300 [fp:e62e5f9fb52b]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "af5c1d0f98c6a4a6",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@130.195.222.215:443 [fp:af5c1d0f98c6]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "ded8d603d2eecdd7",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@14.46.128.84:25010 [fp:ded8d603d2ee]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "4860a5df37db09a3",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@140.83.50.165:443 [fp:4860a5df37db]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0a2774db9ad9fadd",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@158.247.250.157:81 [fp:0a2774db9ad9]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0c20558db121f274",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@168.126.204.135:10035 [fp:0c20558db121]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "9b8d6c5ed0969be3",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.66.42.200:2083 [fp:9b8d6c5ed096]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "6ad4dd562f30f29b",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.66.42.200:8443 [fp:6ad4dd562f30]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2e8cd7086b10e0bc",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@183.108.82.157:10002 [fp:2e8cd7086b10]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2683ab5d31b1a67f",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@194.127.192.165:443 [fp:2683ab5d31b1]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "4f630146c7d13528",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@36.38.117.86:11965 [fp:4f630146c7d1]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0cd6c02285c7fb0c",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@47.82.155.79:2053 [fp:0cd6c02285c7]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "6f9e5e9a013261e1",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@49.142.200.31:11434 [fp:6f9e5e9a0132]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a645f0822bc5825e",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@49.142.200.31:28017 [fp:a645f0822bc5]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0a8723368cf0a0ea",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@104.19.177.137:2096 [fp:0a8723368cf0]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "382d2566c495a9bc",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@103.181.177.88:443 [fp:382d2566c495]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "376df37facb8bd11",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@104.238.70.16:443 [fp:376df37facb8]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "8053c40bb7315d91",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@160.153.137.16:443 [fp:8053c40bb731]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "5f01543ea7e6e3c7",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@161.33.38.253:443 [fp:5f01543ea7e6]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a92931f5291fe21c",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@190.93.246.16:443 [fp:a92931f5291f]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "dc1de77cb9159f03",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@198.12.144.16:443 [fp:dc1de77cb915]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7e4baa8d0ebd6643",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@198.71.188.16:443 [fp:7e4baa8d0ebd]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "56fd7296844fd89b",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@216.205.52.16:443 [fp:56fd7296844f]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "79d6befbfa03a0b7",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@45.40.147.16:443 [fp:79d6befbfa03]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0bed677e2b266144",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@45.40.154.16:443 [fp:0bed677e2b26]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "64c80914a199bbc7",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@50.62.195.16:443 [fp:64c80914a199]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "398564e0093cc32d",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@50.62.88.16:443 [fp:398564e0093c]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "49dc4d2b87edc277",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@50.62.90.16:443 [fp:49dc4d2b87ed]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "00aa148bfae1e705",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@69.84.182.16:443 [fp:00aa148bfae1]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7c3ea019d40da115",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@103.133.1.38:443 [fp:7c3ea019d40d]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0a3c2bc6d87843d6",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@103.90.72.71:443 [fp:0a3c2bc6d878]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "969a8ce72cc953cb",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@129.159.34.196:443 [fp:969a8ce72cc9]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a7084d517fbe81b5",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@193.68.89.220:8443 [fp:a7084d517fbe]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "e51d3596e3165c72",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@199.181.197.38:443 [fp:e51d3596e316]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "b53010f37e72e8cd",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@31.58.50.110:2053 [fp:b53010f37e72]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "1db9186c44328c34",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@45.43.88.13:2053 [fp:1db9186c4432]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "effcf13e172e6131",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@5.253.189.215:443 [fp:effcf13e172e]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "bb3f09aaf3502702",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@95.40.173.149:443 [fp:bb3f09aaf350]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "fa78df4f0c1fa8c0",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@cdns.doon.eu.org:443 [fp:fa78df4f0c1f]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2b6db9a68f4223fd",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@cf.008500.xyz:443 [fp:2b6db9a68f42]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "9f8b1fa933d863ab",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@cf.090227.xyz:443 [fp:9f8b1fa933d8]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "78c5fe12ce7e53bc",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@mfa.gov.ua:443 [fp:78c5fe12ce7e]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "06a055b684287d7d",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@store.ubi.com:443 [fp:06a055b68428]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "406239d4837626cb",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@sub.danfeng.eu.org:443 [fp:406239d48376]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "3f9e89d729afab6b",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@121.178.202.91:12380 [fp:3f9e89d729af]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "563a70fb63d26627",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@138.124.111.115:443 [fp:563a70fb63d2]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "e62a141a24622b3b",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@140.83.50.165:443 [fp:e62a141a2462]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "8febc6f448ac4bfe",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@154.16.183.190:443 [fp:8febc6f448ac]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "3540aeb5d106ec63",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@160.251.209.140:443 [fp:3540aeb5d106]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "bcbaf05f482aab85",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.66.42.200:8443 [fp:bcbaf05f482a]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "268f6b0345a859f4",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@175.204.72.94:11001 [fp:268f6b0345a8]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0918755efa5a3230",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@185.216.177.197:443 [fp:0918755efa5a]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0470d5c44d47e5d1",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@188.239.9.91:443 [fp:0470d5c44d47]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "49938c602b470010",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@194.233.67.84:443 [fp:49938c602b47]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "f4fe4e0601e6229f",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@194.87.10.77:443 [fp:f4fe4e0601e6]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "30ea349990fa47c8",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@47.250.212.59:2053 [fp:30ea349990fa]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "daaacb7835126596",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@47.82.155.79:2053 [fp:daaacb783512]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7eb303ff4b2e50a1",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@47.82.155.79:443 [fp:7eb303ff4b2e]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "39ae505c143a3485",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@47.82.155.79:8443 [fp:39ae505c143a]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "796129de592e5441",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@49.142.200.31:28017 [fp:796129de592e]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a4c8de652c86ff34",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@91.98.92.244:2053 [fp:a4c8de652c86]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "9d62b1bdd4361d37",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@96.126.190.196:443 [fp:9d62b1bdd436]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "31fb972e1b7ea79b",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@104.18.35.15:443 [fp:31fb972e1b7e]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "11cb7260b0bdc39d",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@104.18.41.190:443 [fp:11cb7260b0bd]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "d0dde4e6998d5b40",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@104.18.42.54:443 [fp:d0dde4e6998d]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2c4c49a50495b6fd",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@104.18.43.174:443 [fp:2c4c49a50495]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "216a480c3e4e689d",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@104.21.94.161:443 [fp:216a480c3e4e]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "d1f8d58d4c69e2e8",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@104.26.4.60:443 [fp:d1f8d58d4c69]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "ee776c75804fe69b",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@104.26.5.60:443 [fp:ee776c75804f]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0891ac71d0950631",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@162.159.14.127:443 [fp:0891ac71d095]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c256b904df36524c",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@162.159.25.12:443 [fp:c256b904df36]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "f2c53ba14ef36689",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@162.159.36.20:443 [fp:f2c53ba14ef3]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "748e7a437ac13566",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@162.159.36.5:443 [fp:748e7a437ac1]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "6b5a69b6270adbb1",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@162.159.39.33:443 [fp:6b5a69b6270a]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "ead802f8318c04c9",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.64.145.158:443 [fp:ead802f8318c]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "70413dfbe2bdd522",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.64.145.202:443 [fp:70413dfbe2bd]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "643dedc0fef9ea70",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.64.147.104:443 [fp:643dedc0fef9]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "47d61045beb151db",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.64.150.130:443 [fp:47d61045beb1]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "64b5f1ddcc0e050a",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.64.152.216:443 [fp:64b5f1ddcc0e]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "b60551ab78ddbe63",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.64.152.241:443 [fp:b60551ab78dd]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "69834bdbe7ed0473",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.64.153.86:443 [fp:69834bdbe7ed]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2db7272dd5071f76",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.67.138.17:443 [fp:2db7272dd507]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "d1b6a70bda48f8dc",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.67.70.92:443 [fp:d1b6a70bda48]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "052405dd1a722d5e",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@cdns.doon.eu.org:443 [fp:052405dd1a72]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "803a2ce496055535",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@cf.008500.xyz:443 [fp:803a2ce49605]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "151033165f7c2c7d",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@cf.090227.xyz:443 [fp:151033165f7c]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "52e8857da976f2ef",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@cf.130519.xyz:443 [fp:52e8857da976]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "bfd44ead6b71e66e",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@cf.877774.xyz:443 [fp:bfd44ead6b71]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2ce6497fa983da8d",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@mfa.gov.ua:443 [fp:2ce6497fa983]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "983af6025ca31407",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@saas.sin.fan:443 [fp:983af6025ca3]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "87d92e964fd2d96e",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@store.ubi.com:443 [fp:87d92e964fd2]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "122a0da8a8446d9c",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@sub.danfeng.eu.org:443 [fp:122a0da8a844]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "8c284c60c776bb57",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@8.6.112.0:443 [fp:8c284c60c776]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "893b542dd1903dd3",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@afrcloud22.mmv.kr:80 [fp:893b542dd190]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a6532e9cbd47735e",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@aio.unlimited.biz.id:443 [fp:a6532e9cbd47]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c864db96dbcf66f4",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@124.57.36.207:37020 [fp:c864db96dbcf]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "aef2c8553abd13e5",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@125.138.18.69:11300 [fp:aef2c8553abd]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "d0f897f47897d18d",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@130.195.222.215:443 [fp:d0f897f47897]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c2d68d06486c6fc6",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@14.46.128.84:25010 [fp:c2d68d06486c]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "ea929f12a477ee8f",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@140.83.50.165:443 [fp:ea929f12a477]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "34d836e3b522bf17",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@158.247.250.157:81 [fp:34d836e3b522]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2a4d686eb81aab9f",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@168.126.204.135:10035 [fp:2a4d686eb81a]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "f0cdf41f9f6aca4e",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.66.42.200:2083 [fp:f0cdf41f9f6a]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c0faa7ff0a8dd9ba",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.66.42.200:8443 [fp:c0faa7ff0a8d]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7b600b544b157a4e",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@183.108.82.157:10002 [fp:7b600b544b15]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "73224760f53e2b7b",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@194.127.192.165:443 [fp:73224760f53e]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "1d30ead5ccdb3afe",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@36.38.117.86:11965 [fp:1d30ead5ccdb]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2d1bc76c2ed074df",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@47.82.155.79:2053 [fp:2d1bc76c2ed0]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "85f716fd12cd28f9",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@49.142.200.31:11434 [fp:85f716fd12cd]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "aba1ec1884341045",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@49.142.200.31:28017 [fp:aba1ec188434]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "ee59e75926edab63",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@95.85.250.78:443 [fp:ee59e75926ed]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c63378c2ac4cec96",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@185.188.104.10:443 [fp:c63378c2ac4c]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "e6e739a1f862246b",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@185.188.104.11:443 [fp:e6e739a1f862]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "414edd5200953b26",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@185.188.104.12:443 [fp:414edd520095]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "e167b19f80f09e0a",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@185.188.105.10:443 [fp:e167b19f80f0]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "36a2847c018f4fee",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@185.188.105.11:443 [fp:36a2847c018f]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "dcf9a98e4aa7297f",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@185.188.106.10:443 [fp:dcf9a98e4aa7]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "f5b170efdfb89686",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@185.188.107.10:443 [fp:f5b170efdfb8]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "41e9eeef9e1b047e",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@dkstatics-public.digikala.com:443 [fp:41e9eeef9e1b]",
+      "reason": "broken_ss_cipher:none",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "954348e82e9374b9",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@dlx.viralforge.ru:443 [fp:954348e82e93]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0311423751887b51",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@sub.skyshopnet.ir:2082 [fp:031142375188]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "533e3e16d0245698",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@31.77.145.230:443 [fp:533e3e16d024]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2784796ebd8cb5f3",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@89.42.196.92:1819 [fp:2784796ebd8c]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "040b9d33ae5952ec",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@185.212.49.141:443 [fp:040b9d33ae59]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a098ad437f2778e8",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@sub.skyshopnet.ir:2086 [fp:a098ad437f27]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "f5330b8c87213c49",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@sub.skyshopnet.ir:2082 [fp:f5330b8c8721]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "fa4eee3399fab5d4",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@79.137.199.52:21 [fp:fa4eee3399fa]",
+      "reason": "suspicious_infrastructure_port:21",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "eaaea7bce241bffd",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@sub.skyshopnet.ir:2082 [fp:eaaea7bce241]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7bc85b47bf6a8c9d",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@sub.skyshopnet.ir:2086 [fp:7bc85b47bf6a]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "1a962c2fbbdc3e97",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@sw--nn.bntabriz.ir:3389 [fp:1a962c2fbbdc]",
+      "reason": "suspicious_infrastructure_port:3389",
+      "risk_level": "CRITICAL",
+      "sources_count": 3,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a10de253aa8c05ea",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@79.143.92.57:443 [fp:a10de253aa8c]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "ecea282aa021ecf1",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@[2a01:4f8:1c18:4078::1]:443 [fp:ecea282aa021]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "fd432fa65dbc2338",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@192.220.15.222:8443 [fp:fd432fa65dbc]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "54369f417b63175b",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@95.182.87.221:45326 [fp:54369f417b63]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "cad1996f460e1b98",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@57.131.42.58:8008 [fp:cad1996f460e]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7cb7908b2e88466d",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@57.131.42.58:8008 [fp:7cb7908b2e88]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "cfe767bbab68b2e1",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@dk5.nimhub.ir:1013 [fp:cfe767bbab68]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c1300edf0f5420cd",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@178.215.236.95:5432 [fp:c1300edf0f54]",
+      "reason": "suspicious_infrastructure_port:5432",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "9cd4ceff4d893b39",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@194.146.68.140:500 [fp:9cd4ceff4d89]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "860dd907d7129363",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@79.137.199.52:21 [fp:860dd907d712]",
+      "reason": "suspicious_infrastructure_port:21",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "b6c6bd31d7b2cb26",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@193.23.201.133:5432 [fp:b6c6bd31d7b2]",
+      "reason": "suspicious_infrastructure_port:5432",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "1e2d88eb90894912",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@193.23.201.65:5432 [fp:1e2d88eb9089]",
+      "reason": "suspicious_infrastructure_port:5432",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "71921e6c3c2fab48",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@143.246.216.62:52443 [fp:71921e6c3c2f]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0cc489ede3e21288",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@179.43.138.201:52443 [fp:0cc489ede3e2]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "07c3cf8225f4f7a9",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@188.137.158.151:6443 [fp:07c3cf8225f4]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "041df0cd9d97e7bd",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@205.237.110.34:52443 [fp:041df0cd9d97]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "8354ea819fa85a51",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@205.237.110.38:4443 [fp:8354ea819fa8]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "cdf4a90f9ce61140",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@45.154.96.230:52443 [fp:cdf4a90f9ce6]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "155926cb13640aa3",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@72.56.37.135:52443 [fp:155926cb1364]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2cbf3899bcda5500",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@79.175.102.64:18443 [fp:2cbf3899bcda]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "41e643eae920fb19",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@80.47.17.174:53443 [fp:41e643eae920]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a94740004ae95323",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@89.149.203.154:53443 [fp:a94740004ae9]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "b2f555e9f5981ee3",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@93.123.46.44:13443 [fp:b2f555e9f598]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a8066cf9bfa4f8ff",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@31.14.116.90:2087 [fp:a8066cf9bfa4]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "23c3bc8cf7026971",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@46.8.228.52:28329 [fp:23c3bc8cf702]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "fb6a68bfd2bb3bdd",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@79.137.199.52:21 [fp:fb6a68bfd2bb]",
+      "reason": "suspicious_infrastructure_port:21",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a27e23c3948c42f7",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@ir2.tetrov.top:5948 [fp:a27e23c3948c]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "1266a69dcbf71305",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@3.21.166.59:443 [fp:1266a69dcbf7]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "1a47b64d28188e2c",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@62.60.222.174:443 [fp:1a47b64d2818]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "34bce08f7bf94228",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@135.181.41.45:443 [fp:34bce08f7bf9]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7e79d615013708a7",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@94.156.170.102:110?net=tcp [fp:7e79d6150137]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "28655c1eabd0ffd8",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@newrelax.relaxedboy.online:110?net=tcp [fp:28655c1eabd0]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "331e5e2fb8ef0cfe",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@104.20.239.88:80?net=ws [fp:331e5e2fb8ef]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "388aa0711f42f2fa",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@104.25.228.174:80?net=ws [fp:388aa0711f42]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "1a4c0428e70aa53e",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@108.162.192.188:80?net=ws [fp:1a4c0428e70a]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "09d6e53efb9bb5bd",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@108.162.192.63:80?net=ws [fp:09d6e53efb9b]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "bf264885290a7e2a",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@134.122.41.160:3389?net=http [fp:bf264885290a]",
+      "reason": "suspicious_infrastructure_port:3389",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "aa91732203d042da",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@139.59.24.215:3389?net=tcp [fp:aa91732203d0]",
+      "reason": "suspicious_infrastructure_port:3389",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "ae45ffe4322444e6",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@165.140.217.11:443?net=tcp [fp:ae45ffe43224]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7c378e91cc725a3f",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@165.140.217.139:443?net=tcp [fp:7c378e91cc72]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "f0df26c4d38e5057",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@165.140.217.141:443?net=tcp [fp:f0df26c4d38e]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "4e28dda0a761443c",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@165.140.217.142:443?net=tcp [fp:4e28dda0a761]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "ffbbd2c0ef35ffe3",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@165.140.217.14:443?net=tcp [fp:ffbbd2c0ef35]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "682e507e1ba1c8ae",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@165.140.217.2:443?net=tcp [fp:682e507e1ba1]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "227d838a33e8548a",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@165.140.217.30:443?net=tcp [fp:227d838a33e8]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "cb934a0bd36b9e69",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@165.140.217.53:443?net=tcp [fp:cb934a0bd36b]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "efb9581d8eb3d2bb",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@165.140.217.56:443?net=tcp [fp:efb9581d8eb3]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "d8ecce512841ea4c",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@188.114.96.221:80?net=ws [fp:d8ecce512841]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "bcc137c30ac1bb0d",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@188.114.97.2:80?net=ws [fp:bcc137c30ac1]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "04a96e6ab5cdde24",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@188.114.97.3:80?net=ws [fp:04a96e6ab5cd]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c1d74d4688bfa6d6",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@188.114.98.40:80?net=ws [fp:c1d74d4688bf]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "acefc6755cddd0fd",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@198.41.193.181:80?net=ws [fp:acefc6755cdd]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "e331ad44f26d6838",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@3.79.184.50:1003?net=tcp [fp:e331ad44f26d]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "1230c922acc95525",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@31.77.8.97:110?net=tcp [fp:1230c922acc9]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "448d71b4ce2bf776",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@31.77.8.97:110?net=tcp [fp:448d71b4ce2b]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 3,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "8425ccc4a06c96bd",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@31.77.8.97:110?net=tcp [fp:8425ccc4a06c]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "e63e4b662a76f04d",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@38.110.1.246:18000?net=tcp [fp:e63e4b662a76]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a7ea3fd1f69a6438",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@45.131.208.228:80?net=ws [fp:a7ea3fd1f69a]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "d7112177de09e2a7",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@45.131.209.253:80?net=ws [fp:d7112177de09]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "3cdedd460d333272",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@45.82.31.164:3389?net=http [fp:3cdedd460d33]",
+      "reason": "suspicious_infrastructure_port:3389",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "779342db97cdf101",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@51.159.155.52:3389?net=http [fp:779342db97cd]",
+      "reason": "suspicious_infrastructure_port:3389",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "4a18367199a35333",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@51.83.6.5:20250?net=tcp [fp:4a18367199a3]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "042d5656f2a7f80d",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@54.37.131.126:80?net=ws [fp:042d5656f2a7]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2df152f9a5f8facd",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@62.60.219.95:110?net=tcp [fp:2df152f9a5f8]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "060030f69d32209f",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@66.81.247.246:80?net=ws [fp:060030f69d32]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7bf79d8f94692bdb",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@78.111.102.232:3389?net=http [fp:7bf79d8f9469]",
+      "reason": "suspicious_infrastructure_port:3389",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "9b37b8e7a574f723",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@82.40.62.115:41547?net=tcp [fp:9b37b8e7a574]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "9a2dfdd322a263a5",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@84.17.41.2:18000?net=tcp [fp:9a2dfdd322a2]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "ea36b6b902e37021",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@94.156.179.138:110?net=tcp [fp:ea36b6b902e3]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "4b17d0c0d2d724c1",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@alman.asasin6.ir:110?net=tcp [fp:4b17d0c0d2d7]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "fce6c950dffcc2d9",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@de-d21e56c13c.shamanapp.online:33744?net=ws [fp:fce6c950dffc]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "4b3a0f01deae2a7c",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@funnymemes.goalir.co.uk:8880?net=tcp [fp:4b3a0f01deae]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7b8726f34d95e8ab",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@funnymemes.goalir.co.uk:8880?net=tcp [fp:7b8726f34d95]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c9cbaf1b5639edd3",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@g1.horvexa.ir:20981?net=tcp [fp:c9cbaf1b5639]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "d8f930da67114b07",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@nexus.1.diginoisb.ir:110?net=xhttp [fp:d8f930da6711]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "b9a0316872ee42d0",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@ninja.monak2.ir:110?net=tcp [fp:b9a0316872ee]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "80272ad33e08a41c",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@ninja.monak2.ir:110?net=tcp [fp:80272ad33e08]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "b895f9db64407bd8",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@pori.cjlife.ir:110?net=tcp [fp:b895f9db6440]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "eb093d1732218055",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@pori.cjlife.ir:110?net=tcp [fp:eb093d173221]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "50b7de1ace00c801",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@tr4.asasin5.ir:110?net=tcp [fp:50b7de1ace00]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "fd534657613b7e9a",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@USA.SixMax.ir:110?net=tcp [fp:fd534657613b]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 2,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "9a4e375a22ec3ad8",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.99.190.158:445 [fp:9a4e375a22ec]",
+      "reason": "suspicious_infrastructure_port:445",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "de7c1284ce89ec4b",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@shorts.blog-forme.ru:443 [fp:de7c1284ce89]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "592922afebaee924",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@37.48.81.6:22 [fp:592922afebae]",
+      "reason": "suspicious_infrastructure_port:22",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "4c76506c86b00984",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@lectures.blog-forme.ru:443 [fp:4c76506c86b0]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "72c4081f73b6ebe1",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.105.39.228:3306 [fp:72c4081f73b6]",
+      "reason": "suspicious_infrastructure_port:3306",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "b2f11567c4a8e417",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@139.162.58.13:3389 [fp:b2f11567c4a8]",
+      "reason": "suspicious_infrastructure_port:3389",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "56370352d7d98794",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@hk3n.wxgqlfx.vip:35193 [fp:56370352d7d9]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "d2527063e0eaa9ba",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@134.195.196.230:6379 [fp:d2527063e0ea]",
+      "reason": "suspicious_infrastructure_port:6379",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "aa8254522342b154",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@149.202.82.172:6379 [fp:aa8254522342]",
+      "reason": "suspicious_infrastructure_port:6379",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "473c114588dc7880",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@ro-xh02.tcp-reset-club.net:8443 [fp:473c114588dc]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c9b34798e952ceae",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@67.220.95.3:18000?net=raw [fp:c9b34798e952]",
+      "reason": "unencrypted_vmess_none_without_tls",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "d24ee41ecdb42cf7",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@015a6d1b4320cc42.dlvds-p.musichubmel.ir:5000 [fp:d24ee41ecdb4]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "6bf1b377ddee0eaf",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.105.244.165:3306 [fp:6bf1b377ddee]",
+      "reason": "suspicious_infrastructure_port:3306",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c77eb0e685e78a04",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@91.84.115.36:443 [fp:c77eb0e685e7]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "5fb6b021039bed29",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@118.107.244.113:445 [fp:5fb6b021039b]",
+      "reason": "suspicious_infrastructure_port:445",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "43d4f0c0af858f37",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@5.35.3.115:443 [fp:43d4f0c0af85]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "cd5efc16aca5b03f",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@172.105.244.165:3389 [fp:cd5efc16aca5]",
+      "reason": "suspicious_infrastructure_port:3389",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "20c15d374c8705f4",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@172.65.111.43:22 [fp:20c15d374c87]",
+      "reason": "suspicious_infrastructure_port:22",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "2ca7ad640684b18e",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@172.67.155.1:443 [fp:2ca7ad640684]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "005f76d9048f1c07",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@nim.marlifo.ir:443 [fp:005f76d9048f]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "e17a45bad947a813",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@45.143.201.8:443 [fp:e17a45bad947]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7992dc22ed0b28df",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@193.160.208.106:443 [fp:7992dc22ed0b]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "8b551c22e538bdf6",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@31.43.191.39:443 [fp:8b551c22e538]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c9e98522e9a19010",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@179.254.109.240:2083 [fp:c9e98522e9a1]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "f7cf53e09e4aa069",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@201.24.54.216:443 [fp:f7cf53e09e4a]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "5d38e221312819f8",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@c.mhzedir.qzz.io:8080 [fp:5d38e2213128]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "a84021e336e0b5f5",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@77.90.21.23:8443 [fp:a84021e336e0]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "eb49e5a1f56f7601",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@sub.skyshopnet.ir:2086 [fp:eb49e5a1f56f]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "7b0c9658e4454bb0",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@sub.skyshopnet.ir:2082 [fp:7b0c9658e445]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "4b337140366824bd",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@sub.skyshopnet.ir:2086 [fp:4b3371403668]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "39a9b10f8b7b2aeb",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@chatgpt.com:2083 [fp:39a9b10f8b7b]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "49c1009f8a313194",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@135.106.142.209:443 [fp:49c1009f8a31]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "c70d8733001b4d65",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@64.49.38.6:993 [fp:c70d8733001b]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "99e1aed75bf4a78c",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@23.134.94.168:3389 [fp:99e1aed75bf4]",
+      "reason": "suspicious_infrastructure_port:3389",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "77e4fd8bee433458",
+      "protocol": "ss",
+      "redacted_endpoint": "ss://***@23.157.40.26:3306 [fp:77e4fd8bee43]",
+      "reason": "suspicious_infrastructure_port:3306",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "0638d7e610299234",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@vip.superturk.ir:2087 [fp:0638d7e61029]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "8a1525a8275a771b",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@144.31.4.234:443 [fp:8a1525a8275a]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "4e8fa70926e1c683",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@62.133.63.45:8444 [fp:4e8fa70926e1]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "f8f8e611f74c25af",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@195.123.245.231:443 [fp:f8f8e611f74c]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "5f28703119d5c953",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@dlx.viralforge.ru:443 [fp:5f28703119d5]",
+      "reason": "invalid_or_missing_reality_public_key",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "84b9330ae551ee2f",
+      "protocol": "vless",
+      "redacted_endpoint": "vless://***@94.183.181.248:21 [fp:84b9330ae551]",
+      "reason": "suspicious_infrastructure_port:21",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    },
+    {
+      "config_hash": "814e49710b3427ac",
+      "protocol": "vmess",
+      "redacted_endpoint": "vmess://***@2.26.7.59:110?net=tcp [fp:814e49710b34]",
+      "reason": "suspicious_infrastructure_port:110",
+      "risk_level": "CRITICAL",
+      "sources_count": 1,
+      "detected_at": "2026-11-02T04:04:20Z"
+    }
+  ]
+}

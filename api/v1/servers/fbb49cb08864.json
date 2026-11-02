@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "fbb49cb08864",
+    "name": "bahrain-vpn 732",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "51.79.85.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 14.3,
+    "reliability_score": 87.0,
+    "composite_score": 25.1,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 1332.0,
+    "jitter_ms": 591.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 75.0,
+    "consecutive_alive": 3,
+    "score_delta": -22.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

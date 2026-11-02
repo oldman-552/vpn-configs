@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "068f4d04ff49",
+    "name": "bahrain-vpn 502",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.jinggai.online",
+    "exit_country": "TW",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.0,
+    "reliability_score": 91.0,
+    "composite_score": 47.8,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 140.0,
+    "jitter_ms": 15.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 4,
+    "score_delta": 3.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

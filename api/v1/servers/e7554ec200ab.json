@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "e7554ec200ab",
+    "name": "bahrain-vpn 140",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "216.152.147.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 72.9,
+    "reliability_score": 98.0,
+    "composite_score": 52.0,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 67.0,
+    "jitter_ms": 4.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 10,
+    "score_delta": 0.1,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

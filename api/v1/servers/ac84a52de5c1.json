@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ac84a52de5c1",
+    "name": "bahrain-vpn 687",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "57.131.38.0/24",
+    "exit_country": "IT",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 54.5,
+    "reliability_score": 91.0,
+    "composite_score": 42.4,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 295.0,
+    "jitter_ms": 73.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 4,
+    "score_delta": -12.9,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

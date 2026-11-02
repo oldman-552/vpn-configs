@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "0483c690953c",
+    "name": "bahrain-vpn 734",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.spbstudentlife.com",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": false,
+    "performance_score": 20.4,
+    "reliability_score": 21.1,
+    "composite_score": 23.6,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 1077.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 1,
+    "score_delta": 0.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

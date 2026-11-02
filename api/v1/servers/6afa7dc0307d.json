@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6afa7dc0307d",
+    "name": "bahrain-vpn 161",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "216.152.147.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 71.5,
+    "reliability_score": 86.7,
+    "composite_score": 51.4,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 65.0,
+    "jitter_ms": 9.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 90.0,
+    "consecutive_alive": 2,
+    "score_delta": -13.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

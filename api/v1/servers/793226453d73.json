@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "793226453d73",
+    "name": "bahrain-vpn 370",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "*.ubuntuupdates.com",
+    "exit_country": "GB",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.8,
+    "reliability_score": 98.4,
+    "composite_score": 48.9,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 169.0,
+    "jitter_ms": 20.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": -4.7,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-11-02T04:04:20Z",
+  "generated_at_epoch": 1793592260,
+  "country_code": "IR",
+  "verification_policy": "VERIFIED_NON_VPN_DIRECT_ORIGIN_ONLY",
+  "min_distinct_reporters_for_top500": 2,
+  "qualified_top500_count": 0,
+  "evaluated_servers_count": 0,
+  "rejected_vpn_or_unverified_reports": 0,
+  "isolated_other_country_reports": 0,
+  "results": []
+}

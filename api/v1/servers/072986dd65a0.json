@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "072986dd65a0",
+    "name": "bahrain-vpn 472",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "149.28.130.0/24",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 64.7,
+    "reliability_score": 98.2,
+    "composite_score": 48.1,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 184.0,
+    "jitter_ms": 14.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 11,
+    "score_delta": 2.9,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

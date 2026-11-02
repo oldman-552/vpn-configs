@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7a4a54c87af0",
+    "name": "bahrain-vpn 594",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "*.zestapp778.com",
+    "exit_country": "KR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 61.9,
+    "reliability_score": 87.0,
+    "composite_score": 46.6,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 171.0,
+    "jitter_ms": 44.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 90.91,
+    "consecutive_alive": 2,
+    "score_delta": 0.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

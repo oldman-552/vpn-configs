@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "d0bb457d592d",
+    "name": "bahrain-vpn 721",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "91.185.83.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 38.0,
+    "reliability_score": 48.8,
+    "composite_score": 32.0,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 520.0,
+    "jitter_ms": 32.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 1,
+    "score_delta": 0.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

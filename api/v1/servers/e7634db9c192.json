@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "e7634db9c192",
+    "name": "bahrain-vpn 166",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "169.40.42.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 73.4,
+    "reliability_score": 98.2,
+    "composite_score": 51.2,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 68.0,
+    "jitter_ms": 2.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 11,
+    "score_delta": -9.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

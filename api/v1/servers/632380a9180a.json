@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "632380a9180a",
+    "name": "bahrain-vpn 80",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "216.238.80.0/24",
+    "exit_country": "MX",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 80.3,
+    "reliability_score": 96.3,
+    "composite_score": 81.0,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 53.0,
+    "jitter_ms": 2.4,
+    "download_mbps": 15.67,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 7,
+    "score_delta": -0.8,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

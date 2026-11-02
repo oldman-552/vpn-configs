@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "e92c6608d2ba",
+    "name": "bahrain-vpn 124",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "216.152.156.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 73.1,
+    "reliability_score": 96.8,
+    "composite_score": 52.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 66.0,
+    "jitter_ms": 3.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 91.67,
+    "consecutive_alive": 9,
+    "score_delta": 0.9,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

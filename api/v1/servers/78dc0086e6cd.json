@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "78dc0086e6cd",
+    "name": "bahrain-vpn 708",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "151.101.131.0/24",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 54.0,
+    "reliability_score": 76.4,
+    "composite_score": 37.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 357.0,
+    "jitter_ms": 44.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 1,
+    "score_delta": 0.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

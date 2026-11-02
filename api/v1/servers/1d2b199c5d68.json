@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1d2b199c5d68",
+    "name": "bahrain-vpn 197",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.090227.xyz",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": false,
+    "performance_score": 58.4,
+    "reliability_score": 70.7,
+    "composite_score": 50.5,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 50.0,
+    "jitter_ms": 2.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": 14.1,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

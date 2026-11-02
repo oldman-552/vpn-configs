@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "280e960b851e",
+    "name": "bahrain-vpn 345",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "172.64.229.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": true,
+    "performance_score": 56.9,
+    "reliability_score": 63.4,
+    "composite_score": 49.1,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 50.0,
+    "jitter_ms": 7.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 4,
+    "score_delta": -1.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

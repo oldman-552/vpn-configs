@@ -1,0 +1,9 @@
+{
+  "api_version": "1.0.0",
+  "status": "ok",
+  "generated_at": "2026-11-02T04:04:20Z",
+  "active_servers": 737,
+  "healthy_servers": 687,
+  "quarantined_servers": 288,
+  "degraded_mode": false
+}

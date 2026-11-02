@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6ac5ce4fe6b1",
+    "name": "bahrain-vpn 418",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "217.60.179.0/24",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.8,
+    "reliability_score": 98.4,
+    "composite_score": 48.6,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 149.0,
+    "jitter_ms": 5.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": -4.5,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

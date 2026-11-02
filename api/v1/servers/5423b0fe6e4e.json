@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "5423b0fe6e4e",
+    "name": "bahrain-vpn 529",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "208.69.78.0/24",
+    "exit_country": "CH",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 63.1,
+    "reliability_score": 98.2,
+    "composite_score": 47.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 166.0,
+    "jitter_ms": 35.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 11,
+    "score_delta": -7.3,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

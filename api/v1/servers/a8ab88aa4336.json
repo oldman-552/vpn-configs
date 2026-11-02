@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "a8ab88aa4336",
+    "name": "bahrain-vpn 510",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "67.220.95.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 56.3,
+    "reliability_score": 57.6,
+    "composite_score": 47.8,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 74.0,
+    "jitter_ms": 6.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 81.82,
+    "consecutive_alive": 2,
+    "score_delta": -10.7,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

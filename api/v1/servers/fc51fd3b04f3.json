@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "fc51fd3b04f3",
+    "name": "bahrain-vpn 371",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "*.blog-forme.ru",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 68.4,
+    "reliability_score": 98.2,
+    "composite_score": 48.9,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 145.0,
+    "jitter_ms": 2.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 11,
+    "score_delta": -3.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

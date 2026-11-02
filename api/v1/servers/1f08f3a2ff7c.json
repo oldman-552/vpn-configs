@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1f08f3a2ff7c",
+    "name": "bahrain-vpn 716",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "*.3dns.vip",
+    "exit_country": "HK",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 46.7,
+    "reliability_score": 76.9,
+    "composite_score": 34.3,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 159.0,
+    "jitter_ms": 614.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 60.0,
+    "consecutive_alive": 2,
+    "score_delta": -18.2,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

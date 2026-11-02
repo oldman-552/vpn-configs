@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ba4d50c159ff",
+    "name": "bahrain-vpn 629",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "158.160.180.0/24",
+    "exit_country": "RU",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 61.7,
+    "reliability_score": 82.4,
+    "composite_score": 45.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 220.0,
+    "jitter_ms": 25.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 75.0,
+    "consecutive_alive": 2,
+    "score_delta": -3.2,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "2af5e7f1a1d4",
+    "name": "bahrain-vpn 337",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "57.129.113.0/24",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 66.3,
+    "reliability_score": 85.1,
+    "composite_score": 49.1,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 181.0,
+    "jitter_ms": 2.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 72.73,
+    "consecutive_alive": 3,
+    "score_delta": 5.9,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

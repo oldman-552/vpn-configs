@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "50b6fbfe2509",
+    "name": "bahrain-vpn 709",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "46.17.40.0/24",
+    "exit_country": "RU",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 56.8,
+    "reliability_score": 69.8,
+    "composite_score": 37.1,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 252.0,
+    "jitter_ms": 64.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 50.0,
+    "consecutive_alive": 1,
+    "score_delta": 0.0,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}

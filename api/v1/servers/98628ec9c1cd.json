@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "98628ec9c1cd",
+    "name": "bahrain-vpn 558",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "193.233.253.0/24",
+    "exit_country": "DK",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 65.0,
+    "reliability_score": 98.4,
+    "composite_score": 47.2,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 178.0,
+    "jitter_ms": 14.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 12,
+    "score_delta": 16.2,
+    "verified_at": "2026-11-02T04:04:20Z"
+  }
+}
