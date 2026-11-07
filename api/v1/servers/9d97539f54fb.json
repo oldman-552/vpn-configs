@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "9d97539f54fb",
+    "name": "bahrain-vpn 28",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "162.251.62.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 82.2,
+    "reliability_score": 95.0,
+    "composite_score": 83.4,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 45.0,
+    "jitter_ms": 1.9,
+    "download_mbps": 19.41,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 6,
+    "score_delta": 9.1,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

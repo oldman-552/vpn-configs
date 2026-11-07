@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "3cfb77e06397",
+    "name": "bahrain-vpn 139",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "199.68.156.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 74.2,
+    "reliability_score": 93.3,
+    "composite_score": 52.0,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 54.0,
+    "jitter_ms": 2.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 5,
+    "score_delta": -4.5,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

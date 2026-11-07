@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "03d6bbb501d0",
+    "name": "bahrain-vpn 548",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "45.145.43.0/24",
+    "exit_country": "XX",
+    "country_source": "unknown",
+    "is_cdn": false,
+    "performance_score": 54.9,
+    "reliability_score": 71.2,
+    "composite_score": 48.5,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 124.0,
+    "jitter_ms": 0.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 17,
+    "score_delta": 1.0,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

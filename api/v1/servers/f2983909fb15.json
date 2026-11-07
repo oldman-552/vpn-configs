@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "f2983909fb15",
+    "name": "bahrain-vpn 586",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "62.93.179.0/24",
+    "exit_country": "ES",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 65.5,
+    "reliability_score": 95.8,
+    "composite_score": 47.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 153.0,
+    "jitter_ms": 20.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 91.67,
+    "consecutive_alive": 7,
+    "score_delta": -1.2,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

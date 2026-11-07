@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6b6efa36a9b3",
+    "name": "bahrain-vpn 404",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "derfderf.ru",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 70.3,
+    "reliability_score": 99.3,
+    "composite_score": 49.8,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 120.0,
+    "jitter_ms": 0.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 29,
+    "score_delta": 0.2,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

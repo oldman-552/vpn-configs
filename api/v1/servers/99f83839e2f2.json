@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "99f83839e2f2",
+    "name": "bahrain-vpn 93",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "*.123266.xyz",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 76.1,
+    "reliability_score": 99.3,
+    "composite_score": 77.8,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 45.0,
+    "jitter_ms": 10.2,
+    "download_mbps": 10.7,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 28,
+    "score_delta": 5.2,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

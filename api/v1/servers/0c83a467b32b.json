@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "0c83a467b32b",
+    "name": "bahrain-vpn 811",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "172.64.229.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 37.9,
+    "reliability_score": 21.4,
+    "composite_score": 40.2,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 175.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 60.0,
+    "consecutive_alive": 2,
+    "score_delta": -5.9,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

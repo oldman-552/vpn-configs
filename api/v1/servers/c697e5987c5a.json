@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c697e5987c5a",
+    "name": "bahrain-vpn 757",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "104.21.91.0/24",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 58.5,
+    "reliability_score": 87.9,
+    "composite_score": 43.5,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 222.0,
+    "jitter_ms": 57.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -3.9,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

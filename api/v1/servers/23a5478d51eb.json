@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "23a5478d51eb",
+    "name": "bahrain-vpn 320",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "51.158.206.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 69.4,
+    "reliability_score": 98.9,
+    "composite_score": 50.4,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 126.0,
+    "jitter_ms": 3.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 18,
+    "score_delta": 5.5,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

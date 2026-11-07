@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6e3c396747ed",
+    "name": "bahrain-vpn 595",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "202.146.222.0/24",
+    "exit_country": "HK",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 65.7,
+    "reliability_score": 84.5,
+    "composite_score": 47.7,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 185.0,
+    "jitter_ms": 5.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 96.55,
+    "consecutive_alive": 1,
+    "score_delta": -0.4,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

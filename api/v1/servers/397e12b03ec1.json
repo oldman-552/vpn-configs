@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "397e12b03ec1",
+    "name": "bahrain-vpn 132",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "67.220.85.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 73.3,
+    "reliability_score": 95.9,
+    "composite_score": 52.2,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 41.0,
+    "jitter_ms": 6.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 85.71,
+    "consecutive_alive": 9,
+    "score_delta": 5.0,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

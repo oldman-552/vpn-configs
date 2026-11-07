@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "fbb49cb08864",
+    "name": "bahrain-vpn 870",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "51.79.85.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 17.3,
+    "reliability_score": 95.6,
+    "composite_score": 25.3,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 1163.0,
+    "jitter_ms": 531.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 82.76,
+    "consecutive_alive": 8,
+    "score_delta": 9.3,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}
