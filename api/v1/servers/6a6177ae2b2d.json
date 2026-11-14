@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6a6177ae2b2d",
+    "name": "bahrain-vpn 678",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.qzz.io",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 61.9,
+    "reliability_score": 91.0,
+    "composite_score": 46.5,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 245.0,
+    "jitter_ms": 10.2,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 4,
+    "score_delta": 15.8,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "4e9e364d2a68",
+    "name": "bahrain-vpn 599",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "103.106.229.0/24",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 65.0,
+    "reliability_score": 99.1,
+    "composite_score": 47.7,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 197.0,
+    "jitter_ms": 5.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 21,
+    "score_delta": 0.8,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

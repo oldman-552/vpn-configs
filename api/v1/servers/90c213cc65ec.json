@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "90c213cc65ec",
+    "name": "bahrain-vpn 487",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "8.211.175.0/24",
+    "exit_country": "JP",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 68.9,
+    "reliability_score": 99.2,
+    "composite_score": 49.1,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 141.0,
+    "jitter_ms": 0.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 27,
+    "score_delta": 1.6,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

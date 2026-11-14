@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "378e758c0976",
+    "name": "bahrain-vpn 774",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "104.16.10.0/24",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 60.4,
+    "reliability_score": 78.2,
+    "composite_score": 42.5,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 259.0,
+    "jitter_ms": 18.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 2,
+    "score_delta": 12.2,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

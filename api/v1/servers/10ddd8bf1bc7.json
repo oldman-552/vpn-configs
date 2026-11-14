@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "10ddd8bf1bc7",
+    "name": "bahrain-vpn 154",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "38.91.100.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.7,
+    "reliability_score": 93.0,
+    "composite_score": 51.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 30.0,
+    "jitter_ms": 17.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 83.33,
+    "consecutive_alive": 6,
+    "score_delta": 19.6,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

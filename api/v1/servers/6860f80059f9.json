@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6860f80059f9",
+    "name": "bahrain-vpn 285",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "66.163.127.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 69.5,
+    "reliability_score": 87.2,
+    "composite_score": 50.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 121.0,
+    "jitter_ms": 5.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 91.67,
+    "consecutive_alive": 2,
+    "score_delta": 9.5,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

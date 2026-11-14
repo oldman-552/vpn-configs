@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "a3c17d7dfb6a",
+    "name": "bahrain-vpn 371",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.jarbook.net",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 69.9,
+    "reliability_score": 80.9,
+    "composite_score": 50.0,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 116.0,
+    "jitter_ms": 4.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 70.0,
+    "consecutive_alive": 2,
+    "score_delta": -1.4,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

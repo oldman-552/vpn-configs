@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "3a537bc77ded",
+    "name": "bahrain-vpn 872",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "141.164.45.0/24",
+    "exit_country": "KR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 22.8,
+    "reliability_score": 65.0,
+    "composite_score": 21.4,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 729.0,
+    "jitter_ms": 497.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 28.57,
+    "consecutive_alive": 1,
+    "score_delta": -29.4,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

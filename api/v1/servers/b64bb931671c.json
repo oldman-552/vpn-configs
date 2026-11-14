@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "b64bb931671c",
+    "name": "bahrain-vpn 497",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "67.220.95.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 71.4,
+    "reliability_score": 73.0,
+    "composite_score": 49.1,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 47.0,
+    "jitter_ms": 10.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 72.41,
+    "consecutive_alive": 1,
+    "score_delta": 7.5,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

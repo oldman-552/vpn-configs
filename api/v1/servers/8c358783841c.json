@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "8c358783841c",
+    "name": "bahrain-vpn 829",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "51.79.64.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 47.3,
+    "reliability_score": 98.0,
+    "composite_score": 38.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 254.0,
+    "jitter_ms": 173.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 93.1,
+    "consecutive_alive": 19,
+    "score_delta": 26.5,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ab1f1e8ecc50",
+    "name": "bahrain-vpn 3",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "216.152.155.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 85.0,
+    "reliability_score": 96.9,
+    "composite_score": 85.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 23.0,
+    "jitter_ms": 9.8,
+    "download_mbps": 36.67,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 94.74,
+    "consecutive_alive": 7,
+    "score_delta": -4.4,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

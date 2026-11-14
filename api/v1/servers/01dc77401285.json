@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "01dc77401285",
+    "name": "bahrain-vpn 800",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "*.zestapp778.com",
+    "exit_country": "TH",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 60.9,
+    "reliability_score": 76.4,
+    "composite_score": 41.0,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 247.0,
+    "jitter_ms": 19.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 1,
+    "score_delta": 0.0,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

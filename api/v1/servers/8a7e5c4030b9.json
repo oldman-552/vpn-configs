@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "8a7e5c4030b9",
+    "name": "bahrain-vpn 413",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "149.40.57.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 70.5,
+    "reliability_score": 78.0,
+    "composite_score": 49.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 55.0,
+    "jitter_ms": 13.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 75.0,
+    "consecutive_alive": 1,
+    "score_delta": -1.1,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

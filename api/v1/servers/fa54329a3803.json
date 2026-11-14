@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "fa54329a3803",
+    "name": "bahrain-vpn 684",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.ddnsfree.com",
+    "exit_country": "RU",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 51.4,
+    "reliability_score": 65.3,
+    "composite_score": 46.4,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 193.0,
+    "jitter_ms": 2.2,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 93.75,
+    "consecutive_alive": 4,
+    "score_delta": -0.9,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

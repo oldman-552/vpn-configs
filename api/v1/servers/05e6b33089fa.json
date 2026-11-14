@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "05e6b33089fa",
+    "name": "bahrain-vpn 624",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "129.154.61.0/24",
+    "exit_country": "KR",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 61.9,
+    "reliability_score": 98.0,
+    "composite_score": 47.4,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 197.0,
+    "jitter_ms": 33.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 93.1,
+    "consecutive_alive": 22,
+    "score_delta": 15.5,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

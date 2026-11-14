@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "8756b66dcf5a",
+    "name": "bahrain-vpn 248",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "66.163.112.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 72.1,
+    "reliability_score": 98.2,
+    "composite_score": 50.8,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 56.0,
+    "jitter_ms": 8.4,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 11,
+    "score_delta": 2.3,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

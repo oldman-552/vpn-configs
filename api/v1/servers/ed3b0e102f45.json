@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ed3b0e102f45",
+    "name": "bahrain-vpn 816",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "104.17.136.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 37.4,
+    "reliability_score": 22.0,
+    "composite_score": 40.0,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 189.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 65.38,
+    "consecutive_alive": 2,
+    "score_delta": -16.9,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

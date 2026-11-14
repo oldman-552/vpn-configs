@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "d5b1af36cc5b",
+    "name": "bahrain-vpn 656",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "103.11.76.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 60.0,
+    "reliability_score": 95.2,
+    "composite_score": 46.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 57.0,
+    "jitter_ms": 45.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 78.26,
+    "consecutive_alive": 15,
+    "score_delta": -4.1,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

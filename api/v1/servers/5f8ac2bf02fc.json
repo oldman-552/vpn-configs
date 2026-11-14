@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "5f8ac2bf02fc",
+    "name": "bahrain-vpn 802",
+    "status": "ALIVE",
+    "protocol": "trojan",
+    "masked_network": "193.108.119.0/24",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 49.2,
+    "reliability_score": 99.0,
+    "composite_score": 41.0,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 120.0,
+    "jitter_ms": 144.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 20,
+    "score_delta": -21.2,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

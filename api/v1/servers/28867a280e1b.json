@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "28867a280e1b",
+    "name": "bahrain-vpn 600",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "*.udpgw.com",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 70.6,
+    "reliability_score": 76.5,
+    "composite_score": 47.7,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 112.0,
+    "jitter_ms": 1.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 71.43,
+    "consecutive_alive": 1,
+    "score_delta": 2.0,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}
