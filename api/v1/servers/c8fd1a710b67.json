@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c8fd1a710b67",
+    "name": "bahrain-vpn 873",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "15.204.247.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 15.1,
+    "reliability_score": 14.9,
+    "composite_score": 18.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 2381.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 68.97,
+    "consecutive_alive": 1,
+    "score_delta": -27.2,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

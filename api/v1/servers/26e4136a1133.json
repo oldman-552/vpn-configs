@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "26e4136a1133",
+    "name": "bahrain-vpn 842",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "104.17.77.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 38.6,
+    "reliability_score": 54.5,
+    "composite_score": 36.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 119.0,
+    "jitter_ms": 155.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 33.33,
+    "uptime_pct": 80.77,
+    "consecutive_alive": 2,
+    "score_delta": -12.4,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

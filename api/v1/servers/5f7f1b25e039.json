@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "5f7f1b25e039",
+    "name": "bahrain-vpn 751",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "*.freesocks.work",
+    "exit_country": "RO",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 66.4,
+    "reliability_score": 64.5,
+    "composite_score": 43.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 159.0,
+    "jitter_ms": 11.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 48.0,
+    "consecutive_alive": 1,
+    "score_delta": -2.2,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

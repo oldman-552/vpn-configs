@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "b3678cf225ba",
+    "name": "bahrain-vpn 573",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "13.143.189.0/24",
+    "exit_country": "PL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 68.7,
+    "reliability_score": 87.9,
+    "composite_score": 48.0,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 140.0,
+    "jitter_ms": 2.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": -0.6,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

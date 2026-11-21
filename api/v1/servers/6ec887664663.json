@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "6ec887664663",
+    "name": "bahrain-vpn 213",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "148.135.86.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 72.7,
+    "reliability_score": 87.9,
+    "composite_score": 51.0,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 49.0,
+    "jitter_ms": 7.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 3,
+    "score_delta": 2.0,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

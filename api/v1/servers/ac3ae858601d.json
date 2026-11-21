@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "ac3ae858601d",
+    "name": "bahrain-vpn 782",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "51.15.19.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 70.6,
+    "reliability_score": 65.5,
+    "composite_score": 42.2,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 113.0,
+    "jitter_ms": 1.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 33.33,
+    "consecutive_alive": 1,
+    "score_delta": 0.0,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

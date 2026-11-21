@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "eb1a14e74d68",
+    "name": "bahrain-vpn 202",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "185.164.175.0/24",
+    "exit_country": "IT",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 69.3,
+    "reliability_score": 96.8,
+    "composite_score": 51.1,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 129.0,
+    "jitter_ms": 2.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 86.21,
+    "consecutive_alive": 16,
+    "score_delta": 1.4,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

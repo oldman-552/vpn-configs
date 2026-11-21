@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "4a20cf70a741",
+    "name": "bahrain-vpn 525",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "8.209.247.0/24",
+    "exit_country": "JP",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 68.1,
+    "reliability_score": 86.7,
+    "composite_score": 48.8,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 147.0,
+    "jitter_ms": 3.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 81.25,
+    "consecutive_alive": 3,
+    "score_delta": 0.9,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

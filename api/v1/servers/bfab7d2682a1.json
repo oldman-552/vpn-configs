@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "bfab7d2682a1",
+    "name": "bahrain-vpn 795",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "104.17.136.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 37.0,
+    "reliability_score": 28.1,
+    "composite_score": 41.4,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 201.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 84.0,
+    "consecutive_alive": 2,
+    "score_delta": -21.4,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

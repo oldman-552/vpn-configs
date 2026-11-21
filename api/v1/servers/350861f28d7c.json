@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "350861f28d7c",
+    "name": "bahrain-vpn 282",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "185.176.204.0/24",
+    "exit_country": "DE",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 69.5,
+    "reliability_score": 95.5,
+    "composite_score": 50.6,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 126.0,
+    "jitter_ms": 2.9,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 79.31,
+    "consecutive_alive": 14,
+    "score_delta": 17.2,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

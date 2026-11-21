@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7dcc97a3eb54",
+    "name": "bahrain-vpn 866",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "vipccc.cc",
+    "exit_country": "HK",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 29.1,
+    "reliability_score": 95.0,
+    "composite_score": 27.7,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 763.0,
+    "jitter_ms": 330.5,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 6,
+    "score_delta": -14.3,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

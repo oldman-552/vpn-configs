@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "fa74ef2b9cf9",
+    "name": "bahrain-vpn 830",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "104.27.0.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 37.5,
+    "reliability_score": 19.7,
+    "composite_score": 38.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 188.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 50.0,
+    "consecutive_alive": 2,
+    "score_delta": -5.1,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}
