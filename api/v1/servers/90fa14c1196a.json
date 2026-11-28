@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "90fa14c1196a",
+    "name": "bahrain-vpn 692",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "13.143.189.0/24",
+    "exit_country": "PL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 68.0,
+    "reliability_score": 83.3,
+    "composite_score": 46.2,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 138.0,
+    "jitter_ms": 8.6,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 2,
+    "score_delta": -0.7,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

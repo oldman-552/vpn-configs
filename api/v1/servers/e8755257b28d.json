@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "e8755257b28d",
+    "name": "bahrain-vpn 747",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.jinggai.online",
+    "exit_country": "TW",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 60.7,
+    "reliability_score": 80.9,
+    "composite_score": 43.8,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 218.0,
+    "jitter_ms": 36.3,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 75.0,
+    "consecutive_alive": 2,
+    "score_delta": -4.1,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

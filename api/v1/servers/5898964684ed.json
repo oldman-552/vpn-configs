@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "5898964684ed",
+    "name": "bahrain-vpn 15",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "169.40.42.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 84.3,
+    "reliability_score": 91.0,
+    "composite_score": 84.0,
+    "security_assessment": "Verified",
+    "privacy_assessment": "Unverified",
+    "risk_level": "LOW",
+    "latency_ms": 35.0,
+    "jitter_ms": 2.0,
+    "download_mbps": 25.3,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 4,
+    "score_delta": -2.8,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

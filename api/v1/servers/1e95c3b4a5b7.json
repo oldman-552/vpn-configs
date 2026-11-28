@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "1e95c3b4a5b7",
+    "name": "bahrain-vpn 856",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "51.222.155.0/24",
+    "exit_country": "CA",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 34.4,
+    "reliability_score": 87.4,
+    "composite_score": 31.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 418.0,
+    "jitter_ms": 333.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 72.41,
+    "consecutive_alive": 3,
+    "score_delta": 20.2,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

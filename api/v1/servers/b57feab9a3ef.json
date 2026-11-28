@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "b57feab9a3ef",
+    "name": "bahrain-vpn 690",
+    "status": "ALIVE",
+    "protocol": "hysteria2",
+    "masked_network": "51.15.19.0/24",
+    "exit_country": "NL",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 70.8,
+    "reliability_score": 73.1,
+    "composite_score": 46.3,
+    "security_assessment": "Failed",
+    "privacy_assessment": "High Risk",
+    "risk_level": "HIGH",
+    "latency_ms": 109.0,
+    "jitter_ms": 2.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 57.14,
+    "consecutive_alive": 1,
+    "score_delta": 22.1,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

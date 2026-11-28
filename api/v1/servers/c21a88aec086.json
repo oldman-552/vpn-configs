@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "c21a88aec086",
+    "name": "bahrain-vpn 836",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "*.877771.xyz",
+    "exit_country": "US",
+    "country_source": "remark_hint",
+    "is_cdn": false,
+    "performance_score": 35.4,
+    "reliability_score": 21.7,
+    "composite_score": 37.9,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 250.0,
+    "jitter_ms": 0.0,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 66.67,
+    "uptime_pct": 60.0,
+    "consecutive_alive": 2,
+    "score_delta": -17.4,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

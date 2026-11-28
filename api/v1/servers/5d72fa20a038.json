@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "5d72fa20a038",
+    "name": "bahrain-vpn 839",
+    "status": "ALIVE",
+    "protocol": "vless",
+    "masked_network": "*.digikala-aparat-zula.com",
+    "exit_country": "SG",
+    "country_source": "exit_trace",
+    "is_cdn": true,
+    "performance_score": 53.8,
+    "reliability_score": 73.8,
+    "composite_score": 37.4,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 54.0,
+    "jitter_ms": 203.8,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 66.67,
+    "consecutive_alive": 1,
+    "score_delta": -6.7,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

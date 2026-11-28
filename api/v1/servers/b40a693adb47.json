@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "b40a693adb47",
+    "name": "bahrain-vpn 601",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "84.247.155.0/24",
+    "exit_country": "JP",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 67.4,
+    "reliability_score": 77.1,
+    "composite_score": 47.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 148.0,
+    "jitter_ms": 8.7,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 68.97,
+    "consecutive_alive": 1,
+    "score_delta": 19.9,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

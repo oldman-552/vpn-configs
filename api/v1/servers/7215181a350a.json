@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "7215181a350a",
+    "name": "bahrain-vpn 574",
+    "status": "ALIVE",
+    "protocol": "vmess",
+    "masked_network": "38.64.138.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 60.5,
+    "reliability_score": 89.1,
+    "composite_score": 48.0,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 26.0,
+    "jitter_ms": 32.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 83.33,
+    "consecutive_alive": 4,
+    "score_delta": -12.4,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}

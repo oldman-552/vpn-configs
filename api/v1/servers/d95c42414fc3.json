@@ -1,0 +1,28 @@
+{
+  "api_version": "1.0.0",
+  "server": {
+    "id": "d95c42414fc3",
+    "name": "bahrain-vpn 116",
+    "status": "ALIVE",
+    "protocol": "ss",
+    "masked_network": "156.146.38.0/24",
+    "exit_country": "US",
+    "country_source": "exit_trace",
+    "is_cdn": false,
+    "performance_score": 74.0,
+    "reliability_score": 99.3,
+    "composite_score": 52.7,
+    "security_assessment": "Partial",
+    "privacy_assessment": "Unverified",
+    "risk_level": "MEDIUM",
+    "latency_ms": 59.0,
+    "jitter_ms": 2.1,
+    "download_mbps": 0.0,
+    "upload_mbps": 0.0,
+    "packet_loss_pct": 0.0,
+    "uptime_pct": 100.0,
+    "consecutive_alive": 29,
+    "score_delta": 9.2,
+    "verified_at": "2026-11-07T02:30:41Z"
+  }
+}
